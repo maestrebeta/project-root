@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="SmartPlanner - Gestión de proyectos">
+    
+    <!-- Favicon (puedes reemplazar con tu propio favicon) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#0073ea">
+    
+    <!-- Preconexiones para mejorar performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    
+    <!-- Fuentes principales -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Poppins:ital,wght@0,100;0,500;0,700;1,100;1,500;1,700&display=swap" rel="stylesheet">
+    
+    <!-- Íconos de Material y Font Awesome (como fallback) -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Preload de recursos críticos -->
+    <link rel="preload" href="../src/index.css" as="style">
+    <link rel="preload" href="../src/index.js" as="script">
+    
+    <!-- Metadatos para SEO y redes sociales -->
+    <meta property="og:title" content="SmartPlanner - Gestión de Proyectos">
+    <meta property="og:description" content="Plataforma de gestión de proyectos colaborativa al estilo Monday.com">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://smartplanner.app">
+    <meta property="og:image" content="https://smartplanner.app/og-image.jpg">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@smartplanner">
+    
+    <title>SmartPlanner | Gestión de Proyectos Colaborativos</title>
+    
+    <!-- Estilos iniciales críticos -->
+    <style>
+      /* Critical CSS - Solo lo necesario para el renderizado inicial */
+      body {
+        margin: 0;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #f6f7fb;
+        color: #323338;
+      }
+      #root {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .material-icons-outlined {
+        font-family: 'Material Icons Outlined';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        -webkit-font-feature-settings: 'liga';
+        -webkit-font-smoothing: antialiased;
+      }
+    </style>
+  </head>
+  
+  <body class="antialiased text-gray-800 bg-gray-50">
+    <div id="root" class="min-h-screen flex flex-col">
+      <!-- El contenido de la aplicación se inyectará aquí -->
+    </div>
+    
+    <!-- Scripts (módulos ES) -->
+    <script type="module" src="../src/index.js"></script>
+    
+    <!-- Polyfills para navegadores antiguos (opcional) -->
+    <script nomodule src="https://cdn.jsdelivr.net/npm/@webcomponents/webcomponentsjs@2.8.0/webcomponents-loader.js"></script>
+    <script nomodule src="https://cdn.jsdelivr.net/npm/intersection-observer@0.12.0/intersection-observer.js"></script>
+    
+    <!-- Google Analytics (ejemplo) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-XXXXXXXXXX');
+    </script>
+  </body>
+</html>

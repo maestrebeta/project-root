@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variables CSS personalizadas */
+:root {
+  --color-primary: 0, 115, 234;
+  --color-primary-hover: 0, 83, 179;
+  --color-secondary: 246, 247, 251;
+  --color-accent: 255, 204, 0;
+  --color-danger: 226, 68, 92;
+  --color-success: 40, 167, 69;
+  --color-text: 50, 51, 56;
+  --color-text-muted: 107, 108, 126;
+  --color-border: 230, 233, 239;
+  --color-background: 255, 255, 255;
+  --color-hover: 234, 241, 251;
+}
+
+/* Estructura de Layout */
+#root {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-layout {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  background-color: rgb(var(--color-secondary));
+  font-family: 'Inter', sans-serif;
+}
+
+.app-sidebar {
+  width: 16rem;
+  min-height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  background-color: rgb(var(--color-background));
+  border-right: 1px solid rgb(var(--color-border));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s ease;
+}
+
+.app-sidebar.collapsed {
+  width: 5rem;
+}
+
+.app-content {
+  flex: 1;
+  margin-left: 16rem;
+  transition: margin-left 0.3s ease;
+}
+
+.app-sidebar.collapsed + .app-content {
+  margin-left: 5rem;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 4rem;
+  background-color: rgb(var(--color-background));
+  border-bottom: 1px solid rgb(var(--color-border));
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+}
+
+.main-content {
+  padding: 1.5rem;
+  background-color: rgb(var(--color-secondary));
+  min-height: calc(100vh - 4rem);
+}
+
+/* Componentes específicos */
+.metric-card {
+  background-color: rgb(var(--color-background));
+  border-radius: 0.75rem;
+  border: 1px solid rgb(var(--color-border));
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.metric-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Media Queries */
+@media (max-width: 768px) {
+  .app-sidebar {
+    transform: translateX(-100%);
+  }
+  
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+  
+  .app-content {
+    margin-left: 0;
+  }
+}
