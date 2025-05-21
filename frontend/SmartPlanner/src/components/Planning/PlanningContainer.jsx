@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import PlanningBoard from "./PlanningBoard";
 import KanbanStatesManager from "./KanbanStatesManager";
+import { useAppTheme } from "../../context/ThemeContext";
 import { v4 as uuidv4 } from 'uuid';
 
 // --- Configuración dinámica de estados Kanban ---
@@ -237,6 +238,7 @@ const generateMockData = () => {
 };
 
 export default function PlanningContainer() {
+  const theme = useAppTheme();
   const [epics, setEpics] = useState([]);
   const [sprints, setSprints] = useState([]);
   const [users, setUsers] = useState([]);
@@ -335,7 +337,7 @@ export default function PlanningContainer() {
     <div className="relative h-full">
       {/* Botón para abrir el gestor de estados Kanban */}
       <button
-        className="absolute top-16 right-4 z-10 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+        className={`absolute top-16 right-4 z-10 bg-${theme.PRIMARY_COLOR}-600 text-white px-4 py-2 rounded-lg hover:bg-${theme.PRIMARY_COLOR}-700 transition-colors text-sm font-medium`}
         onClick={() => setShowStatesManager(true)}
       >
         Gestionar Estados Kanban

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FiEdit2, FiTrash2, FiPlus, FiCheck, FiX, FiInfo, FiCopy } from "react-icons/fi";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Tooltip } from "react-tippy";
+import { useAppTheme } from "../../context/ThemeContext";
 import "react-tippy/dist/tippy.css";
 
 const COLOR_PALETTES = [
@@ -20,6 +21,7 @@ function generateKey(label, colorClass) {
 }
 
 export default function KanbanStatesManager({ states = [], setStates }) {
+  const theme = useAppTheme();
   const [editIndex, setEditIndex] = useState(null);
   const [form, setForm] = useState({
     label: "",
@@ -216,7 +218,7 @@ export default function KanbanStatesManager({ states = [], setStates }) {
                 text-base
                 transition
                 flex items-center justify-center
-                ${!form.label ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}
+                ${!form.label ? 'bg-gray-400 cursor-not-allowed' : `bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700`}
                 shadow-sm
                 h-[42px]
               `}

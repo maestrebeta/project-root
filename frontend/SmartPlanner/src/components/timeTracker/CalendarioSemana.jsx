@@ -3,6 +3,7 @@ import { FiX, FiPlus, FiEdit2, FiTrash2, FiChevronLeft, FiChevronRight } from "r
 import { format, addDays, startOfWeek, isToday, isSameDay } from "date-fns";
 import es from "date-fns/locale/es";
 import FormularioEntrada from "./FormularioEntrada";
+import { useAppTheme } from "../../context/ThemeContext";
 
 const HOURS = Array.from({ length: 12 }, (_, i) => 7 + i); // 7:00 a 18:00
 
@@ -33,7 +34,7 @@ const CalendarioSemana = ({
   });
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState(null);
-
+  const theme = useAppTheme();
   const weekDays = getWeekDays(referenceDate);
 
   // Agrupa entradas por día y hora
@@ -109,7 +110,7 @@ const CalendarioSemana = ({
             </button>
             <button
               onClick={handleToday}
-              className="px-3 py-1 rounded-md bg-blue-50 text-blue-700 font-medium text-sm hover:bg-blue-100"
+              className={`px-3 py-1 rounded-md bg-${theme.PRIMARY_COLOR}-50 text-${theme.PRIMARY_COLOR}-700 font-medium text-sm hover:bg-${theme.PRIMARY_COLOR}-100`}
             >
               Hoy
             </button>
@@ -137,12 +138,12 @@ const CalendarioSemana = ({
                   <th
                     key={day}
                     className={`text-center px-2 py-2 text-xs font-semibold uppercase tracking-wide ${
-                      isToday(day) ? "text-blue-700" : "text-gray-500"
+                      isToday(day) ? `text-${theme.PRIMARY_COLOR}-700` : "text-gray-500"
                     }`}
                   >
                     <div
                       className={`flex flex-col items-center ${
-                        isToday(day) ? "bg-blue-50 rounded-lg px-2 py-1" : ""
+                        isToday(day) ? `bg-${theme.PRIMARY_COLOR}-50 rounded-lg px-2 py-1` : ""
                       }`}
                     >
                       <span>{format(day, "EEE", { locale: es })}</span>
@@ -168,9 +169,9 @@ const CalendarioSemana = ({
                         key={key}
                         className={`relative group h-16 min-w-[120px] align-top transition cursor-pointer ${
                           isToday(day) && hour === new Date().getHours()
-                            ? "bg-blue-50"
+                            ? `bg-${theme.PRIMARY_COLOR}-50`
                             : "bg-white"
-                        } ${isSelected ? "ring-2 ring-blue-400" : "hover:bg-blue-100"}`}
+                        } ${isSelected ? `ring-2 ring-${theme.PRIMARY_COLOR}-400` : `hover:bg-${theme.PRIMARY_COLOR}-100`}`}
                         tabIndex={0}
                         aria-label={
                           entry
@@ -187,12 +188,12 @@ const CalendarioSemana = ({
                         }}
                       >
                         {entry ? (
-                          <div className="absolute inset-1 bg-blue-100 border border-blue-300 rounded-lg px-2 py-1 flex flex-col justify-between shadow group-hover:bg-blue-200 transition">
+                          <div className={`absolute inset-1 bg-${theme.PRIMARY_COLOR}-100 border border-${theme.PRIMARY_COLOR}-300 rounded-lg px-2 py-1 flex flex-col justify-between shadow group-hover:bg-${theme.PRIMARY_COLOR}-200 transition`}>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-blue-900 truncate">
+                              <span className={`text-xs font-semibold text-${theme.PRIMARY_COLOR}-900 truncate`}>
                                 {entry.description}
                               </span>
-                              <span className="ml-2 text-xs text-blue-700 font-mono">
+                              <span className={`ml-2 text-xs text-${theme.PRIMARY_COLOR}-700 font-mono`}>
                                 {entry.start_time} - {entry.end_time}
                               </span>
                             </div>
@@ -201,7 +202,11 @@ const CalendarioSemana = ({
                                 entry.etiquetas.map((tag) => (
                                   <span
                                     key={tag}
-                                    className="bg-blue-200 text-blue-800 rounded-full px-2 py-0.5 text-xxs font-medium"
+                                    className={`
+                                      bg-${theme.PRIMARY_COLOR}-200
+                                      text-${theme.PRIMARY_COLOR}-800
+                                      rounded-full px-2 py-0.5 text-xxs font-medium
+                                    `}
                                   >
                                     {tag}
                                   </span>
@@ -210,7 +215,7 @@ const CalendarioSemana = ({
                           </div>
                         ) : (
                           <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition">
-                            <FiPlus className="text-blue-400" />
+                            <FiPlus className={`text-${theme.PRIMARY_COLOR}-400`} />
                           </div>
                         )}
                       </td>

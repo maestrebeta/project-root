@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useAppTheme } from '../../context/ThemeContext';
 
 function ProyectosTable() {
+  const theme = useAppTheme();
   const [proyectos, setProyectos] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -91,7 +93,7 @@ function ProyectosTable() {
       <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-4 gap-2">
         <h2 className="text-lg font-bold text-gray-700">Proyectos</h2>
         <button
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition"
+          className={`bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition`}
           onClick={() => {
             setShowForm(true);
             setEditId(null);

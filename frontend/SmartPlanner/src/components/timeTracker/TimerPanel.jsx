@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { FiPlay, FiPause, FiSquare, FiTag, FiChevronDown, FiCheck, FiX } from 'react-icons/fi';
 import { useProjectsAndTags } from './useProjectsAndTags';
+import { useAppTheme } from "../../context/ThemeContext.jsx";
 import debounce from 'lodash.debounce';
 
 const MinimunTime = 5; // segundos mínimos para guardar la entrada
@@ -35,6 +36,7 @@ const TimerPanel = ({
   const [time, setTime] = useState(0); // en segundos
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const theme = useAppTheme();
   const [saveStatus, setSaveStatus] = useState({ message: '', error: false });
   const [validationErrors, setValidationErrors] = useState({
     project: false,
@@ -367,7 +369,7 @@ const TimerPanel = ({
                 `}
               ></span>
             </span>
-            <span className={`ml-3 font-medium text-sm select-none ${billable ? 'text-blue-700' : 'text-gray-700'}`}>
+            <span className={`ml-3 font-medium text-sm select-none ${billable ? `text-${theme.PRIMARY_COLOR}-700` : 'text-gray-700'}`}>
               Facturable
             </span>
           </label>
@@ -419,8 +421,8 @@ const TimerPanel = ({
           onClick={handleSave}
           className={`flex items-center justify-center w-full py-2 px-4 rounded-md transition ${
             saving
-              ? 'bg-blue-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500'
+              ? `bg-${theme.PRIMARY_COLOR}-400 cursor-not-allowed`
+              : `bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 focus:ring-2 focus:ring-${theme.PRIMARY_COLOR}-500`
           } text-white font-medium`}
           disabled={saving || running}
           aria-label="Guardar entrada"

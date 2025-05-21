@@ -39,16 +39,35 @@ const FONT_SIZE_OPTIONS = [
 
 // Hook para gestionar el tema
 export function useTheme(defaults = {}) {
-  const [primaryColor, setPrimaryColor] = React.useState(defaults.primaryColor || "blue");
-  const [font, setFont] = React.useState(defaults.font || "font-sans");
-  const [fontSize, setFontSize] = React.useState(defaults.fontSize || "text-base");
-  const [animations, setAnimations] = React.useState(defaults.animations ?? true);
+
+  const getInitialTheme = () => {
+    try {
+      const saved = localStorage.getItem("smartplanner_theme");
+      return saved ? JSON.parse(saved) : defaults;
+    } catch {
+      return defaults;
+    }
+  };
+
+  const [primaryColor, setPrimaryColor] = React.useState(getInitialTheme().primaryColor || "blue");
+  const [font, setFont] = React.useState(getInitialTheme().font || "font-sans");
+  const [fontSize, setFontSize] = React.useState(getInitialTheme().fontSize || "text-base");
+  const [animations, setAnimations] = React.useState(getInitialTheme().animations ?? true);
 
   // Derivadas de Tailwind
+  const PRIMARY_COLOR = `${primaryColor}`;
   const PRIMARY_COLOR_CLASS = `text-${primaryColor}-500`;
   const PRIMARY_BG_CLASS = `bg-${primaryColor}-100`;
   const PRIMARY_BG_SOFT = `bg-${primaryColor}-50`;
   const PRIMARY_FONT_CLASS = `text-${primaryColor}-600`;
+
+  // Guarda en localStorage cada vez que cambie algo
+  React.useEffect(() => {
+    localStorage.setItem(
+      "smartplanner_theme",
+      JSON.stringify({ primaryColor, font, fontSize, animations })
+    );
+  }, [primaryColor, font, fontSize, animations]);
 
   return {
     primaryColor,
@@ -59,6 +78,7 @@ export function useTheme(defaults = {}) {
     setFontSize,
     animations,
     setAnimations,
+    PRIMARY_COLOR,
     PRIMARY_COLOR_CLASS,
     PRIMARY_BG_CLASS,
     PRIMARY_BG_SOFT,
@@ -75,6 +95,15 @@ export default function ThemeManager({
   const local = useTheme();
   const t = theme || local;
   const s = setTheme || (() => {});
+
+  const handleResetTheme = () => {
+    localStorage.removeItem("smartplanner_theme");
+    if (t.setPrimaryColor) t.setPrimaryColor("blue");
+    if (t.setFont) t.setFont("font-sans");
+    if (t.setFontSize) t.setFontSize("text-base");
+    if (t.setAnimations) t.setAnimations(true);
+    // window.location.reload(); // solo si quieres recargar la app
+  };
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow flex flex-col gap-6">
@@ -192,6 +221,12 @@ export default function ThemeManager({
           <div><b>ANIMATIONS:</b> <code>{String(t.animations)}</code></div>
         </div>
       </section>
+      <button
+        onClick={handleResetTheme}
+        className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-semibold text-gray-700 transition"
+      >
+        Restaurar valores por defecto
+      </button>
     </div>
   );
 }

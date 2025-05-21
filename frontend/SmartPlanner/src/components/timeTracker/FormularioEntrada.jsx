@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useProjectsAndTags } from './useProjectsAndTags';
+import { useAppTheme } from "../../context/ThemeContext.jsx";
 
 // Normaliza los datos para el formulario (soporta edición y creación)
 function normalizeFormData(data) {
@@ -52,6 +53,8 @@ const FormularioEntrada = ({
     suggestedActivity,
   } = useProjectsAndTags();
 
+  const theme = useAppTheme();
+  
   // Estado del formulario (siempre normalizado)
   const [form, setForm] = useState(() =>
     normalizeFormData(initialData)
@@ -349,7 +352,7 @@ const FormularioEntrada = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700`}
               disabled={saving}
             >
               {saving ? 'Guardando...' : editId ? 'Actualizar' : 'Crear'}

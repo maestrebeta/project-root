@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useAppTheme } from '../../context/ThemeContext';
 
 export default function Header({ onMenuClick, title = "Workplace ticket" }) {
+  const theme = useAppTheme();
   const [searchFocused, setSearchFocused] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -10,7 +12,7 @@ export default function Header({ onMenuClick, title = "Workplace ticket" }) {
       {/* Left Section */}
       <div className="flex items-center gap-4">
         <button 
-          className="material-icons-outlined text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1 rounded-lg transition-colors duration-200"
+          className={`material-icons-outlined text-gray-500 hover:text-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-50 p-1 rounded-lg transition-colors duration-200`}
           aria-label="Toggle menu"
           onClick={onMenuClick}
         >
@@ -78,9 +80,9 @@ export default function Header({ onMenuClick, title = "Workplace ticket" }) {
             <img
               src="https://randomuser.me/api/portraits/men/32.jpg"
               alt="User Avatar"
-              className="w-8 h-8 rounded-full border-2 border-blue-500"
+              className={`w-8 h-8 rounded-full border-2 border-${theme.PRIMARY_COLOR}-500`}
             />
-            <span className="font-medium text-gray-700 text-sm">Juan Pérez</span>
+            <span className="font-medium text-gray-700 text-sm">John Doe</span>
             <span className={`material-icons-outlined text-gray-500 text-lg transition-transform duration-200 ${profileMenuOpen ? 'transform rotate-180' : ''}`}>
               expand_more
             </span>
@@ -90,55 +92,51 @@ export default function Header({ onMenuClick, title = "Workplace ticket" }) {
           {profileMenuOpen && (
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
               <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-900">Juan Pérez</p>
-                <p className="text-xs text-gray-500 truncate">juan.perez@example.com</p>
+                <p className="text-sm font-medium text-gray-900">John Doe</p>
+                <p className="text-xs text-gray-500 truncate">john.doe@example.com</p>
               </div>
               <div className="py-1">
-                <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2">
+                <a href="#" className={`block px-4 py-2 text-sm text-gray-700 hover:bg-${theme.PRIMARY_COLOR}-50 hover:text-${theme.PRIMARY_COLOR}-600 flex items-center gap-2`}>
                   <span className="material-icons-outlined text-gray-400 text-lg">account_circle</span>
-                  Profile
-                </a>
-                <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2">
-                  <span className="material-icons-outlined text-gray-400 text-lg">settings</span>
-                  Settings
-                </a>
-              </div>
-              <div className="py-1 border-t border-gray-100">
-                <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 flex items-center gap-2">
-                  <span className="material-icons-outlined text-gray-400 text-lg">logout</span>
-                  Sign out
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+                                Perfil
+                              </a>
+                            </div>
+                            <div className="py-1 border-t border-gray-100">
+                              <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 flex items-center gap-2">
+                                <span className="material-icons-outlined text-gray-400 text-lg">logout</span>
+                                Cerrar sesión
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-      {/* Notifications Dropdown */}
-      {notificationsOpen && (
-        <div className="absolute right-4 top-16 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-30 py-2">
-          <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
-            <h3 className="font-medium text-gray-900">Notifications</h3>
-            <button className="text-xs text-blue-600 hover:text-blue-800">Mark all as read</button>
-          </div>
-          <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                <div className="flex gap-3">
-                  <div className="bg-blue-100 text-blue-600 rounded-full p-2">
-                    <span className="material-icons-outlined text-lg">assignment</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">New ticket assigned</p>
-                    <p className="text-xs text-gray-500 mt-1">You have a new ticket #TKT-00{item}</p>
-                    <p className="text-xs text-gray-400 mt-1">2{item} minutes ago</p>
-                  </div>
-                </div>
-              </div>
+                    {/* Notifications Dropdown */}
+                    {notificationsOpen && (
+                      <div className="absolute right-4 top-16 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-30 py-2">
+                        <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
+                          <h3 className="font-medium text-gray-900">Notificaciones</h3>
+                          <button className={`text-xs text-${theme.PRIMARY_COLOR}-600 hover:text-${theme.PRIMARY_COLOR}-800`}>Marcar todo como leído</button>
+                        </div>
+                        <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                          {[1, 2, 3].map((item) => (
+                            <div key={item} className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                              <div className="flex gap-3">
+                                <div className={`bg-${theme.PRIMARY_COLOR}-100 text-${theme.PRIMARY_COLOR}-600 rounded-full p-2`}>
+                                  <span className="material-icons-outlined text-lg">assignment</span>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">New ticket assigned</p>
+                                  <p className="text-xs text-gray-500 mt-1">You have a new ticket #TKT-00{item}</p>
+                                  <p className="text-xs text-gray-400 mt-1">2{item} minutes ago</p>
+                                </div>
+                              </div>
+                            </div>
             ))}
           </div>
           <div className="px-4 py-2 border-t border-gray-100 text-center">
-            <a href="#" className="text-xs text-blue-600 hover:text-blue-800">View all notifications</a>
+            <a href="#" className={`text-xs text-${theme.PRIMARY_COLOR}-600 hover:text-${theme.PRIMARY_COLOR}-800`}>Ver todas las notificaciones</a>
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAppTheme } from "../../context/ThemeContext";
 import { FiChevronDown, FiChevronRight, FiFilter, FiPlus } from "react-icons/fi";
 
 // Estados Kanban normalizados
@@ -64,6 +65,7 @@ export default function EpicsSidebar({
   onSearchChange,
   projects = []
 }) {
+  const theme = useAppTheme();
   const [collapsedEpics, setCollapsedEpics] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState(() => {
@@ -180,7 +182,7 @@ export default function EpicsSidebar({
         <h3 className="font-bold text-lg text-gray-900 flex items-center justify-between">
           Épicas
           <button
-            className="text-blue-600 hover:text-blue-800 p-1"
+            className={`text-${theme.PRIMARY_COLOR}-600 hover:text-${theme.PRIMARY_COLOR}-800 p-1`}
             onClick={onNewEpic}
             title="Nueva épica"
           >
@@ -222,7 +224,7 @@ export default function EpicsSidebar({
         <ul className="space-y-2">
           {/* Opción "Todas" */}
           <li
-            className={`cursor-pointer mb-2 px-3 py-2 rounded-lg flex items-center justify-between ${!selectedEpic ? "bg-blue-100 font-medium text-blue-800" : "hover:bg-gray-50"}`}
+            className={`cursor-pointer mb-2 px-3 py-2 rounded-lg flex items-center justify-between ${!selectedEpic ? `bg-${theme.PRIMARY_COLOR}-100 font-medium text-${theme.PRIMARY_COLOR}-800` : "hover:bg-gray-50"}`}
             onClick={() => onSelectEpic(null)}
           >
             <span>Todas las historias</span>

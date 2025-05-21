@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, Suspense, lazy } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAppTheme } from "../../context/ThemeContext";
 
 // Carga dinámica con React.lazy
 const EpicsSidebar = lazy(() => import('./EpicsSidebar'));
@@ -21,6 +22,7 @@ export default function PlanningBoard({
   filters = {},
   onFilterChange
 }) {
+  const theme = useAppTheme();
   const [selectedEpic, setSelectedEpic] = useState(null);
   const [selectedStory, setSelectedStory] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -164,7 +166,7 @@ export default function PlanningBoard({
             
             <div className="flex items-center gap-3">
               <button
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                className={`flex items-center gap-2 bg-${theme.PRIMARY_COLOR}-600 text-white px-4 py-2 rounded-lg hover:bg-${theme.PRIMARY_COLOR}-700 transition-colors text-sm font-medium`}
                 onClick={() => setShowNew(true)}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

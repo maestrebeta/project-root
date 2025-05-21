@@ -8,6 +8,7 @@ import EntradasTiempo from './EntradasTiempo';
 import FormularioEntrada from './FormularioEntrada';
 import CalendarioSemana from './CalendarioSemana';
 import NotificationPortal from './NotificationPortal';
+import { useAppTheme } from "../../context/ThemeContext.jsx";
 import Footer from "../Template/Footer.jsx";
 
 const getStats = (entries) => {
@@ -55,6 +56,7 @@ const TimeTracker = () => {
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [notification, setNotification] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
+  const theme = useAppTheme();
   const [currentFilters, setCurrentFilters] = useState({});
   const [confirmDelete, setConfirmDelete] = useState({ 
     open: false, 
@@ -195,9 +197,9 @@ const TimeTracker = () => {
               transition={{ duration: 0.5 }}
             >
               <motion.span 
-                className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-2 rounded-lg mr-3"
+                className={`bg-gradient-to-r from-${theme.PRIMARY_COLOR}-600 to-${theme.PRIMARY_COLOR}-500 text-white p-2 rounded-lg mr-3`}
                 animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 1, repeat: Infinity, repeatDelay: 5 }}
+                transition={{ duration: 1, repeat: Infinity, repeatDelay: 5 }}s
               >
                 <FiClock className="w-5 h-5 md:w-6 md:h-6" />
               </motion.span>
@@ -217,7 +219,7 @@ const TimeTracker = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="flex items-center bg-gradient-to-r from-blue-600 to-blue-500 text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium hover:from-blue-700 hover:to-blue-600 focus:outline-none transition-all"
+              className={`flex items-center bg-gradient-to-r from-${theme.PRIMARY_COLOR}-600 to-${theme.PRIMARY_COLOR}-500 text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium hover:from-${theme.PRIMARY_COLOR}-700 hover:to-${theme.PRIMARY_COLOR}-600 focus:outline-none transition-all`}
               onClick={() => setEditingEntry({})}
             >
               <FiPlus className="mr-2" />
