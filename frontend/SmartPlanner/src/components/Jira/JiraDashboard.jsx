@@ -9,6 +9,7 @@ import { FiChevronDown, FiChevronRight, FiDownload, FiAlertCircle,
   FiCheckCircle, FiCircle, FiTrendingUp, FiRefreshCw } from "react-icons/fi";
 import { format, parseISO, isBefore, isToday, isAfter, addDays } from "date-fns";
 import { es } from "date-fns/locale";
+import Footer from "../Template/Footer.jsx";
 
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6"];
 
@@ -1020,13 +1021,7 @@ const JiraDashboard = () => {
         </div>
       </main>
 
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto py-6 px-4 overflow-hidden sm:px-6 lg:px-8">
-          <p className="text-center text-base text-gray-500">
-            &copy; {new Date().getFullYear()} Jira Dashboard Pro. Todos los derechos reservados.
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };

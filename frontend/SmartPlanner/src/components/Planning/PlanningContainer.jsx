@@ -1,19 +1,31 @@
 import React, { useState, useEffect } from "react";
 import PlanningBoard from "./PlanningBoard";
+import KanbanStatesManager from "./KanbanStatesManager";
 import { v4 as uuidv4 } from 'uuid';
 
-
+// --- Configuración dinámica de estados Kanban ---
+const KANBAN_STATES_KEY = "smartplanner_kanban_states";
 const DEFAULT_KANBAN_STATES = [
-    { key: "nuevo", label: "Nuevo", color: "bg-gray-100", textColor: "text-gray-700" },
-    { key: "en_progreso", label: "En Progreso", color: "bg-blue-50", textColor: "text-blue-700" },
-    { key: "listo_pruebas", label: "Listo para Pruebas", color: "bg-yellow-50", textColor: "text-yellow-700" },
-    { key: "cerrado", label: "Cerrado", color: "bg-green-50", textColor: "text-green-700" }
-  ];
+  { key: "nuevo", label: "Nuevo", color: "bg-gray-100", textColor: "text-gray-700" },
+  { key: "en_progreso", label: "En Progreso", color: "bg-blue-50", textColor: "text-blue-700" },
+  { key: "listo_pruebas", label: "Listo para Pruebas", color: "bg-yellow-50", textColor: "text-yellow-700" },
+  { key: "cerrado", label: "Cerrado", color: "bg-green-50", textColor: "text-green-700" }
+];
 
-// Datos mock escalados para entorno empresarial
+function getInitialKanbanStates() {
+  const stored = localStorage.getItem(KANBAN_STATES_KEY);
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return DEFAULT_KANBAN_STATES;
+    }
+  }
+  return DEFAULT_KANBAN_STATES;
+}
+
+// --- Mock data empresarial ---
 const generateMockData = () => {
-  
-  // Generar 20 usuarios realistas
   const MOCK_USERS = Array.from({ length: 20 }, (_, i) => ({
     id: uuidv4(),
     nombre: [
@@ -36,7 +48,6 @@ const generateMockData = () => {
     lastActive: new Date(Date.now() - Math.floor(Math.random() * 7) * 24 * 60 * 60 * 1000).toISOString()
   }));
 
-  // Generar 5 proyectos empresariales
   const MOCK_PROJECTS = Array.from({ length: 5 }, (_, i) => ({
     id: uuidv4(),
     nombre: [
@@ -67,7 +78,6 @@ const generateMockData = () => {
     ][i]
   }));
 
-  // Generar 15 épicas de producto por proyecto
   const MOCK_EPICS = MOCK_PROJECTS.flatMap(project => 
     Array.from({ length: 3 }, (_, i) => ({
       id: uuidv4(),
@@ -104,7 +114,6 @@ const generateMockData = () => {
     }))
   );
 
-  // Generar 12 sprints trimestrales por proyecto
   const MOCK_SPRINTS = MOCK_PROJECTS.flatMap(project => 
     Array.from({ length: 12 }, (_, i) => {
       const startDate = new Date(Date.now() - (11 - i) * 90 * 24 * 60 * 60 * 1000);
@@ -136,18 +145,15 @@ const generateMockData = () => {
     })
   );
 
-  // Generar 250 historias de usuario realistas distribuidas en proyectos
   const MOCK_STORIES = MOCK_PROJECTS.flatMap(project => {
     const projectEpics = MOCK_EPICS.filter(epic => epic.projectId === project.id);
     const projectSprints = MOCK_SPRINTS.filter(sprint => sprint.projectId === project.id);
-    
     return Array.from({ length: 50 }, (_, i) => {
       const epic = projectEpics[Math.floor(Math.random() * projectEpics.length)];
       const statusOptions = ["nuevo", "en_progreso", "listo_pruebas", "cerrado"];
       const status = statusOptions[Math.floor(Math.random() * statusOptions.length)];
       const sprint = status === "nuevo" ? null : 
         projectSprints[Math.floor(Math.random() * projectSprints.length)];
-      
       return {
         id: uuidv4(),
         titulo: [
@@ -237,7 +243,8 @@ export default function PlanningContainer() {
   const [stories, setStories] = useState([]);
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [kanbanStates, setKanbanStates] = useState(DEFAULT_KANBAN_STATES);
+  const [kanbanStates, setKanbanStates] = useState(getInitialKanbanStates());
+  const [showStatesManager, setShowStatesManager] = useState(false);
   const [filters, setFilters] = useState({
     status: undefined,
     priority: undefined,
@@ -245,14 +252,17 @@ export default function PlanningContainer() {
     project: undefined
   });
 
+  // Persistir cambios de estados Kanban
+  useEffect(() => {
+    localStorage.setItem(KANBAN_STATES_KEY, JSON.stringify(kanbanStates));
+  }, [kanbanStates]);
+
   // Simular carga inicial de datos
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
-      // Simular llamada a API
       await new Promise(resolve => setTimeout(resolve, 800));
       const { MOCK_USERS, MOCK_PROJECTS, MOCK_EPICS, MOCK_SPRINTS, MOCK_STORIES } = generateMockData();
-      
       setUsers(MOCK_USERS);
       setProjects(MOCK_PROJECTS);
       setEpics(MOCK_EPICS);
@@ -260,11 +270,10 @@ export default function PlanningContainer() {
       setStories(MOCK_STORIES);
       setIsLoading(false);
     };
-
     loadData();
   }, []);
 
-  // Handlers para CRUD
+  // CRUD Handlers
   const handleUpdateStory = (updatedStory) => {
     setStories(prev => 
       prev.map(story => 
@@ -323,21 +332,51 @@ export default function PlanningContainer() {
   }
 
   return (
-    <PlanningBoard
-      epics={epics}
-      sprints={sprints}
-      stories={stories}
-      users={users}
-      projects={projects}
-      setStories={setStories}
-      onUpdateStory={handleUpdateStory}
-      onCreateStory={handleCreateStory}
-      onCreateEpic={handleCreateEpic}
-      onCreateProject={handleCreateProject}
-      filters={filters}
-      onFilterChange={handleFilterChange}
-      kanbanStates={kanbanStates}
-      onEditKanbanStates={setKanbanStates}
-    />
+    <div className="relative h-full">
+      {/* Botón para abrir el gestor de estados Kanban */}
+      <button
+        className="absolute top-16 right-4 z-10 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+        onClick={() => setShowStatesManager(true)}
+      >
+        Gestionar Estados Kanban
+      </button>
+
+      {/* Modal del gestor */}
+      {showStatesManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg px-6 pt-6 pb-6 relative min-w-[350px]">
+            <button
+              className="absolute top-9 right-10 text-gray-500 hover:text-gray-700 text-2xl"
+              onClick={() => setShowStatesManager(false)}
+              aria-label="Cerrar gestor de estados"
+              type="button"
+            >
+              ✕
+            </button>
+            <KanbanStatesManager
+              states={kanbanStates}
+              setStates={setKanbanStates}
+            />
+          </div>
+        </div>
+      )}
+
+      <PlanningBoard
+        epics={epics}
+        sprints={sprints}
+        stories={stories}
+        users={users}
+        projects={projects}
+        setStories={setStories}
+        onUpdateStory={handleUpdateStory}
+        onCreateStory={handleCreateStory}
+        onCreateEpic={handleCreateEpic}
+        onCreateProject={handleCreateProject}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        kanbanStates={kanbanStates}
+        onEditKanbanStates={setKanbanStates}
+      />
+    </div>
   );
 }

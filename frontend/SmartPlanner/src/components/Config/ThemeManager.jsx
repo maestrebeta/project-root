@@ -47,6 +47,7 @@ export function useTheme(defaults = {}) {
   // Derivadas de Tailwind
   const PRIMARY_COLOR_CLASS = `text-${primaryColor}-500`;
   const PRIMARY_BG_CLASS = `bg-${primaryColor}-100`;
+  const PRIMARY_BG_SOFT = `bg-${primaryColor}-50`;
   const PRIMARY_FONT_CLASS = `text-${primaryColor}-600`;
 
   return {
@@ -60,6 +61,7 @@ export function useTheme(defaults = {}) {
     setAnimations,
     PRIMARY_COLOR_CLASS,
     PRIMARY_BG_CLASS,
+    PRIMARY_BG_SOFT,
     PRIMARY_FONT_CLASS
   };
 }

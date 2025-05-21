@@ -10,13 +10,14 @@ import Projects from './components/Projects/Proyectos.jsx';
 import TimeTracker from './components/timeTracker/TimeTracker.jsx';
 import JiraDashboard from './components/Jira/JiraDashboard';
 import PlanningContainer from "./components/Planning/PlanningContainer";
-import KanbanStatesManager from './components/Config/KanbanStatesManager.jsx';
+import KanbanStatesManager from './components/Planning/KanbanStatesManager.jsx';
 import ThemeManager from './components/Config/ThemeManager.jsx';
 import { useAppTheme } from "./context/ThemeContext.jsx";
+import { sidebarItems, getHeaderTitleFromSidebar } from './components/Template/sidebarConfig';
 import './index.css';
 
 const pageTransition = {
-  initial: { opacity: 0, scale: 0.98, y: 24, filter: "blur(4px)" },
+  initial: { opacity: 0, scale: 0.98, y: 24, filter: "blur(5px)" },
   animate: { opacity: 1, scale: 1, y: 0, filter: "blur(0px)" },
   exit: { opacity: 0, scale: 0.98, y: -24, filter: "blur(4px)" },
   transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] }
@@ -30,15 +31,22 @@ const DEFAULT_KANBAN_STATES = [
 ];
 
 export default function App() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [kanbanStates, setKanbanStates] = useState(DEFAULT_KANBAN_STATES);
   const location = useLocation();
+  const headerTitle = getHeaderTitleFromSidebar(location.pathname);
 
   return (
     <div id="app-layout" className="app-layout bg-gradient-to-br from-[#f6f7fb] to-[#e9eaf3] min-h-screen">
       <Sidebar collapsed={sidebarCollapsed} />
-      <div className={`app-content ${sidebarCollapsed ? 'collapsed' : ''} transition-all duration-300`}>
-        <Header onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      {/* <div className={`app-content ${sidebarCollapsed ? 'collapsed' : ''} transition-all duration-300`}> */}
+        <div
+          className={`app-content transition-all duration-300`}
+          style={{
+            marginLeft: sidebarCollapsed ? 80 : 260, // 80px cuando colapsado, 260px cuando expandido
+          }}
+        >
+        <Header onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)} title={headerTitle}/>
         <div className="relative min-h-[calc(100vh-4rem)]">
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
@@ -123,7 +131,7 @@ export default function App() {
                 path="/manager/kanban-states"
                 element={
                   <motion.div
-                    {...pageTransition}s
+                    {...pageTransition}
                     className="h-full"
                   >
                     <KanbanStatesManager
@@ -137,7 +145,7 @@ export default function App() {
                 path="/config/theme"
                 element={
                   <motion.div
-                    {...pageTransition}s
+                    {...pageTransition}
                     className="h-full"
                   >
                     <ThemeManager

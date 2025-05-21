@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Header({ onMenuClick }) {
+export default function Header({ onMenuClick, title = "Workplace ticket" }) {
   const [searchFocused, setSearchFocused] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -18,10 +18,10 @@ export default function Header({ onMenuClick }) {
         </button>
         
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-gray-800 tracking-tight">Workplace ticket</h2>
+          <h2 className="text-lg font-bold text-gray-800 tracking-tight">{title}</h2>
           <span className="px-2 py-1 bg-gray-100 text-xs text-gray-600 rounded-full font-medium flex items-center gap-1">
-            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-            Main Table
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+            En línea
           </span>
         </div>
       </div>
@@ -31,7 +31,7 @@ export default function Header({ onMenuClick }) {
         <div className="relative">
           <input
             type="text"
-            placeholder="Search anything..."
+            placeholder="Buscar..."
             className="w-full px-4 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:border-blue-500 pl-10"
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
