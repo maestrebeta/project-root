@@ -5,9 +5,14 @@ import Header from './components/Template/Header';
 import Sidebar from './components/Template/Sidebar';
 import Home from './components/Home/Home.jsx';
 import Users from './components/Users/Users.jsx';
-import Clients from './components/Clients/Clients.jsx';
+import Clients from './components/Customers/Clients.jsx';
 import Projects from './components/Projects/Proyectos.jsx';
-import Tasks from './components/Tasks/Tasks.jsx';
+import TimeTracker from './components/timeTracker/TimeTracker.jsx';
+import JiraDashboard from './components/Jira/JiraDashboard';
+import PlanningContainer from "./components/Planning/PlanningContainer";
+import KanbanStatesManager from './components/Config/KanbanStatesManager.jsx';
+import ThemeManager from './components/Config/ThemeManager.jsx';
+import { useAppTheme } from "./context/ThemeContext.jsx";
 import './index.css';
 
 const pageTransition = {
@@ -17,8 +22,16 @@ const pageTransition = {
   transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] }
 };
 
+const DEFAULT_KANBAN_STATES = [
+  { key: "nuevo", label: "Nuevo", color: "bg-gray-100", textColor: "text-gray-700" },
+  { key: "en_progreso", label: "En Progreso", color: "bg-blue-50", textColor: "text-blue-700" },
+  { key: "listo_pruebas", label: "Listo para Pruebas", color: "bg-yellow-50", textColor: "text-yellow-700" },
+  { key: "cerrado", label: "Cerrado", color: "bg-green-50", textColor: "text-green-700" }
+];
+
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [kanbanStates, setKanbanStates] = useState(DEFAULT_KANBAN_STATES);
   const location = useLocation();
 
   return (
@@ -30,7 +43,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
               <Route
-                path="/"
+                path="/home"
                 element={
                   <motion.div
                     {...pageTransition}
@@ -41,7 +54,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/projects"
+                path="/admin/projects"
                 element={
                   <motion.div
                     {...pageTransition}
@@ -52,7 +65,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/users"
+                path="admin/users"
                 element={
                   <motion.div
                     {...pageTransition}
@@ -63,7 +76,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/clients"
+                path="/admin/customers"
                 element={
                   <motion.div
                     {...pageTransition}
@@ -74,13 +87,62 @@ export default function App() {
                 }
               />
               <Route
-                path="/tasks"
+                path="/user/time-tracker"
                 element={
                   <motion.div
                     {...pageTransition}
                     className="h-full"
                   >
-                    <Tasks />
+                    <TimeTracker />
+                  </motion.div>
+                }
+              />
+              <Route
+                path="/manager/jira-summary"
+                element={
+                  <motion.div
+                    {...pageTransition}
+                    className="h-full"
+                  >
+                    <JiraDashboard />
+                  </motion.div>
+                }
+              />
+              <Route
+                path="manager/planning"
+                element={
+                  <motion.div
+                    {...pageTransition}
+                    className="h-full"
+                  >
+                    <PlanningContainer />
+                  </motion.div>
+                }
+              />
+              <Route
+                path="/manager/kanban-states"
+                element={
+                  <motion.div
+                    {...pageTransition}s
+                    className="h-full"
+                  >
+                    <KanbanStatesManager
+                      states={kanbanStates}
+                      setStates={setKanbanStates}
+                    />
+                  </motion.div>
+                }
+              />
+              <Route
+                path="/config/theme"
+                element={
+                  <motion.div
+                    {...pageTransition}s
+                    className="h-full"
+                  >
+                    <ThemeManager
+                      theme={useAppTheme()}
+                    />
                   </motion.div>
                 }
               />
@@ -92,3 +154,4 @@ export default function App() {
     </div>
   );
 }
+

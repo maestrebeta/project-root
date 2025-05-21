@@ -8,7 +8,7 @@ class TimeEntryBase(BaseModel):
     entry_date: date
     activity_type: str
     start_time: time
-    end_time: time
+    end_time: Optional[time] = None
     description: Optional[str] = None
     status: str
 
@@ -20,7 +20,7 @@ class TimeEntryUpdate(TimeEntryBase):
 
 class TimeEntryOut(TimeEntryBase):
     entry_id: int
-    duration_hours: float
+    duration_hours: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 

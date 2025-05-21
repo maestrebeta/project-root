@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import Base, engine
-from app.routers import project_router, client_router, user_router, ticket_router, time_entry_router # Agrega otros routers aquí
+from app.routers import project_router, client_router, user_router, ticket_router, time_entry_router, jira_router # Agrega otros routers aquí
 
 # Crear todas las tablas en la base de datos
 Base.metadata.create_all(bind=engine)
@@ -29,3 +29,4 @@ app.include_router(client_router.router)
 app.include_router(user_router.router)
 app.include_router(ticket_router.router)
 app.include_router(time_entry_router.router)
+app.include_router(jira_router.router)
