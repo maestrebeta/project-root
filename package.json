@@ -1,0 +1,17 @@
+{
+  "name": "smartplanner",
+  "version": "1.0.0",
+  "description": "SmartPlanner Project Management System",
+  "private": true,
+  "workspaces": [
+    "frontend/SmartPlanner",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "cd frontend/SmartPlanner && npm run dev",
+    "build": "cd frontend/SmartPlanner && npm run build",
+    "preview": "cd frontend/SmartPlanner && npm run preview"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
