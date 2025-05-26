@@ -27,3 +27,6 @@ dist-ssr
 *.sw?
 *.sql
 *.yml
+package-lock.json
+package.json
+package.json
