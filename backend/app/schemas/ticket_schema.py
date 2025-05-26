@@ -15,6 +15,7 @@ class TicketCreate(TicketBase):
     ticket_number: str
     project_id: int
     client_id: int
+    organization_id: int
     reported_by_user_id: int
     assigned_to_user_id: int
 
@@ -29,6 +30,7 @@ class TicketOut(TicketBase):
     ticket_number: str
     project_id: int
     client_id: int
+    organization_id: int
     reported_by_user_id: int
     assigned_to_user_id: int
     created_at: datetime

@@ -44,3 +44,7 @@ class User(Base):
         foreign_keys="[Ticket.assigned_to_user_id]", 
         back_populates="assigned_to_user"
     )
+    
+    # Relaciones para comentarios y cambios en tickets
+    ticket_comments = relationship("TicketComment", back_populates="user")
+    ticket_history_changes = relationship("TicketHistory", back_populates="changed_by_user")

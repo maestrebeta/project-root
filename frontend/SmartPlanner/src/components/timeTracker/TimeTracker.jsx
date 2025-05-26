@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FiClock, FiCalendar, FiPlus, FiChevronRight, FiX, FiCheck } from 'react-icons/fi';
+import { FiClock, FiCalendar, FiPlus, FiChevronRight, FiX, FiCheck, FiSettings, FiPlay, FiPause, FiSquare, FiEdit2, FiTrash2, FiUser, FiTag, FiChevronDown, FiChevronUp, FiRefreshCw } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { isSameDay, isThisWeek, parseISO } from 'date-fns';
+import { isSameDay, isThisWeek, parseISO, format, startOfToday, isToday, addHours, addMinutes, differenceInMinutes } from 'date-fns';
+import { es } from 'date-fns/locale';
 import TimerPanel from './TimerPanel';
 import EstadisticasPanel from './EstadisticasPanel';
 import EntradasTiempo from './EntradasTiempo';
@@ -11,7 +12,9 @@ import NotificationPortal from './NotificationPortal';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import Footer from "../Template/Footer.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { useProjectsAndTags } from "./useProjectsAndTags.jsx";
+import { useProjectsAndTags, useTaskStates } from "./useProjectsAndTags.jsx";
+import TaskStatesManager from './TaskStatesManager';
+import TasksTable from './TasksTable';
 
 const calculateStats = (entries, projects) => {
   const totalHours = entries.reduce((sum, entry) => {
@@ -80,6 +83,7 @@ const TimeTracker = () => {
     loading: projectsLoading, 
     error: projectsError 
   } = useProjectsAndTags();
+  const { taskStates, updateTaskStates } = useTaskStates();
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -98,13 +102,35 @@ const TimeTracker = () => {
   const [notification, setNotification] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [currentFilters, setCurrentFilters] = useState({});
-  const [confirmDelete, setConfirmDelete] = useState({ 
-    open: false, 
-    entryId: null, 
-    description: '' 
-  });
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('today');
+  const [showTaskStates, setShowTaskStates] = useState(false);
+  const [showEntryForm, setShowEntryForm] = useState(false);
+
+  // Normalizar estado
+  const normalizeStatus = (status) => {
+    if (!status) return 'pendiente';
+    
+    const normalized = status.toLowerCase().trim();
+    switch (normalized) {
+      case 'pending':
+      case 'pendiente':
+      case 'nueva':
+        return 'pendiente';
+      case 'in_progress':
+      case 'in progress':
+      case 'en_progreso':
+      case 'en progreso':
+        return 'en_progreso';
+      case 'completed':
+      case 'completado':
+      case 'completada':
+      case 'done':
+        return 'completada';
+      default:
+        return 'pendiente';
+    }
+  };
 
   const handleFilterChange = (newFilter) => {
     setCurrentFilters(prev => ({ ...prev, ...newFilter }));
@@ -132,10 +158,15 @@ const TimeTracker = () => {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         credentials: 'include'
       });
+
+      if (response.status === 401) {
+        throw new Error('Sesión expirada');
+      }
 
       if (!response.ok) {
         const errorData = await response.text();
@@ -152,14 +183,14 @@ const TimeTracker = () => {
     } catch (error) {
       console.error('Error al cargar entradas de tiempo:', error);
       
-      // Manejar específicamente errores de autenticación
-      if (error.message.includes('Unauthorized') || error.message.includes('token')) {
-        alert('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
-        // Opcional: Redirigir a la página de login
+      if (error.message.includes('Sesión expirada') || error.message.includes('No hay sesión activa')) {
+        showNotification('error', 'Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+        // Aquí podrías redirigir al login si tienes un sistema de navegación
         // navigate('/login');
-      } else {
-        alert(error.message || 'Error al cargar las entradas de tiempo');
+        return;
       }
+      
+      showNotification('error', error.message || 'Error al cargar las entradas de tiempo');
     }
   };
 
@@ -196,56 +227,6 @@ const TimeTracker = () => {
   }, []);
 
   // Handlers
-  const handleEliminarClick = useCallback((entry) => {
-    setConfirmDelete({
-      open: true,
-      entryId: entry.entry_id || entry.id,
-      description: entry.description || '¿Seguro que deseas eliminar esta entrada?',
-    });
-  }, []);
-
-  const handleEliminar = useCallback(async () => {
-    try {
-      const response = await fetch(`http://localhost:8000/time-entries/${confirmDelete.entryId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Error al eliminar la entrada');
-      
-      await fetchTimeEntries();
-      showNotification('success', 'Entrada eliminada correctamente');
-    } catch (err) {
-      showNotification('error', err.message);
-    } finally {
-      setConfirmDelete({ open: false, entryId: null, description: '' });
-    }
-  }, [confirmDelete.entryId, fetchTimeEntries, showNotification]);
-
-  const handleSubmit = useCallback(async (data) => {
-    try {
-      const isEdit = !!data.entry_id;
-      const url = isEdit 
-        ? `http://localhost:8000/time-entries/${data.entry_id}`
-        : 'http://localhost:8000/time-entries/';
-      
-      const response = await fetch(url, {
-        method: isEdit ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) throw new Error('Error al guardar la entrada');
-
-      await fetchTimeEntries();
-      setEditingEntry(null);
-      showNotification(
-        'success',
-        isEdit ? '¡Entrada actualizada con éxito!' : '¡Entrada creada con éxito!'
-      );
-    } catch (err) {
-      showNotification('error', err.message);
-    }
-  }, [fetchTimeEntries, showNotification]);
-
   const handleEditar = useCallback((entry) => {
     setEditingEntry(entry);
   }, []);
@@ -353,6 +334,112 @@ const TimeTracker = () => {
     };
   };
 
+  const handleTaskStatesUpdate = async (newStates) => {
+    try {
+      await updateTaskStates(newStates);
+      // Recargar las entradas después de actualizar los estados
+      await fetchTimeEntries(filter);
+      showNotification('success', 'Estados actualizados correctamente');
+    } catch (error) {
+      console.error('Error al actualizar estados:', error);
+      showNotification('error', 'Error al actualizar los estados');
+    }
+    setShowTaskStates(false);
+  };
+
+  // Eliminar tarea - Método unificado
+  const handleDelete = useCallback(async (taskId) => {
+    console.log('TimeTracker - Intentando eliminar tarea:', taskId);
+    
+    if (!taskId || isNaN(taskId)) {
+      console.error('TimeTracker - ID de tarea inválido:', taskId);
+      showNotification('error', 'ID de tarea inválido');
+      return;
+    }
+
+    if (!window.confirm('¿Estás seguro de que quieres eliminar esta entrada?')) {
+      return;
+    }
+
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
+      }
+
+      console.log('TimeTracker - Enviando petición DELETE a:', `http://localhost:8000/time-entries/${taskId}`);
+      
+      const response = await fetch(`http://localhost:8000/time-entries/${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al eliminar la entrada');
+      }
+
+      // Actualizar el estado local
+      setTimeEntries(prev => prev.filter(task => task.entry_id !== taskId));
+      showNotification('success', 'Entrada eliminada correctamente');
+      console.log('TimeTracker - Tarea eliminada exitosamente:', taskId);
+    } catch (err) {
+      console.error('TimeTracker - Error al eliminar tarea:', err);
+      showNotification('error', err.message);
+    }
+  }, [showNotification]);
+
+  // Modificar handleSubmit para normalizar el estado
+  const handleSubmit = useCallback(async (data) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const normalizedData = {
+        ...data,
+        status: normalizeStatus(data.status),
+        organization_id: user.organization_id
+      };
+
+      const isEdit = !!data.entry_id;
+      const url = isEdit 
+        ? `http://localhost:8000/time-entries/${data.entry_id}`
+        : 'http://localhost:8000/time-entries/';
+      
+      console.log('Enviando datos:', normalizedData);
+      
+      const response = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.token}`,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(normalizedData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(errorData || 'Error al guardar la entrada');
+      }
+
+      await fetchTimeEntries(filter);
+      setEditingEntry(null);
+      showNotification(
+        'success',
+        isEdit ? '¡Entrada actualizada con éxito!' : '¡Entrada creada con éxito!'
+      );
+    } catch (err) {
+      console.error('Error en handleSubmit:', err);
+      showNotification('error', err.message);
+    }
+  }, [fetchTimeEntries, showNotification, filter, user?.organization_id]);
+
   return (
     <div className={`min-h-screen bg-gray-50 flex flex-col relative ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}>
       {/* Header */}
@@ -376,8 +463,29 @@ const TimeTracker = () => {
               </motion.span>
               Seguimiento de Tiempo Pro
             </motion.h1>
+
+            {/* Selector de filtro */}
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="ml-4 px-3 py-2 border rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="today">Hoy</option>
+              <option value="this_week">Esta semana</option>
+              <option value="this_month">Este mes</option>
+              <option value="all">Todas</option>
+            </select>
           </div>
           <div className="flex items-center space-x-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="hidden md:flex items-center bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 focus:outline-none"
+              onClick={() => setShowTaskStates(true)}
+            >
+              <span className="material-icons-outlined mr-2">settings</span>
+              Gestionar Estados
+            </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -385,7 +493,7 @@ const TimeTracker = () => {
               onClick={() => setShowCalendar(true)}
             >
               <FiCalendar className="mr-2" />
-              Entrada calendario
+              Entrada Calendario
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -465,7 +573,7 @@ const TimeTracker = () => {
               entradas={timeEntries}
               loading={loadingEntries}
               onEditar={handleEditar}
-              onEliminar={handleEliminarClick}
+              onEliminar={handleDelete}
               onRefresh={fetchTimeEntries}
               currentFilters={currentFilters}
               onFilterChange={handleFilterChange}
@@ -485,6 +593,7 @@ const TimeTracker = () => {
             initialData={editingEntry}
             onClose={() => setEditingEntry(null)}
             onSubmit={handleSubmit}
+            organizationStates={taskStates}
           />
         )}
       </AnimatePresence>
@@ -501,46 +610,28 @@ const TimeTracker = () => {
         )}
       </AnimatePresence>
 
-      {/* Confirmación de eliminación */}
-      {confirmDelete.open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40"
-        >
-          <motion.div
-            initial={{ scale: 0.9, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4"
-          >
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirmar eliminación</h3>
-            <p className="text-gray-700 mb-4">{confirmDelete.description}</p>
-            <div className="flex justify-end space-x-3">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
-                onClick={() => setConfirmDelete({ open: false, entryId: null, description: '' })}
-              >
-                Cancelar
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 flex items-center"
-                onClick={handleEliminar}
-              >
-                <FiX className="mr-1" />
-                Eliminar
-              </motion.button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-      
       {/* Footer */}
       <Footer />
+
+      {/* Modal de gestión de estados */}
+      <AnimatePresence>
+        {showTaskStates && (
+          <TaskStatesManager
+            onClose={() => setShowTaskStates(false)}
+            onUpdate={handleTaskStatesUpdate}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Tabla de tareas
+      <TasksTable
+        tasks={timeEntries}
+        onEdit={handleEditar}
+        onDelete={handleDelete}
+        organizationStates={taskStates}
+        onRefresh={fetchTimeEntries}
+      /> */}
+
     </div>
   );
 };

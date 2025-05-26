@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import datetime, timezone
+from pydantic import ValidationError
 
 from app.schemas.time_entry_schema import TimeEntryCreate, TimeEntryUpdate, TimeEntryOut
 from app.crud import time_entry_crud
@@ -46,10 +48,24 @@ def create(
                 detail="Proyecto no encontrado o no pertenece a la organización"
             )
 
+        # Validar que end_time sea posterior a start_time si está presente
+        if entry.end_time and entry.start_time:
+            if entry.end_time < entry.start_time:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="La hora de fin debe ser posterior a la hora de inicio"
+                )
+
         # Crear entrada de tiempo
         db_entry = time_entry_crud.create_time_entry(db, entry)
         return db_entry
 
+    except ValidationError as ve:
+        # Errores de validación de Pydantic
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(ve)
+        )
     except ValueError as ve:
         # Errores de validación de datos
         raise HTTPException(

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, CheckConstraint, TIMESTAMP, func, DateTime, Table, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, CheckConstraint, TIMESTAMP, func, DateTime, Table, UniqueConstraint, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
@@ -43,3 +43,21 @@ class Project(Base):
     time_entries = relationship("TimeEntry", back_populates="project")
     tickets = relationship("Ticket", back_populates="project")
     organization = relationship("Organization", foreign_keys=[organization_id])
+    invoices = relationship("Invoice", back_populates="project")
+    budgets = relationship("ProjectBudget", back_populates="project")
+
+class ProjectBudget(Base):
+    __tablename__ = "project_budgets"
+    
+    budget_id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=False)
+    estimated_hours = Column(Numeric(10, 2), nullable=False)
+    estimated_cost = Column(Numeric(12, 2), nullable=False)
+    hourly_rate = Column(Numeric(10, 2), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    
+    # Relaciones
+    project = relationship("Project", back_populates="budgets")

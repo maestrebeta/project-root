@@ -4,6 +4,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 export default function ProyectosTable() {
   const theme = useAppTheme();
   const [proyectos, setProyectos] = useState([]);
+  const [clientes, setClientes] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -64,8 +65,46 @@ export default function ProyectosTable() {
     }
   };
 
+  // Cargar clientes de la organización
+  const fetchClientes = async () => {
+    try {
+      const session = localStorage.getItem('session');
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const parsedSession = JSON.parse(session);
+      if (!parsedSession.token) {
+        throw new Error('Token de autenticación no encontrado');
+      }
+
+      const response = await fetch('http://localhost:8000/clients/', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${parsedSession.token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Error al cargar clientes:', errorData);
+        throw new Error(errorData || 'Error al cargar los clientes');
+      }
+
+      const data = await response.json();
+      console.log('Clientes cargados:', data);
+      setClientes(data);
+    } catch (error) {
+      console.error('Error completo al cargar los clientes:', error);
+      setClientes([]);
+    }
+  };
+
   useEffect(() => {
     fetchProyectos();
+    fetchClientes();
   }, []);
 
   const handleChange = (e) => {
@@ -96,7 +135,7 @@ export default function ProyectosTable() {
       const projectData = {
         name: form.name,
         project_type: form.project_type,
-        client_id: parseInt(form.client_id, 10),
+        client_id: form.client_id ? parseInt(form.client_id, 10) : null,
         status: form.status,
         start_date: form.start_date ? new Date(form.start_date).toISOString().split('T')[0] : null,
         end_date: form.end_date ? new Date(form.end_date).toISOString().split('T')[0] : null,
@@ -211,6 +250,13 @@ export default function ProyectosTable() {
     setShowForm(true);
   };
 
+  // Función para obtener el nombre del cliente por su ID
+  const getClientName = (clientId) => {
+    if (!clientId) return 'Sin cliente';
+    const cliente = clientes.find(c => c.client_id === clientId);
+    return cliente ? cliente.name : `Cliente ID: ${clientId}`;
+  };
+
   return (
     <div className={`${theme.FONT_CLASS}`}>
       <div className="overflow-x-auto">
@@ -273,16 +319,21 @@ export default function ProyectosTable() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ID Cliente</label>
-                <input
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cliente</label>
+                <select
                   className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   name="client_id"
-                  type="number"
-                  placeholder="ID Cliente"
                   value={form.client_id}
                   onChange={handleChange}
-                  required
-                />
+                >
+                  <option value="" disabled hidden>Selecciona un cliente</option>
+                  <option value="">Sin cliente</option>
+                  {clientes.map((cliente) => (
+                    <option key={cliente.client_id} value={cliente.client_id}>
+                      {cliente.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Fecha Inicio</label>
@@ -387,6 +438,7 @@ export default function ProyectosTable() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nombre</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tipo</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha Inicio</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha Fin</th>
@@ -399,6 +451,7 @@ export default function ProyectosTable() {
                 <tr key={proyecto.project_id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getClientName(proyecto.client_id)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_type}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.start_date}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.end_date}</td>

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Date, TIMESTAMP, Enum, CheckConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Date, TIMESTAMP, Enum, CheckConstraint, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -11,6 +11,7 @@ class Ticket(Base):
     ticket_number = Column(String(20), unique=True, nullable=False)
     project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=True)
     client_id = Column(Integer, ForeignKey("clients.client_id"), nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.organization_id"), nullable=False)
     reported_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     assigned_to_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     title = Column(String(100), nullable=False)
@@ -38,6 +39,7 @@ class Ticket(Base):
     # Relaciones
     project = relationship("Project", back_populates="tickets")
     client = relationship("Client", back_populates="tickets")
+    organization = relationship("Organization", back_populates="tickets")
     reported_by_user = relationship(
         "User", 
         foreign_keys=[reported_by_user_id], 
@@ -49,3 +51,34 @@ class Ticket(Base):
         back_populates="tickets_assigned"
     )
     time_entries = relationship("TimeEntry", back_populates="ticket")
+    comments = relationship("TicketComment", back_populates="ticket")
+    history = relationship("TicketHistory", back_populates="ticket")
+
+class TicketComment(Base):
+    __tablename__ = "ticket_comments"
+    
+    comment_id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.ticket_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    comment_text = Column(Text, nullable=False)
+    is_internal = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    ticket = relationship("Ticket", back_populates="comments")
+    user = relationship("User", back_populates="ticket_comments")
+
+class TicketHistory(Base):
+    __tablename__ = "ticket_history"
+    
+    history_id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.ticket_id"), nullable=False)
+    changed_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    changed_field = Column(String(50), nullable=False)
+    old_value = Column(Text)
+    new_value = Column(Text)
+    change_timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relaciones
+    ticket = relationship("Ticket", back_populates="history")
+    changed_by_user = relationship("User", back_populates="ticket_history_changes")

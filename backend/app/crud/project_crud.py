@@ -140,24 +140,64 @@ def update_project(db: Session, project_id: int, updates: ProjectUpdate):
         if not db_project:
             return None
         
-        # Validar tipos de proyecto y estado si se proporcionan
+        # Validar tipos de proyecto si se proporcionan
         if updates.project_type:
             valid_project_types = [
-                'desarrollo', 'soporte', 'reunion', 'capacitacion', 'otro', 'consultoria',
-                'development', 'support', 'meeting', 'training', 'other', 'consulting'
+                'development', 'support', 'meeting', 'training', 'other'
             ]
-            project_type_lower = updates.project_type.lower()
-            if project_type_lower not in valid_project_types:
+            
+            # Mapeo de tipos de proyecto
+            project_type_mapping = {
+                'desarrollo': 'development',
+                'soporte': 'support',
+                'reunion': 'meeting',
+                'capacitacion': 'training',
+                'otro': 'other',
+                'consultoria': 'other'  # Mapear consultoria a other
+            }
+            
+            # Normalizar tipo de proyecto
+            normalized_project_type = project_type_mapping.get(
+                updates.project_type.lower(), 
+                updates.project_type.lower()
+            )
+            
+            if normalized_project_type not in valid_project_types:
                 raise ValueError(f"Tipo de proyecto inválido. Debe ser uno de: {valid_project_types}")
+            
+            # Actualizar con el tipo normalizado
+            updates.project_type = normalized_project_type
         
         if updates.status:
             valid_statuses = [
-                'nuevo', 'en_progreso', 'completado', 'pausado', 'cancelado',
-                'new', 'in_progress', 'completed', 'paused', 'canceled'
+                'active', 'paused', 'completed', 'archived'
             ]
-            status_lower = updates.status.lower()
-            if status_lower not in valid_statuses:
+            
+            # Mapeo de estados (igual que en el schema)
+            status_mapping = {
+                'nuevo': 'active',
+                'en_progreso': 'active', 
+                'completado': 'completed',
+                'pausado': 'paused',
+                'cancelado': 'archived',
+                'new': 'active',
+                'in_progress': 'active',
+                'completed': 'completed',
+                'paused': 'paused',
+                'canceled': 'archived'
+            }
+            
+            # Normalizar estado
+            normalized_status = status_mapping.get(
+                updates.status.lower(), 
+                updates.status.lower()
+            )
+            
+            if normalized_status not in valid_statuses:
                 raise ValueError(f"Estado de proyecto inválido. Debe ser uno de: {valid_statuses}")
+            
+            # Actualizar con el estado normalizado
+            updates.status = normalized_status
         
         # Actualizar campos
         for key, value in updates.dict(exclude_unset=True).items():

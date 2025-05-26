@@ -1,0 +1,321 @@
+"""v1.0.0 initial schema
+
+Revision ID: v1_0_0
+Revises: 
+Create Date: 2024-03-19 10:00:00.000000
+
+"""
+from typing import Sequence, Union
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+import json
+
+# revision identifiers, used by Alembic.
+revision: str = 'v1_0_0'
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+# Estados predeterminados del sistema
+default_task_states = {
+    "states": [
+        {"id": "pendiente", "label": "Pendiente", "icon": "🟡", "color": "yellow"},
+        {"id": "en_progreso", "label": "En Progreso", "icon": "🔵", "color": "blue"},
+        {"id": "completada", "label": "Completada", "icon": "🟢", "color": "green"}
+    ],
+    "default_state": "pendiente",
+    "final_states": ["completada"]
+}
+
+def upgrade() -> None:
+    # Crear tabla countries
+    op.create_table(
+        'countries',
+        sa.Column('country_code', sa.String(2), primary_key=True),
+        sa.Column('country_name', sa.String(100), nullable=False),
+        sa.Column('continent', sa.String(50), nullable=False),
+        sa.Column('phone_code', sa.String(10), nullable=True),
+        sa.Column('currency_code', sa.String(3), nullable=True),
+        sa.Column('currency_symbol', sa.String(5), nullable=True),
+        sa.Column('is_active', sa.Boolean(), default=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'))
+    )
+
+    # Crear tabla organizations
+    op.create_table(
+        'organizations',
+        sa.Column('organization_id', sa.Integer(), nullable=False),
+        sa.Column('name', sa.String(length=100), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('is_active', sa.Boolean(), default=True),
+        sa.Column('country_code', sa.String(length=2), sa.ForeignKey('countries.country_code'), nullable=True),
+        sa.Column('timezone', sa.String(length=50), server_default='UTC'),
+        sa.Column('subscription_plan', sa.String(length=20), server_default='free'),
+        sa.Column('max_users', sa.Integer(), server_default='5'),
+        sa.Column('logo_url', sa.Text(), nullable=True),
+        sa.Column('primary_contact_email', sa.String(length=100), nullable=True),
+        sa.Column('primary_contact_name', sa.String(length=100), nullable=True),
+        sa.Column('primary_contact_phone', sa.String(length=20), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('task_states', postgresql.JSONB(astext_type=sa.Text()), nullable=False, 
+                  server_default=sa.text(f"'{json.dumps(default_task_states)}'::jsonb")),
+        sa.PrimaryKeyConstraint('organization_id'),
+        sa.UniqueConstraint('name')
+    )
+
+    # Crear tabla clients
+    op.create_table(
+        'clients',
+        sa.Column('client_id', sa.Integer(), nullable=False),
+        sa.Column('name', sa.String(length=100), nullable=False),
+        sa.Column('code', sa.String(length=20), nullable=True),
+        sa.Column('is_active', sa.Boolean(), default=True),
+        sa.Column('organization_id', sa.Integer(), sa.ForeignKey('organizations.organization_id'), nullable=False),
+        sa.Column('country_code', sa.String(length=2), sa.ForeignKey('countries.country_code'), nullable=True),
+        sa.Column('address', sa.Text(), nullable=True),
+        sa.Column('contact_email', sa.String(length=100), nullable=True),
+        sa.Column('contact_phone', sa.String(length=20), nullable=True),
+        sa.Column('tax_id', sa.String(length=50), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('client_id'),
+        sa.UniqueConstraint('name', 'organization_id', name='unique_client_name_per_organization')
+    )
+
+    # Crear tabla users
+    op.create_table(
+        'users',
+        sa.Column('user_id', sa.Integer(), nullable=False),
+        sa.Column('username', sa.String(50), unique=True, nullable=False, index=True),
+        sa.Column('full_name', sa.String(100), nullable=True),
+        sa.Column('email', sa.String(100), unique=True, nullable=False, index=True),
+        sa.Column('password_hash', sa.String(255), nullable=False),
+        sa.Column('role', sa.String(20), nullable=False),
+        sa.Column('is_active', sa.Boolean(), default=True),
+        sa.Column('profile_image', sa.Text(), nullable=True),
+        sa.Column('theme_preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('organization_id', sa.Integer(), sa.ForeignKey('organizations.organization_id'), nullable=True),
+        sa.Column('country_code', sa.String(2), nullable=True),
+        sa.Column('timezone', sa.String(50), server_default='UTC'),
+        sa.Column('language', sa.String(10), server_default='es'),
+        sa.Column('last_login', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('user_id'),
+        sa.UniqueConstraint('email'),
+        sa.UniqueConstraint('username'),
+        sa.CheckConstraint("role IN ('admin', 'dev', 'infra', 'super_user')", name='valid_user_roles')
+    )
+
+    # Crear tabla projects
+    op.create_table(
+        'projects',
+        sa.Column('project_id', sa.Integer(), nullable=False),
+        sa.Column('client_id', sa.Integer(), sa.ForeignKey('clients.client_id'), nullable=True),
+        sa.Column('name', sa.String(length=100), nullable=False),
+        sa.Column('code', sa.String(length=20), unique=True, nullable=True),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('project_type', sa.String(length=50), nullable=False),
+        sa.Column('status', sa.String(length=20), nullable=False),
+        sa.Column('start_date', sa.Date(), nullable=True),
+        sa.Column('end_date', sa.Date(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('manager_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=True),
+        sa.Column('estimated_hours', sa.Integer(), nullable=True),
+        sa.Column('priority', sa.String(length=20), server_default='medium'),
+        sa.Column('tags', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('organization_id', sa.Integer(), sa.ForeignKey('organizations.organization_id'), nullable=True),
+        sa.PrimaryKeyConstraint('project_id'),
+        sa.UniqueConstraint('name', 'client_id', name='unique_project_client'),
+        sa.CheckConstraint("project_type IN ('development', 'support', 'meeting', 'training', 'other')", name='projects_project_type_check'),
+        sa.CheckConstraint("status IN ('active', 'paused', 'completed', 'archived')", name='projects_status_check')
+    )
+
+    # Crear tabla project_organizations (relación muchos a muchos)
+    op.create_table(
+        'project_organizations',
+        sa.Column('project_id', sa.Integer(), sa.ForeignKey('projects.project_id'), primary_key=True),
+        sa.Column('organization_id', sa.Integer(), sa.ForeignKey('organizations.organization_id'), primary_key=True)
+    )
+
+    # Crear tabla tickets
+    op.create_table(
+        'tickets',
+        sa.Column('ticket_id', sa.Integer(), nullable=False),
+        sa.Column('ticket_number', sa.String(length=20), unique=True, nullable=False),
+        sa.Column('title', sa.String(length=200), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('project_id', sa.Integer(), sa.ForeignKey('projects.project_id'), nullable=False),
+        sa.Column('client_id', sa.Integer(), sa.ForeignKey('clients.client_id'), nullable=True),
+        sa.Column('organization_id', sa.Integer(), sa.ForeignKey('organizations.organization_id'), nullable=False),
+        sa.Column('status', sa.String(length=50), nullable=False),
+        sa.Column('priority', sa.String(length=20), nullable=False, server_default='medium'),
+        sa.Column('reported_by_user_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=True),
+        sa.Column('assigned_to_user_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=True),
+        sa.Column('category', sa.String(length=50), nullable=True),
+        sa.Column('due_date', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('resolution_description', sa.Text(), nullable=True),
+        sa.Column('resolved_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('closed_at', sa.TIMESTAMP(), nullable=True),
+        sa.Column('tags', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('estimated_hours', sa.Integer(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('ticket_id'),
+        sa.CheckConstraint("status IN ('nuevo', 'en_progreso', 'listo_pruebas', 'cerrado')", name='valid_ticket_status'),
+        sa.CheckConstraint("priority IN ('baja', 'media', 'alta', 'critica')", name='valid_ticket_priority')
+    )
+
+    # Crear tabla ticket_comments
+    op.create_table(
+        'ticket_comments',
+        sa.Column('comment_id', sa.Integer(), nullable=False),
+        sa.Column('ticket_id', sa.Integer(), sa.ForeignKey('tickets.ticket_id'), nullable=False),
+        sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=False),
+        sa.Column('comment_text', sa.Text(), nullable=False),
+        sa.Column('is_internal', sa.Boolean(), server_default='false'),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('comment_id')
+    )
+
+    # Crear tabla ticket_history
+    op.create_table(
+        'ticket_history',
+        sa.Column('history_id', sa.Integer(), nullable=False),
+        sa.Column('ticket_id', sa.Integer(), sa.ForeignKey('tickets.ticket_id'), nullable=False),
+        sa.Column('changed_by_user_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=False),
+        sa.Column('changed_field', sa.String(length=50), nullable=False),
+        sa.Column('old_value', sa.Text(), nullable=True),
+        sa.Column('new_value', sa.Text(), nullable=True),
+        sa.Column('change_timestamp', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('history_id')
+    )
+
+    # Crear tabla invoices
+    op.create_table(
+        'invoices',
+        sa.Column('invoice_id', sa.Integer(), nullable=False),
+        sa.Column('project_id', sa.Integer(), sa.ForeignKey('projects.project_id'), nullable=False),
+        sa.Column('invoice_number', sa.String(length=50), unique=True, nullable=False),
+        sa.Column('issue_date', sa.Date(), nullable=False),
+        sa.Column('total_amount', sa.Numeric(precision=12, scale=2), nullable=False),
+        sa.Column('status', sa.String(length=20), nullable=False),
+        sa.Column('payment_terms', sa.String(length=100), nullable=True),
+        sa.Column('due_date', sa.Date(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('invoice_id'),
+        sa.CheckConstraint("status IN ('draft', 'issued', 'paid', 'cancelled')", name='valid_invoice_status')
+    )
+
+    # Crear tabla payment_installments
+    op.create_table(
+        'payment_installments',
+        sa.Column('installment_id', sa.Integer(), nullable=False),
+        sa.Column('invoice_id', sa.Integer(), sa.ForeignKey('invoices.invoice_id'), nullable=False),
+        sa.Column('installment_number', sa.Integer(), nullable=False),
+        sa.Column('due_date', sa.Date(), nullable=False),
+        sa.Column('amount', sa.Numeric(precision=12, scale=2), nullable=False),
+        sa.Column('status', sa.String(length=20), nullable=False),
+        sa.Column('paid_amount', sa.Numeric(precision=12, scale=2), server_default='0'),
+        sa.Column('paid_date', sa.Date(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('installment_id'),
+        sa.CheckConstraint("status IN ('pending', 'paid', 'overdue', 'cancelled')", name='valid_installment_status')
+    )
+
+    # Crear tabla payments
+    op.create_table(
+        'payments',
+        sa.Column('payment_id', sa.Integer(), nullable=False),
+        sa.Column('installment_id', sa.Integer(), sa.ForeignKey('payment_installments.installment_id'), nullable=False),
+        sa.Column('amount', sa.Numeric(precision=12, scale=2), nullable=False),
+        sa.Column('payment_date', sa.Date(), nullable=False),
+        sa.Column('payment_method', sa.String(length=50), nullable=False),
+        sa.Column('reference_number', sa.String(length=100), nullable=True),
+        sa.Column('notes', sa.String(length=500), nullable=True),
+        sa.Column('recorded_by_user_id', sa.Integer(), sa.ForeignKey('users.user_id'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('payment_id'),
+        sa.CheckConstraint("payment_method IN ('transfer', 'check', 'cash', 'credit_card')", name='valid_payment_method')
+    )
+
+    # Crear tabla time_entries
+    op.create_table(
+        'time_entries',
+        sa.Column('entry_id', sa.Integer(), nullable=False),
+        sa.Column('user_id', sa.Integer(), nullable=False),
+        sa.Column('project_id', sa.Integer(), nullable=False),
+        sa.Column('ticket_id', sa.Integer(), nullable=True),
+        sa.Column('organization_id', sa.Integer(), nullable=False),
+        sa.Column('entry_date', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('activity_type', sa.String(length=50), nullable=False, server_default='desarrollo'),
+        sa.Column('start_time', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('end_time', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('description', sa.String(length=500), nullable=True),
+        sa.Column('status', sa.String(length=20), nullable=False, server_default='pendiente'),
+        sa.Column('billable', sa.Boolean(), server_default='true'),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('duration_hours', sa.Numeric(5, 2), 
+                  sa.Computed("""
+                    CASE 
+                        WHEN end_time IS NOT NULL AND start_time IS NOT NULL 
+                        THEN EXTRACT(EPOCH FROM (end_time - start_time)) / 3600
+                        ELSE NULL 
+                    END
+                  """, persisted=True)),
+        sa.PrimaryKeyConstraint('entry_id'),
+        sa.ForeignKeyConstraint(['user_id'], ['users.user_id']),
+        sa.ForeignKeyConstraint(['project_id'], ['projects.project_id']),
+        sa.ForeignKeyConstraint(['ticket_id'], ['tickets.ticket_id']),
+        sa.ForeignKeyConstraint(['organization_id'], ['organizations.organization_id'])
+    )
+
+    # Crear tabla project_budgets
+    op.create_table(
+        'project_budgets',
+        sa.Column('budget_id', sa.Integer(), nullable=False),
+        sa.Column('project_id', sa.Integer(), nullable=False),
+        sa.Column('estimated_hours', sa.Numeric(precision=10, scale=2), nullable=False),
+        sa.Column('estimated_cost', sa.Numeric(precision=12, scale=2), nullable=False),
+        sa.Column('hourly_rate', sa.Numeric(precision=10, scale=2), nullable=False),
+        sa.Column('start_date', sa.Date(), nullable=False),
+        sa.Column('end_date', sa.Date(), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('budget_id'),
+        sa.ForeignKeyConstraint(['project_id'], ['projects.project_id'])
+    )
+
+    # Crear índices
+    op.create_index('ix_time_entries_entry_id', 'time_entries', ['entry_id'])
+    op.create_index('ix_time_entries_user_id', 'time_entries', ['user_id'])
+    op.create_index('ix_time_entries_project_id', 'time_entries', ['project_id'])
+    op.create_index('ix_time_entries_organization_id', 'time_entries', ['organization_id'])
+    op.create_index('ix_projects_organization_id', 'projects', ['organization_id'])
+    op.create_index('ix_users_organization_id', 'users', ['organization_id'])
+    op.create_index('ix_project_budgets_project_id', 'project_budgets', ['project_id'])
+    op.create_index('ix_clients_organization_id', 'clients', ['organization_id'])
+    op.create_index('ix_clients_client_id', 'clients', ['client_id'])
+
+def downgrade() -> None:
+    # Eliminar tablas en orden inverso
+    op.drop_table('payments')
+    op.drop_table('payment_installments')
+    op.drop_table('invoices')
+    op.drop_table('ticket_history')
+    op.drop_table('ticket_comments')
+    op.drop_table('tickets')
+    op.drop_table('project_budgets')
+    op.drop_table('time_entries')
+    op.drop_table('projects')
+    op.drop_table('clients')
+    op.drop_table('users')
+    op.drop_table('organizations')
+    op.drop_table('countries') 

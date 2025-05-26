@@ -17,7 +17,7 @@ const EstadisticasPanel = ({
   // Convertir a número y asegurar un valor por defecto
   const safeHours = (hours) => {
     const numHours = Number(hours);
-    return isNaN(numHours) ? 0 : Number(numHours.toFixed(2));
+    return isNaN(numHours) ? '0.00' : numHours.toFixed(2);
   };
 
   return (

@@ -11,6 +11,7 @@ from app.crud import project_crud
 from app.core.database import get_db
 from app.core.security import get_current_user_organization
 from app.models.user_models import User
+from app.models.organization_models import Organization
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -42,10 +43,21 @@ def read_projects(
     """
     try:
         # Verificar si el usuario tiene una organización
-        if not current_user.organization_id:
+        if not current_user or not current_user.organization_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, 
                 detail="El usuario no tiene una organización asignada"
+            )
+
+        # Obtener la organización
+        organization = db.query(Organization).filter(
+            Organization.organization_id == current_user.organization_id
+        ).first()
+
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
             )
 
         proyectos = project_crud.get_projects_by_organization(
@@ -56,6 +68,8 @@ def read_projects(
         )
         
         return proyectos
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 

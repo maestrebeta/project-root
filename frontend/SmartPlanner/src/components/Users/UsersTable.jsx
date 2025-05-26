@@ -99,6 +99,21 @@ export default function UsersTable() {
     }
   }, [isAuthenticated]);
 
+  // Función para resetear el formulario con valores por defecto
+  const resetForm = () => {
+    const session = JSON.parse(localStorage.getItem('session'));
+    const currentUserOrganizationId = session?.user?.organization_id || null;
+    
+    setForm({
+      username: "",
+      full_name: "",
+      email: "",
+      role: "",
+      password: "",
+      organization_id: currentUserOrganizationId // Usar la organización del usuario actual por defecto
+    });
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm({ 
@@ -134,7 +149,7 @@ export default function UsersTable() {
         is_active: true,
         password: form.password || undefined,
         organization_id: isSuperUser 
-          ? (form.organization_id ? Number(form.organization_id) : null)
+          ? (form.organization_id !== null ? Number(form.organization_id) : currentUserOrganizationId)
           : currentUserOrganizationId
       } : {
         username: form.username,
@@ -144,7 +159,7 @@ export default function UsersTable() {
         password: form.password,
         is_active: true,
         organization_id: isSuperUser 
-          ? (form.organization_id ? Number(form.organization_id) : null)
+          ? (form.organization_id !== null ? Number(form.organization_id) : currentUserOrganizationId)
           : currentUserOrganizationId
       };
 
@@ -174,14 +189,7 @@ export default function UsersTable() {
 
       setShowForm(false);
       setEditId(null);
-      setForm({
-        username: "",
-        full_name: "",
-        email: "",
-        role: "",
-        password: "",
-        organization_id: null
-      });
+      resetForm(); // Usar la función resetForm
       await fetchUsers();
     } catch (error) {
       console.error('Error completo:', error);
@@ -242,14 +250,7 @@ export default function UsersTable() {
             onClick={() => {
               setShowForm(true);
               setEditId(null);
-              setForm({
-                username: "",
-                full_name: "",
-                email: "",
-                role: "",
-                password: "",
-                organization_id: null
-              });
+              resetForm(); // Usar la función resetForm
               setError('');
             }}
           >
@@ -339,7 +340,9 @@ export default function UsersTable() {
               </div>
               {isSuperUser && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Organización</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Organización
+                  </label>
                   <select
                     className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     name="organization_id"
@@ -350,9 +353,13 @@ export default function UsersTable() {
                     {organizations.map(org => (
                       <option key={org.organization_id} value={org.organization_id}>
                         {org.name}
+                        {org.organization_id === user?.organization_id && ' (Tu organización)'}
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Como super usuario, puedes asignar usuarios a cualquier organización
+                  </p>
                 </div>
               )}
             </div>
@@ -373,14 +380,7 @@ export default function UsersTable() {
                 onClick={() => {
                   setShowForm(false);
                   setEditId(null);
-                  setForm({
-                    username: "",
-                    full_name: "",
-                    email: "",
-                    role: "",
-                    password: "",
-                    organization_id: null
-                  });
+                  resetForm(); // Usar la función resetForm
                   setError('');
                 }}
                 disabled={loading}

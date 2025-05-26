@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   FiEdit2, FiTrash2, FiClock, FiTag, FiChevronDown,
-  FiChevronUp, FiDollarSign, FiFilter, FiPlus, FiSearch
+  FiChevronUp, FiDollarSign, FiFilter, FiPlus, FiSearch, FiRefreshCw, FiX
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO, isToday, isYesterday } from 'date-fns';
@@ -9,17 +9,36 @@ import { es } from 'date-fns/locale';
 import { Tooltip } from 'react-tippy';
 import 'react-tippy/dist/tippy.css';
 import { useProjectsAndTags } from './useProjectsAndTags';
+import { useAppTheme } from "../../context/ThemeContext.jsx";
+import { useAutoAnimate } from '@formkit/auto-animate/react';
+import { useOrganizationStates } from '../../hooks/useOrganizationStates';
 
-// Mapea status a color y emoji tipo semáforo
-const STATUS_META = {
-  pending:   { color: 'bg-yellow-100 text-yellow-800', emoji: '🟡', label: 'Pendiente' },
-  in_progress: { color: 'bg-blue-100 text-blue-800 animate-pulse', emoji: '🔵', label: 'En progreso' },
-  draft:     { color: 'bg-gray-100 text-gray-700', emoji: '⚪', label: 'Borrador' },
-  completed: { color: 'bg-green-100 text-green-800', emoji: '🟢', label: 'Completada' },
-  // Otros estados pueden agregarse aquí
+// Orden de los estados
+const STATUS_ORDER = ['pendiente', 'en_progreso', 'completada'];
+
+// Función para normalizar estados
+const normalizeStatus = (status) => {
+  if (!status) return 'pendiente';
+  
+  const normalized = status.toLowerCase().replace(/[^a-z_]/g, '');
+  
+  switch (normalized) {
+    case 'pendiente':
+    case 'pending':
+      return 'pendiente';
+    case 'enprogreso':
+    case 'en_progreso':
+    case 'inprogress':
+    case 'progreso':
+      return 'en_progreso';
+    case 'completada':
+    case 'completed':
+    case 'completado':
+      return 'completada';
+    default:
+      return 'pendiente';
+  }
 };
-
-const STATUS_ORDER = ['pending', 'in_progress', 'draft', 'completed'];
 
 const EntradasTiempo = ({
   entradas = [],
@@ -30,35 +49,91 @@ const EntradasTiempo = ({
   loading = false,
   onFilterChange = () => {},
   currentFilters = {},
-  onNuevaEntrada = () => {}
+  onNuevaEntrada = () => {},
+  onRefresh
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'entry_date', direction: 'desc' });
   const [hoveredId, setHoveredId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [collapsed, setCollapsed] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [localFilters, setLocalFilters] = useState(currentFilters);
+  const [entries, setEntries] = useState([]);
+  const [error, setError] = useState(null);
+  const [parent] = useAutoAnimate();
+  const { states: organizationStates, loading: statesLoading } = useOrganizationStates();
+  const theme = useAppTheme();
+  const [projects, setProjects] = useState([]);
+  const [projectIdToName, setProjectIdToName] = useState({});
 
   // Trae datos del hook
-  const { projectIdToName, tagOptions, statusOptions } = useProjectsAndTags();
+  const { tagOptions, statusOptions } = useProjectsAndTags();
 
-  // Utilidad para obtener campos de la entrada
-  const getEntryField = useCallback((entry, field) => {
-    const fieldMap = {
-      id: ['id', 'entry_id'],
-      description: ['description', 'descripcion'],
-      project: ['project_id'],
-      date: ['entry_date', 'fecha'],
-      duration: ['duration_hours', 'duration', 'duracion'],
-      tags: ['tags', 'etiquetas'],
-      billable: ['billable', 'facturable'],
-      status: ['status'],
-      activity_type: ['activity_type'],
+  // Actualizar filtros locales cuando cambien los filtros externos
+  useEffect(() => {
+    setLocalFilters(currentFilters);
+  }, [currentFilters]);
+
+  // Cargar proyectos
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const session = JSON.parse(localStorage.getItem('session'));
+        if (!session?.token) {
+          throw new Error('No hay sesión activa');
+        }
+
+        const response = await fetch('http://localhost:8000/projects/', {
+          headers: {
+            'Authorization': `Bearer ${session.token}`,
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Error al cargar los proyectos');
+        }
+
+        const data = await response.json();
+        setProjects(data);
+        
+        // Crear mapeo de ID a nombre
+        const mapping = {};
+        data.forEach(project => {
+          mapping[project.project_id] = project.name;
+        });
+        setProjectIdToName(mapping);
+      } catch (error) {
+        console.error('Error al cargar proyectos:', error);
+      }
     };
-    const fields = fieldMap[field] || [field];
-    for (const f of fields) {
-      if (entry[f] !== undefined) return entry[f];
+
+    fetchProjects();
+  }, []);
+
+  // Función para obtener campos de la entrada
+  const getEntryField = useCallback((entry, field) => {
+    switch (field) {
+      case 'duration':
+        return entry.duration_hours || 0;
+      case 'project':
+        return entry.project_id;
+      case 'date':
+        return entry.entry_date;
+      case 'description':
+        return entry.description;
+      case 'activity_type':
+        return entry.activity_type;
+      case 'billable':
+        return entry.billable;
+      case 'tags':
+        return entry.tags || [];
+      case 'status':
+        return entry.status;
+      default:
+        return entry[field];
     }
-    return null;
   }, []);
 
   const formatDuration = useCallback((duration) => {
@@ -81,55 +156,34 @@ const EntradasTiempo = ({
   // FILTRO CORRECTO: Aplica todos los filtros juntos y soporta project_id y activity_type
   const filteredEntries = useMemo(() => {
     return entradas.filter(entry => {
-      // Filtro por proyecto (asegura tipo string y compara con project_id)
-      if (
-        currentFilters.project &&
-        String(getEntryField(entry, 'project')) !== String(currentFilters.project)
-      ) {
+      // Filtro por proyecto
+      if (localFilters.project && 
+          String(getEntryField(entry, 'project')) !== String(localFilters.project)) {
         return false;
       }
-      // Filtro por etiqueta/activity_type (case-insensitive, soporta string y array)
-      if (currentFilters.tag) {
-        // Puede ser que los tags vengan como array o como string (activity_type)
-        const tags = getEntryField(entry, 'tags') || [];
+      
+      // Filtro por etiqueta/activity_type
+      if (localFilters.tag) {
         const activityType = getEntryField(entry, 'activity_type');
-        const tagFilter = currentFilters.tag.trim().toLowerCase();
-
-        // Si hay tags, busca en el array
-        if (tags.length > 0) {
-          const tagsNormalized = tags.map(t =>
-            typeof t === 'string'
-              ? t.trim().toLowerCase()
-              : (t.name || '').trim().toLowerCase()
-          );
-          if (!tagsNormalized.includes(tagFilter)) {
-            return false;
-          }
-        } else if (activityType) {
-          // Si no hay tags pero sí activity_type, compara con activity_type
-          if (String(activityType).trim().toLowerCase() !== tagFilter) {
-            return false;
-          }
-        } else {
-          // Si no hay ni tags ni activity_type, no pasa el filtro
+        if (!activityType || 
+            !activityType.toLowerCase().includes(localFilters.tag.toLowerCase())) {
           return false;
         }
       }
-      // Filtro por búsqueda (si hay texto, debe coincidir alguno)
+
+      // Filtro por búsqueda
       if (searchQuery) {
         const searchLower = searchQuery.toLowerCase();
         const matches =
           String(getEntryField(entry, 'description')).toLowerCase().includes(searchLower) ||
           String(projectIdToName[String(getEntryField(entry, 'project'))] || '').toLowerCase().includes(searchLower) ||
-          (getEntryField(entry, 'tags') || [])
-            .map(t => (typeof t === 'string' ? t : t.name || ''))
-            .some(tag => tag.toLowerCase().includes(searchLower)) ||
           String(getEntryField(entry, 'activity_type') || '').toLowerCase().includes(searchLower);
         if (!matches) return false;
       }
+
       return true;
     });
-  }, [entradas, searchQuery, getEntryField, projectIdToName, currentFilters]);
+  }, [entradas, localFilters, searchQuery, getEntryField, projectIdToName]);
 
   // Agrupar por status dinámicamente según statusOptions
   const groupedEntries = useMemo(() => {
@@ -140,7 +194,7 @@ const EntradasTiempo = ({
       });
     }
     filteredEntries.forEach((entry) => {
-      const status = getEntryField(entry, 'status') || 'Sin estado';
+      const status = normalizeStatus(getEntryField(entry, 'status')) || 'Sin estado';
       if (!groups[status]) groups[status] = [];
       groups[status].push(entry);
     });
@@ -162,7 +216,7 @@ const EntradasTiempo = ({
     return sorted;
   }, [groupedEntries, sortConfig, getEntryField]);
 
-  // Ordena los status: pending primero, luego in_progress, draft, completed, luego los demás
+  // Ordena los status: pendiente primero, luego en_progreso, completada, luego los demás
   const sortedStatusKeys = useMemo(() => {
     const keys = Object.keys(sortedGroupedEntries);
     return [
@@ -171,16 +225,15 @@ const EntradasTiempo = ({
     ];
   }, [sortedGroupedEntries]);
 
-  // Contrae 'completed' por defecto
+  // Contrae 'completada' por defecto
   useEffect(() => {
-    setCollapsed(prev => {
-      const next = { ...prev };
-      if ('completed' in sortedGroupedEntries && next.completed === undefined) {
-        next.completed = true;
-      }
-      return next;
-    });
-  }, [sortedGroupedEntries]);
+    if (!sortedGroupedEntries.completada) return;
+    
+    setCollapsed(prev => ({
+      ...prev,
+      completada: prev.completada === undefined ? true : prev.completada
+    }));
+  }, [sortedGroupedEntries.completada]);
 
   const handleDelete = useCallback(async (id) => {
     setDeletingId(id);
@@ -213,7 +266,7 @@ const EntradasTiempo = ({
     <div className="space-y-3">
       {[...Array(5)].map((_, i) => (
         <motion.div
-          key={i}
+          key={`skeleton-${i}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: i * 0.05 }}
@@ -235,6 +288,71 @@ const EntradasTiempo = ({
     </div>
   );
 
+  // Handler para cambios en filtros
+  const handleFilterChange = useCallback((type, value) => {
+    const newFilters = {
+      ...localFilters,
+      [type]: value === '' ? undefined : value
+    };
+    setLocalFilters(newFilters);
+    onFilterChange(newFilters);
+  }, [localFilters, onFilterChange]);
+
+  // Limpiar filtros
+  const clearFilters = useCallback(() => {
+    setLocalFilters({});
+    if (onFilterChange) {
+      onFilterChange({});
+    }
+  }, [onFilterChange]);
+
+  // Memoizar estadísticas
+  const stats = useMemo(() => {
+    const total = filteredEntries.length;
+    const totalHours = filteredEntries.reduce((sum, entry) => {
+      const duration = getEntryField(entry, 'duration');
+      return sum + (Number(duration) || 0);
+    }, 0);
+
+    return {
+      total,
+      totalHours: totalHours.toFixed(2)
+    };
+  }, [filteredEntries, getEntryField]);
+
+  // Mostrar estado de carga
+  if (loading || statesLoading) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl shadow-xl p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <span className="ml-2">Cargando...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error si ocurre
+  if (error || !organizationStates?.states) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl shadow-xl p-6">
+          <div className="text-red-600">
+            {error || "Error al cargar los estados de la organización"}
+          </div>
+          <button
+            onClick={onClose}
+            className="mt-4 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <motion.section
       initial={{ opacity: 0 }}
@@ -247,6 +365,29 @@ const EntradasTiempo = ({
           <div>
             <h2 className="text-2xl font-bold">Registro de Tiempo</h2>
             <p className="text-indigo-100">Gestiona tus horas trabajadas</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`p-2 rounded-md transition-colors ${
+                Object.keys(localFilters).length > 0
+                  ? `${theme.PRIMARY_BG_LIGHT} ${theme.PRIMARY_COLOR_CLASS}`
+                  : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              title="Filtros"
+            >
+              <FiFilter />
+            </button>
+            <button
+              onClick={onRefresh}
+              className={`p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors ${
+                loading ? 'animate-spin' : ''
+              }`}
+              disabled={loading}
+              title="Actualizar"
+            >
+              <FiRefreshCw />
+            </button>
           </div>
         </div>
       </div>
@@ -278,9 +419,9 @@ const EntradasTiempo = ({
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <select
             className="text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm h-9"
-            value={currentFilters.project || ''}
+            value={localFilters.project || ''}
             onChange={(e) => {
-              onFilterChange({ project: e.target.value || undefined });
+              handleFilterChange('project', e.target.value || undefined);
             }}
           >
             <option value="">Todos los proyectos</option>
@@ -290,9 +431,9 @@ const EntradasTiempo = ({
           </select>
           <select
             className="text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm h-9"
-            value={currentFilters.tag || ''}
+            value={localFilters.tag || ''}
             onChange={(e) => {
-              onFilterChange({ tag: e.target.value || undefined });
+              handleFilterChange('tag', e.target.value || undefined);
             }}
           >
             <option value="">Todas las categorías</option>
@@ -303,6 +444,33 @@ const EntradasTiempo = ({
         </div>
       </div>
 
+      {/* Panel de filtros */}
+      {showFilters && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+          <div className="flex flex-wrap gap-4">
+            {Object.keys(localFilters).map((filterKey) => (
+              <div key={filterKey} className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">{filterKey}:</span>
+                <span className="text-sm font-medium">{localFilters[filterKey]}</span>
+                <button
+                  onClick={() => handleFilterChange(filterKey, undefined)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <FiX size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={clearFilters}
+              className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+            >
+              <FiX className="mr-1" />
+              Limpiar filtros
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Agrupación por status con color y emoji */}
       <div className="overflow-x-auto px-4 py-2">
         {loading ? (
@@ -311,35 +479,52 @@ const EntradasTiempo = ({
           <EmptyState />
         ) : (
           sortedStatusKeys.map((status) => {
-            const meta = STATUS_META[status] || {
-              color: 'bg-gray-100 text-gray-500',
-              emoji: '⚫',
-              label: status.charAt(0).toUpperCase() + status.slice(1)
+            const state = organizationStates.states.find(s => s.id === status) || 
+                         organizationStates.states.find(s => s.id === organizationStates.default_state);
+            
+            // Mapear colores a clases de Tailwind
+            const colorMap = {
+              'red': 'bg-red-100 text-red-700',
+              'blue': 'bg-blue-100 text-blue-700',
+              'green': 'bg-green-100 text-green-700',
+              'yellow': 'bg-yellow-100 text-yellow-700',
+              'gray': 'bg-gray-100 text-gray-700',
+              'purple': 'bg-purple-100 text-purple-700',
+              'orange': 'bg-orange-100 text-orange-700',
+              'indigo': 'bg-indigo-100 text-indigo-700',
+              'pink': 'bg-pink-100 text-pink-700'
             };
+
+            const meta = {
+              color: colorMap[state.color] || 'bg-gray-100 text-gray-500',
+              emoji: state.icon,
+              label: state.label
+            };
+
             return (
-              <div key={status} className="mb-6">
+              <div key={`status-group-${status}`} className="mb-6">
                 <button
                   className={`w-full flex items-center justify-between px-4 py-2 ${meta.color} rounded-t transition font-semibold`}
                   onClick={() => toggleCollapse(status)}
                   type="button"
                 >
                   <span className="flex items-center gap-2">
-                    <span className="text-xl animate-pulse">{meta.emoji}</span>
+                    <span className="text-xl">{meta.emoji}</span>
                     <span>{meta.label}</span>
-                    <span className="ml-2 text-xs font-normal text-gray-500">
+                    <span className="ml-2 text-xs bg-white/50 rounded-full px-2 py-0.5 text-gray-700 font-normal">
                       ({sortedGroupedEntries[status]?.length || 0})
                     </span>
                   </span>
                   {collapsed[status] ? <FiChevronDown /> : <FiChevronUp />}
                 </button>
                 {!collapsed[status] && sortedGroupedEntries[status]?.map((entry) => {
-                  const entryId = getEntryField(entry, 'id');
+                  const entryId = entry.entry_id || entry.id;
                   const isExpanded = expandedId === entryId;
                   const isHovered = hoveredId === entryId;
                   const isDeleting = deletingId === entryId;
                   return (
                     <motion.div
-                      key={entryId}
+                      key={`entry-${entryId}`}
                       layout
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -385,13 +570,12 @@ const EntradasTiempo = ({
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                  {projectIdToName[String(getEntryField(entry, 'project'))] || 'Sin proyecto'}
+                                  {projectIdToName[getEntryField(entry, 'project')] || `Proyecto ${getEntryField(entry, 'project')}`}
                                 </span>
-                                {/* Mostrar etiquetas si existen, si no, mostrar activity_type */}
                                 {getEntryField(entry, 'tags')?.length > 0
-                                  ? getEntryField(entry, 'tags').map((tag) => (
+                                  ? getEntryField(entry, 'tags').map((tag, index) => (
                                       <span
-                                        key={tag}
+                                        key={`tag-${entryId}-${index}-${typeof tag === 'string' ? tag : tag.name}`}
                                         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
                                       >
                                         <FiTag className="mr-1" size={10} />
@@ -399,7 +583,10 @@ const EntradasTiempo = ({
                                       </span>
                                     ))
                                   : getEntryField(entry, 'activity_type') && (
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                      <span
+                                        key={`activity-${entryId}-${getEntryField(entry, 'activity_type')}`}
+                                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
+                                      >
                                         <FiTag className="mr-1" size={10} />
                                         {getEntryField(entry, 'activity_type')}
                                       </span>
@@ -437,7 +624,7 @@ const EntradasTiempo = ({
                                       whileTap={{ scale: 0.9 }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        onEliminar(entry);
+                                        handleDelete(entryId);
                                       }}
                                       className={`text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-100 transition-colors ${
                                         isDeleting ? 'opacity-50 cursor-not-allowed' : ''

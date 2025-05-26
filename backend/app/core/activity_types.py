@@ -2,20 +2,21 @@ from typing import Dict, List, Optional
 
 # Tipos de actividad predeterminados
 DEFAULT_ACTIVITY_TYPES: List[str] = [
-    'trabajo',
+    'desarrollo',
     'reunion',
-    'capacitacion', 
-    'soporte', 
+    'capacitacion',
+    'soporte',
     'otro'
 ]
 
 # Mapeo de tipos de actividad para conversión
 ACTIVITY_TYPE_MAPPING: Dict[str, str] = {
-    # Trabajo
-    'development': 'trabajo',
-    'coding': 'trabajo',
-    'programming': 'trabajo',
-    'design': 'trabajo',
+    # Desarrollo
+    'trabajo': 'desarrollo',
+    'development': 'desarrollo',
+    'coding': 'desarrollo',
+    'programming': 'desarrollo',
+    'design': 'desarrollo',
     
     # Reunión
     'meeting': 'reunion',
@@ -44,7 +45,7 @@ def normalize_activity_type(activity_type: Optional[str]) -> str:
     :return: Tipo de actividad convertido
     """
     if not activity_type:
-        return 'trabajo'
+        return 'desarrollo'
     
     lower_activity_type = activity_type.lower()
     return ACTIVITY_TYPE_MAPPING.get(lower_activity_type, 'otro')
@@ -64,4 +65,4 @@ def get_valid_activity_types() -> List[str]:
     
     :return: Lista de tipos de actividad
     """
-    return list(set(DEFAULT_ACTIVITY_TYPES + list(ACTIVITY_TYPE_MAPPING.values()))) 
+    return DEFAULT_ACTIVITY_TYPES 

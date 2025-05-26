@@ -1,13 +1,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta, timezone, date, time
-from typing import Union
+from typing import Union, List, Dict
 from app.models.time_entry_models import TimeEntry
 from app.schemas.time_entry_schema import TimeEntryCreate, TimeEntryUpdate
 from sqlalchemy.exc import IntegrityError
 from app.models.project_models import Project
 from app.models.user_models import User
 from app.models.organization_models import Organization
+from app.core.activity_types import normalize_activity_type
 
 def safe_int_convert(value: Union[int, str, None]) -> Union[int, None]:
     """
@@ -51,6 +52,44 @@ def parse_time(time_str: Union[str, time, None]) -> Union[time, None]:
         except ValueError:
             raise ValueError(f"Formato de tiempo inválido: {time_str}")
 
+def get_valid_states(db: Session, organization_id: int) -> Dict:
+    """
+    Obtiene los estados válidos para una organización
+    """
+    org = db.query(Organization).filter(Organization.organization_id == organization_id).first()
+    if not org:
+        raise ValueError("Organización no encontrada")
+    return org.task_states
+
+def validate_state(db: Session, organization_id: int, state: str) -> str:
+    """
+    Valida que el estado sea uno de los permitidos para la organización
+    """
+    task_states = get_valid_states(db, organization_id)
+    valid_states = [s["id"] for s in task_states["states"]]
+    
+    if state not in valid_states:
+        raise ValueError(f"Estado inválido. Debe ser uno de: {valid_states}")
+    return state
+
+def normalize_status(status: str) -> str:
+    """
+    Normaliza el estado de una entrada de tiempo
+    """
+    if not status:
+        return 'pendiente'
+        
+    normalized = status.lower().strip()
+    
+    if normalized in ['pendiente', 'pending', 'nueva']:
+        return 'pendiente'
+    elif normalized in ['en_progreso', 'en progreso', 'in_progress', 'in progress']:
+        return 'en_progreso'
+    elif normalized in ['completada', 'completado', 'completed', 'done']:
+        return 'completada'
+    else:
+        return 'pendiente'
+
 def create_time_entry(db: Session, entry: TimeEntryCreate):
     """
     Crear una nueva entrada de tiempo con validaciones exhaustivas
@@ -79,60 +118,27 @@ def create_time_entry(db: Session, entry: TimeEntryCreate):
     
     if not user:
         raise ValueError("Usuario no encontrado o no pertenece a la organización")
-    
-    # Validar tipos de actividad
-    valid_activity_types = ['trabajo', 'reunion', 'capacitacion', 'soporte', 'otro']
-    activity_type = entry.activity_type or 'trabajo'
-    if activity_type not in valid_activity_types:
-        raise ValueError(f"Tipo de actividad inválido. Debe ser uno de: {valid_activity_types}")
-    
-    # Validar estados
-    valid_statuses = ['completado', 'en_progreso', 'pendiente']
-    status = entry.status or 'completado'
-    if status not in valid_statuses:
-        raise ValueError(f"Estado inválido. Debe ser uno de: {valid_statuses}")
-    
-    # Convertir datos de entrada
-    entry_data = entry.dict(exclude_unset=True)
-    
-    # Eliminar duration_hours si está presente
-    entry_data.pop('duration_hours', None)
-    
-    # Convertir tipos de datos
-    entry_data['user_id'] = safe_int_convert(entry_data.get('user_id'))
-    entry_data['project_id'] = safe_int_convert(entry_data.get('project_id'))
-    entry_data['ticket_id'] = safe_int_convert(entry_data.get('ticket_id'))
-    entry_data['organization_id'] = safe_int_convert(entry_data.get('organization_id'))
-    
-    # Convertir tiempos
-    if 'start_time' in entry_data and isinstance(entry_data['start_time'], str):
-        entry_data['start_time'] = parse_time(entry_data['start_time'])
-    
-    if 'end_time' in entry_data and isinstance(entry_data['end_time'], str):
-        entry_data['end_time'] = parse_time(entry_data['end_time'])
-    
-    # Calcular fecha de entrada si no se proporciona
-    entry_date = entry.entry_date or date.today()
+
+    # Normalizar el estado
+    status = normalize_status(entry.status)
     
     try:
-        # Crear diccionario de datos excluyendo duration_hours
+        # Crear diccionario de datos
         entry_data = {
-            'user_id': entry_data['user_id'],
-            'project_id': entry_data['project_id'],
-            'entry_date': entry_date,
-            'activity_type': activity_type,
-            'start_time': entry_data['start_time'],
-            'end_time': entry_data['end_time'],
+            'user_id': entry.user_id,
+            'project_id': entry.project_id,
+            'entry_date': entry.entry_date or date.today(),
+            'activity_type': entry.activity_type,
+            'start_time': entry.start_time,
+            'end_time': entry.end_time,
             'description': entry.description,
             'status': status,
-            'billable': entry.billable if entry.billable is not None else True,
-            'ticket_id': entry_data['ticket_id'],
-            'organization_id': entry_data['organization_id']
+            'billable': entry.billable,
+            'ticket_id': entry.ticket_id,
+            'organization_id': entry.organization_id
         }
 
-        # Crear entrada de tiempo
         db_entry = TimeEntry(**entry_data)
-        
         db.add(db_entry)
         db.commit()
         db.refresh(db_entry)
@@ -152,22 +158,28 @@ def get_time_entry(db: Session, entry_id: int):
     return db.query(TimeEntry).filter(TimeEntry.entry_id == entry_id).first()
 
 def update_time_entry(db: Session, entry_id: int, entry_data: TimeEntryUpdate):
+    """
+    Actualizar una entrada de tiempo
+    """
     db_entry = db.query(TimeEntry).filter(TimeEntry.entry_id == entry_id).first()
     if not db_entry:
         return None
     
-    # Actualizar campos de manera segura
-    for key, value in entry_data.dict(exclude_unset=True).items():
-        if key in ['user_id', 'project_id', 'ticket_id', 'organization_id']:
-            setattr(db_entry, key, safe_int_convert(value))
-        elif key in ['start_time', 'end_time']:
-            setattr(db_entry, key, parse_time(value))
-        else:
-            setattr(db_entry, key, value)
+    # Si se está actualizando el estado, validarlo
+    if hasattr(entry_data, 'status'):
+        entry_data.status = validate_state(db, db_entry.organization_id, entry_data.status)
     
-    db.commit()
-    db.refresh(db_entry)
-    return db_entry
+    # Actualizar campos
+    for key, value in entry_data.dict(exclude_unset=True).items():
+        setattr(db_entry, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(db_entry)
+        return db_entry
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Error al actualizar entrada de tiempo: {str(e)}")
 
 def delete_time_entry(db: Session, entry_id: int):
     db_entry = db.query(TimeEntry).filter(TimeEntry.entry_id == entry_id).first()
