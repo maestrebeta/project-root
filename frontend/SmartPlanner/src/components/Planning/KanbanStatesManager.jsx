@@ -15,9 +15,12 @@ const COLOR_PALETTES = [
   { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200", label: "Violeta", class: "violet" }
 ];
 
-function generateKey(label, colorClass) {
-  const cleanLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  return colorClass ? `${cleanLabel}-${colorClass}` : cleanLabel;
+function generateKey(label) {
+  return label.toLowerCase()
+    .replace(/[áéíóúñü]/g, c => ({ 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n', 'ü': 'u' })[c])
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/(^_|_$)/g, '')
+    .replace(/_{2,}/g, '_');
 }
 
 export default function KanbanStatesManager({ states = [], setStates }) {
@@ -26,18 +29,20 @@ export default function KanbanStatesManager({ states = [], setStates }) {
   const [form, setForm] = useState({
     label: "",
     ...COLOR_PALETTES[0],
-    key: generateKey("", COLOR_PALETTES[0].class)
+    key: "",
+    originalKey: ""
   });
   const [isDragging, setIsDragging] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setForm(prev => ({
-      ...prev,
-      key: generateKey(prev.label, prev.class)
-    }));
-    // eslint-disable-next-line
-  }, [form.label, form.class]);
+    if (form.label) {
+      setForm(prev => ({
+        ...prev,
+        key: generateKey(form.label)
+      }));
+    }
+  }, [form.label]);
 
   useHotkeys('esc', () => {
     if (editIndex !== null) cancelEdit();
@@ -51,7 +56,8 @@ export default function KanbanStatesManager({ states = [], setStates }) {
     setForm({
       label: "",
       ...COLOR_PALETTES[0],
-      key: generateKey("", COLOR_PALETTES[0].class)
+      key: "",
+      originalKey: ""
     });
     setEditIndex(null);
   };
@@ -66,7 +72,7 @@ export default function KanbanStatesManager({ states = [], setStates }) {
     setForm(prev => ({
       ...prev,
       label: value,
-      key: generateKey(value, prev.class)
+      key: generateKey(value)
     }));
   };
 
@@ -77,18 +83,21 @@ export default function KanbanStatesManager({ states = [], setStates }) {
       text: palette.text,
       border: palette.border,
       class: palette.class,
-      key: generateKey(prev.label, palette.class)
+      key: generateKey(prev.label)
     }));
   };
 
   const handleAdd = () => {
     if (!form.label) return;
+    
+    const newKey = generateKey(form.label);
     const newState = {
-      key: form.key,
+      key: newKey,
       label: form.label,
       color: form.bg,
       textColor: form.text
     };
+    
     setStates([...states, newState]);
     resetForm();
   };
@@ -103,22 +112,26 @@ export default function KanbanStatesManager({ states = [], setStates }) {
       text: palette.text,
       border: palette.border,
       class: palette.class,
-      key: state.key
+      key: state.key,
+      originalKey: state.key
     });
   };
 
   const handleUpdate = () => {
     if (!form.label) return;
-    setStates(states.map((st, i) =>
-      i === editIndex
-        ? {
-            key: form.key,
-            label: form.label,
-            color: form.bg,
-            textColor: form.text
-          }
-        : st
-    ));
+    
+    setStates(states.map((st, i) => {
+      if (i === editIndex) {
+        return {
+          key: form.originalKey,
+          label: form.label,
+          color: form.bg,
+          textColor: form.text
+        };
+      }
+      return st;
+    }));
+    
     cancelEdit();
   };
 
@@ -158,7 +171,7 @@ export default function KanbanStatesManager({ states = [], setStates }) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-100"
+      className={`max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-100 ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}
     >
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Gestor de Estados Kanban</h2>
@@ -201,7 +214,6 @@ export default function KanbanStatesManager({ states = [], setStates }) {
           </div>
         </div>
 
-
         {/* Botón Agregar alineado */}
         <div className="md:col-span-1 flex flex-col">
           <label className="block text-sm font-medium text-transparent mb-1 select-none">Agregar</label>
@@ -209,175 +221,81 @@ export default function KanbanStatesManager({ states = [], setStates }) {
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              className={`
-                w-full
-                min-w-[120px]
-                px-4 py-2
-                rounded-lg
-                text-white font-medium
-                text-base
-                transition
-                flex items-center justify-center
-                ${!form.label ? 'bg-gray-400 cursor-not-allowed' : `bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700`}
-                shadow-sm
-                h-[42px]
-              `}
-              style={{ minHeight: 42 }}
+              className={`px-3 py-2 rounded-lg ${theme.PRIMARY_BUTTON_CLASS} flex items-center justify-center gap-2`}
               onClick={handleAdd}
               disabled={!form.label}
-              type="button"
             >
-              <FiPlus className="mr-2 text-lg" />
-              <span className="hidden md:inline">{!form.label ? "Ingresa nombre" : "Agregar"}</span>
-              <span className="md:hidden">{!form.label ? "" : "+"}</span>
+              <FiPlus className="w-5 h-5" />
             </motion.button>
           ) : (
-            <div className="flex gap-2 w-full">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className={`
-                  w-full
-                  min-w-[120px]
-                  px-4 py-2
-                  rounded-lg
-                  text-white font-medium
-                  text-base
-                  transition
-                  flex items-center justify-center
-                  ${!form.label ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}
-                  shadow-sm
-                  h-[42px]
-                `}
-                style={{ minHeight: 42 }}
-                onClick={handleUpdate}
-                disabled={!form.label}
-                type="button"
-              >
-                <FiCheck className="mr-1" />
-                <span className="hidden md:inline">Guardar</span>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className={`
-                  w-full
-                  min-w-[42px]
-                  px-4 py-2
-                  rounded-lg
-                  bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium
-                  text-base
-                  transition
-                  flex items-center justify-center
-                  shadow-sm
-                  h-[42px]
-                `}
-                style={{ minHeight: 42 }}
-                onClick={cancelEdit}
-                type="button"
-              >
-                <FiX />
-              </motion.button>
-            </div>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className={`px-3 py-2 rounded-lg ${theme.PRIMARY_BUTTON_CLASS} flex items-center justify-center gap-2`}
+              onClick={handleUpdate}
+              disabled={!form.label}
+            >
+              <FiCheck className="w-5 h-5" />
+            </motion.button>
           )}
         </div>
       </motion.div>
 
       {/* Lista de Estados */}
       <div className="space-y-2">
-        <div className="grid grid-cols-12 gap-4 px-4 py-2 text-sm font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-          <div className="col-span-5">Estado</div>
-          <div className="col-span-3">Clave</div>
-          <div className="col-span-2">Previa</div>
-          <div className="col-span-2 text-right">Acciones</div>
-        </div>
-
-        <AnimatePresence>
-          {states.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg"
-            >
-              <div className="text-gray-400 mb-2">No hay estados configurados</div>
-              <div className="text-sm text-gray-500">Comienza agregando tu primer estado</div>
-            </motion.div>
-          ) : (
-            states.map((state, idx) => {
-              const palette = COLOR_PALETTES.find(p => p.bg === state.color && p.text === state.textColor) || COLOR_PALETTES[0];
-              return (
-                <motion.div
-                  key={state.key}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{
-                    opacity: 1,
-                    y: 0,
-                    scale: isDragging ? 1.02 : 1,
-                    boxShadow: isDragging ? "0 10px 15px -3px rgba(0, 0, 0, 0.1)" : "none"
-                  }}
-                  exit={{ opacity: 0, x: -50 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className={`grid grid-cols-12 gap-4 items-center p-4 rounded-lg border ${palette.border} ${isDragging ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'} transition-all`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, idx)}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, idx)}
+        {states.map((state, idx) => (
+          <motion.div
+            key={state.key}
+            layout
+            draggable
+            onDragStart={(e) => handleDragStart(e, idx)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, idx)}
+            className={`
+              flex items-center gap-4 p-3 rounded-lg border
+              ${isDragging ? 'border-dashed' : 'border-solid'}
+              ${state.color} ${state.textColor}
+              cursor-grab active:cursor-grabbing
+              transition-all duration-200
+            `}
+          >
+            <div className="flex-1 flex items-center gap-3">
+              <span className="font-medium">{state.label}</span>
+              <span className="text-xs opacity-60">({state.key})</span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Tooltip
+                title="Copiar clave"
+                position="top"
+                arrow={true}
+                distance={10}
+                theme="light"
+              >
+                <button
+                  onClick={() => copyToClipboard(state.key)}
+                  className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
                 >
-                  <div className="col-span-5 font-medium text-gray-900 flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${palette.bg} ${palette.border} border`} />
-                    {state.label}
-                  </div>
-                  <div className="col-span-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
-                        {state.key}
-                      </span>
-                      <Tooltip title="Copiar clave" position="top">
-                        <button
-                          className="text-gray-400 hover:text-gray-600"
-                          onClick={() => copyToClipboard(state.key)}
-                          type="button"
-                        >
-                          <FiCopy size={14} />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${palette.bg} ${palette.text} ${palette.border}`}>
-                      {state.label}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex justify-end space-x-2">
-                    <Tooltip title="Editar" position="top" trigger="mouseenter">
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-full transition"
-                        onClick={() => handleEdit(idx)}
-                        type="button"
-                      >
-                        <FiEdit2 size={18} />
-                      </motion.button>
-                    </Tooltip>
-                    <Tooltip title="Eliminar" position="top" trigger="mouseenter">
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-full transition"
-                        onClick={() => handleDelete(idx)}
-                        type="button"
-                      >
-                        <FiTrash2 size={18} />
-                      </motion.button>
-                    </Tooltip>
-                  </div>
-                </motion.div>
-              );
-            })
-          )}
-        </AnimatePresence>
+                  <FiCopy className="w-4 h-4" />
+                </button>
+              </Tooltip>
+              
+              <button
+                onClick={() => handleEdit(idx)}
+                className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+              >
+                <FiEdit2 className="w-4 h-4" />
+              </button>
+              
+              <button
+                onClick={() => handleDelete(idx)}
+                className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+              >
+                <FiTrash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        ))}
       </div>
     </motion.div>
   );

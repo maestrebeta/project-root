@@ -163,12 +163,39 @@ const JiraDashboard = () => {
   const [expanded, setExpanded] = useState({});
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const projectsPerPage = 5;
+
+  // Verificar estado de la sesión
+  const checkSession = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/jira/check-session", {
+        credentials: "include"
+      });
+      const data = await res.json();
+      setIsAuthenticated(data.isAuthenticated);
+      return data.isAuthenticated;
+    } catch (err) {
+      console.error("Error checking session:", err);
+      setIsAuthenticated(false);
+      return false;
+    }
+  };
 
   // DATA FETCH
   const fetchData = async () => {
     try {
       setIsRefreshing(true);
+      
+      // Verificar sesión antes de hacer la petición
+      const sessionValid = await checkSession();
+      if (!sessionValid) {
+        // Guardar la URL actual para redirigir después del login
+        const currentUrl = encodeURIComponent(window.location.href);
+        window.location.href = `http://localhost:8000/jira/oauth/login?return_url=${currentUrl}`;
+        return;
+      }
+
       const res = await fetch("http://localhost:8000/jira/projects-with-issues", { 
         credentials: "include",
         headers: {
@@ -177,7 +204,9 @@ const JiraDashboard = () => {
       });
       
       if (res.status === 401) {
-        window.location.href = "http://localhost:8000/jira/oauth/login";
+        setIsAuthenticated(false);
+        const currentUrl = encodeURIComponent(window.location.href);
+        window.location.href = `http://localhost:8000/jira/oauth/login?return_url=${currentUrl}`;
         return;
       }
       
@@ -185,7 +214,12 @@ const JiraDashboard = () => {
       setProjects(data.projects || []);
       setLastUpdated(new Date());
       setError("");
+      setIsAuthenticated(true);
     } catch (err) {
+      if (!isAuthenticated) {
+        // Si no está autenticado, no mostrar error
+        return;
+      }
       setError("No se pudo cargar la información de Jira. Verifica tu conexión e intenta nuevamente.");
       console.error("Fetch error:", err);
     } finally {
@@ -201,6 +235,24 @@ const JiraDashboard = () => {
     const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Si no está autenticado, mostrar pantalla de carga
+  if (!isAuthenticated && loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className={`w-16 h-16 ${theme.PRIMARY_BG_SOFT} rounded-full mx-auto mb-4 flex items-center justify-center`}>
+            <svg className="w-8 h-8 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Verificando sesión de Jira</h3>
+          <p className="text-sm text-gray-500">Por favor espera mientras verificamos tu sesión...</p>
+        </div>
+      </div>
+    );
+  }
 
   // DATA PROCESSING
   const allIssues = useMemo(() => projects.flatMap(p => p.issues || []), [projects]);
@@ -354,13 +406,13 @@ const JiraDashboard = () => {
 
   // UI
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen bg-gray-50 ${theme.FONT_CLASS}`}>
       {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-              <span className={`bg-${theme.PRIMARY_COLOR}-600 text-white p-2 rounded-lg mr-3`}>
+              <span className={`${theme.PRIMARY_BG_STRONG} text-white p-2 rounded-lg mr-3`}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                 </svg>
@@ -378,7 +430,7 @@ const JiraDashboard = () => {
           <button
             onClick={fetchData}
             disabled={isRefreshing}
-            className={`flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${isRefreshing ? "opacity-70 cursor-not-allowed" : ""}`}
+            className={`flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 ${theme.PRIMARY_RING_CLASS} ${isRefreshing ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             <FiRefreshCw className={`mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Actualizando..." : "Actualizar datos"}
@@ -468,7 +520,7 @@ const JiraDashboard = () => {
             
             <button
               onClick={exportToExcel}
-              className={`flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-${theme.PRIMARY_COLOR}-500`}
+              className={`flex items-center justify-center px-4 py-2 rounded-md shadow-sm text-sm font-medium ${theme.PRIMARY_BUTTON_CLASS}`}
             >
               <FiDownload className="mr-2" />
               Exportar
@@ -703,7 +755,12 @@ const JiraDashboard = () => {
                           <PriorityBadge priority={issue.priority} />
                           <div className="ml-2">
                             <div className="text-sm font-medium text-gray-900">
-                              <a href={issue.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">
+                              <a 
+                                href={issue.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className={`${theme.PRIMARY_COLOR_CLASS} ${theme.PRIMARY_HOVER_TEXT} hover:underline`}
+                              >
                                 {issue.key}
                               </a>
                             </div>
@@ -873,7 +930,7 @@ const JiraDashboard = () => {
                                                 href={issue.url} 
                                                 target="_blank" 
                                                 rel="noopener noreferrer"
-                                                className="text-blue-600 hover:text-blue-800 hover:underline"
+                                                className={`${theme.PRIMARY_COLOR_CLASS} ${theme.PRIMARY_HOVER_TEXT} hover:underline`}
                                               >
                                                 {issue.key}
                                               </a>
@@ -989,7 +1046,7 @@ const JiraDashboard = () => {
                               onClick={() => setPage(pageNum)}
                               className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                                 pageNum === page
-                                  ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                  ? `z-10 ${theme.PRIMARY_BG_SOFT} ${theme.PRIMARY_BORDER_CLASS} ${theme.PRIMARY_FONT_CLASS}`
                                   : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                               }`}
                             >

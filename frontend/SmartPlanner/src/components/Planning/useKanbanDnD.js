@@ -1,123 +1,94 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { closestCorners } from '@dnd-kit/core';
 
 export function useKanbanDnD(stories, setStories) {
-  // 1. Uso de referencias para estado que no necesita renderizado
-  const activeStoryRef = useRef(null);
-  const pointerPosition = useRef({ x: 0, y: 0 });
-  
-  // 2. Estado mínimo necesario
+  const [activeStory, setActiveStory] = useState(null);
   const [targetColumn, setTargetColumn] = useState(null);
-  const [activeStory, _setActiveStory] = useState(null);
 
-  // 3. Memoización de handlers con useCallback
-  const setActiveStory = useCallback((story) => {
-    activeStoryRef.current = story;
-    _setActiveStory(story);
-  }, []);
-
-  const handleDragStart = useCallback((event) => {
-    const { active } = event;
-    if (active.data.current?.type === "story") {
-      setActiveStory(active.data.current.story);
-    }
-  }, [setActiveStory]);
-
-  // 4. Detección de columnas optimizada
-  const getColumnFromPosition = useCallback((x, y) => {
+  // Función mejorada para encontrar la columna objetivo
+  const findTargetColumn = useCallback((x, y) => {
     const elements = document.elementsFromPoint(x, y);
-    for (const el of elements) {
-      if (el.getAttribute?.('data-col-key')) {
-        return el.getAttribute('data-col-key');
+    for (const element of elements) {
+      if (element.hasAttribute('data-col-key')) {
+        return element.getAttribute('data-col-key');
+      }
+      // Buscar también en los padres por si el punto está sobre un elemento hijo
+      const columnParent = element.closest('[data-col-key]');
+      if (columnParent) {
+        return columnParent.getAttribute('data-col-key');
       }
     }
     return null;
   }, []);
 
-  const handleDragMove = useCallback((event) => {
-    if (event.activatorEvent) {
-      pointerPosition.current = {
-        x: event.activatorEvent.clientX,
-        y: event.activatorEvent.clientY
-      };
-    }
+  const handleDragStart = useCallback((event) => {
+    const { active } = event;
+    if (!active?.data?.current?.story) return;
+    
+    setActiveStory(active.data.current.story);
+    // Limpiar la columna objetivo al inicio del arrastre
+    setTargetColumn(null);
   }, []);
 
   const handleDragOver = useCallback((event) => {
     const { active, over } = event;
-    if (!over) {
-      setTargetColumn(null);
-      return;
+    if (!active || !event.activatorEvent) return;
+
+    const currentColumn = findTargetColumn(
+      event.activatorEvent.clientX,
+      event.activatorEvent.clientY
+    );
+
+    // Solo actualizar si la columna objetivo es diferente a la actual
+    if (currentColumn !== targetColumn) {
+      setTargetColumn(currentColumn);
     }
-    
-    const overColumn = over.data.current?.columnKey || 
-                     getColumnFromPosition(
-                       pointerPosition.current.x, 
-                       pointerPosition.current.y
-                     );
+  }, [findTargetColumn, targetColumn]);
 
-    const activeColumn = active.data.current?.columnKey;
-
-    // 5. Evitar updates innecesarios
-    if (overColumn && overColumn !== activeColumn) {
-      setTargetColumn(prev => prev !== overColumn ? overColumn : prev);
-    } else {
-      setTargetColumn(null);
-    }
-  }, [getColumnFromPosition]);
-
-  // 6. Manejo de fin de arrastre con transición garantizada
   const handleDragEnd = useCallback((event) => {
-    const { active, over } = event;
-    const currentActiveStory = activeStoryRef.current;
-    
-    if (!over || !currentActiveStory) {
+    const { active } = event;
+    if (!active || !event.activatorEvent) {
       setActiveStory(null);
       setTargetColumn(null);
       return;
     }
 
-    const overColumn = over.data.current?.columnKey || 
-                     getColumnFromPosition(
-                       pointerPosition.current.x, 
-                       pointerPosition.current.y
-                     );
+    const finalColumn = findTargetColumn(
+      event.activatorEvent.clientX,
+      event.activatorEvent.clientY
+    );
 
-    const activeColumn = active.data.current?.columnKey;
+    if (finalColumn && active.data.current?.story) {
+      const storyId = active.data.current.story.id;
+      const originalColumn = active.data.current.story.estado;
 
-    if (overColumn && overColumn !== activeColumn) {
-      // 7. Actualización optimizada del estado
-      setStories(prev => {
-        const newStories = [...prev];
-        const index = newStories.findIndex(s => s.id === currentActiveStory.id);
-        if (index !== -1) {
-          newStories[index] = { ...newStories[index], estado: overColumn };
-        }
-        return newStories;
-      });
+      // Solo actualizar si la columna destino es diferente a la original
+      if (finalColumn !== originalColumn) {
+        setStories(prev => prev.map(story => 
+          story.id === storyId 
+            ? { ...story, estado: finalColumn }
+            : story
+        ));
+      }
     }
 
-    // 8. Limpieza con delay para mejor feedback visual
-    setTimeout(() => {
-      setActiveStory(null);
-      setTargetColumn(null);
-    }, 100);
-  }, [setStories, getColumnFromPosition]);
+    // Limpiar estados
+    setActiveStory(null);
+    setTargetColumn(null);
+  }, [findTargetColumn, setStories]);
 
   const handleDragCancel = useCallback(() => {
     setActiveStory(null);
     setTargetColumn(null);
   }, []);
 
-  // 9. Retorno de propiedades memoizadas
   return {
     activeStory,
     targetColumn,
-    collisionDetection: closestCorners, // Más preciso que closestCenter
+    collisionDetection: closestCorners,
     onDragStart: handleDragStart,
     onDragEnd: handleDragEnd,
     onDragOver: handleDragOver,
-    onDragCancel: handleDragCancel,
-    onDragMove: handleDragMove // Nuevo evento para tracking preciso
+    onDragCancel: handleDragCancel
   };
 }

@@ -14,6 +14,12 @@ const EstadisticasPanel = ({
   productivityPoints = 0,
   loading = false,
 }) => {
+  // Convertir a número y asegurar un valor por defecto
+  const safeHours = (hours) => {
+    const numHours = Number(hours);
+    return isNaN(numHours) ? 0 : Number(numHours.toFixed(2));
+  };
+
   return (
     <section
       aria-label="Panel de estadísticas"
@@ -29,7 +35,7 @@ const EstadisticasPanel = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-600">Hoy</h3>
             <p className="text-3xl font-extrabold text-gray-900" aria-live="polite">
-              {loading ? '...' : todayHours.toFixed(2)} horas
+              {loading ? '...' : safeHours(todayHours)} horas
             </p>
           </div>
           <div className="bg-blue-100 text-blue-600 p-3 rounded-lg">
@@ -50,7 +56,7 @@ const EstadisticasPanel = ({
           <div>
             <h3 className="text-lg font-semibold text-gray-600">Esta semana</h3>
             <p className="text-3xl font-extrabold text-gray-900" aria-live="polite">
-              {loading ? '...' : weekHours.toFixed(2)} horas
+              {loading ? '...' : safeHours(weekHours)} horas
             </p>
           </div>
           <div className="bg-green-100 text-green-600 p-3 rounded-lg">

@@ -10,59 +10,101 @@ import CalendarioSemana from './CalendarioSemana';
 import NotificationPortal from './NotificationPortal';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import Footer from "../Template/Footer.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { useProjectsAndTags } from "./useProjectsAndTags.jsx";
 
-const getStats = (entries) => {
-  const today = new Date();
-  let todayHours = 0, todayEntries = 0, weekHours = 0, weekEntries = 0;
+const calculateStats = (entries, projects) => {
+  const totalHours = entries.reduce((sum, entry) => {
+    // Calcular duración en horas
+    const start = new Date(entry.start_time);
+    const end = entry.end_time ? new Date(entry.end_time) : new Date();
+    const duration = (end - start) / (1000 * 60 * 60);
+    return sum + (isNaN(duration) ? 0 : duration);
+  }, 0);
 
-  entries.forEach(entry => {
-    const rawDate = entry.entry_date || entry.fecha || entry.date;
-    if (!rawDate) return;
-    
-    let entryDate;
-    try {
-      entryDate = typeof rawDate === 'string' ? parseISO(rawDate) : new Date(rawDate);
-      if (isNaN(entryDate)) return;
-    } catch {
-      return;
-    }
-
-    const hours = Number(entry.duration_hours || entry.duration || 0);
-    if (isSameDay(entryDate, today)) {
-      todayHours += hours;
-      todayEntries += 1;
-    }
-    if (isThisWeek(entryDate, { weekStartsOn: 1 })) {
-      weekHours += hours;
-      weekEntries += 1;
-    }
+  // Filtrar entradas de hoy y esta semana
+  const now = new Date();
+  const todayEntries = entries.filter(entry => {
+    const entryDate = new Date(entry.start_time);
+    return entryDate.toDateString() === now.toDateString();
   });
 
-  return { 
-    todayHours, 
-    todayEntries, 
-    weekHours, 
-    weekEntries, 
-    productivityPoints: Math.min(Math.round(weekHours * 10), 100) // Puntos de productividad (0-100) como entero
+  const weekEntries = entries.filter(entry => {
+    const entryDate = new Date(entry.start_time);
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+    return entryDate >= startOfWeek;
+  });
+
+  const todayHours = todayEntries.reduce((sum, entry) => {
+    const start = new Date(entry.start_time);
+    const end = entry.end_time ? new Date(entry.end_time) : new Date();
+    const duration = (end - start) / (1000 * 60 * 60);
+    return sum + (isNaN(duration) ? 0 : duration);
+  }, 0);
+
+  const weekHours = weekEntries.reduce((sum, entry) => {
+    const start = new Date(entry.start_time);
+    const end = entry.end_time ? new Date(entry.end_time) : new Date();
+    const duration = (end - start) / (1000 * 60 * 60);
+    return sum + (isNaN(duration) ? 0 : duration);
+  }, 0);
+
+  // Agrupar por proyecto
+  const projectStats = entries.reduce((stats, entry) => {
+    const project = projects.find(p => p.project_id === entry.project_id);
+    if (project) {
+      const projectName = project.name;
+      const duration = ((new Date(entry.end_time || new Date()) - new Date(entry.start_time)) / (1000 * 60 * 60));
+      stats[projectName] = (stats[projectName] || 0) + (isNaN(duration) ? 0 : duration);
+    }
+    return stats;
+  }, {});
+
+  return {
+    totalHours: Number(totalHours.toFixed(2)) || 0,
+    projectStats,
+    todayHours: Number(todayHours.toFixed(2)) || 0,
+    todayEntries: todayEntries.length,
+    weekHours: Number(weekHours.toFixed(2)) || 0,
+    weekEntries: weekEntries.length,
+    productivityPoints: Math.round(totalHours * 10)
   };
 };
 
 const TimeTracker = () => {
-  // Estados principales
+  const theme = useAppTheme();
+  const { user } = useAuth();
+  const { 
+    projects, 
+    clients, 
+    loading: projectsLoading, 
+    error: projectsError 
+  } = useProjectsAndTags();
+
   const [showCalendar, setShowCalendar] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [billable, setBillable] = useState(true);
   const [timeEntries, setTimeEntries] = useState([]);
+  const [stats, setStats] = useState({ 
+    totalHours: 0, 
+    projectStats: {},
+    todayHours: 0,
+    todayEntries: 0,
+    weekHours: 0,
+    weekEntries: 0,
+    productivityPoints: 0
+  });
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [notification, setNotification] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
-  const theme = useAppTheme();
   const [currentFilters, setCurrentFilters] = useState({});
   const [confirmDelete, setConfirmDelete] = useState({ 
     open: false, 
     entryId: null, 
     description: '' 
   });
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState('today');
 
   const handleFilterChange = (newFilter) => {
     setCurrentFilters(prev => ({ ...prev, ...newFilter }));
@@ -73,24 +115,60 @@ const TimeTracker = () => {
   const notificationTimeoutRef = useRef(null);
 
   // Fetch de entradas de tiempo
-  const fetchEntries = useCallback(async () => {
-    setLoadingEntries(true);
+  const fetchTimeEntries = async (filter = 'today') => {
     try {
-      const res = await fetch('http://localhost:8000/time-entries/');
-      if (!res.ok) throw new Error('Error al cargar entradas');
-      const data = await res.json();
+      const session = localStorage.getItem('session');
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const { token, user } = JSON.parse(session);
+      
+      if (!token || !user) {
+        throw new Error('Información de sesión incompleta');
+      }
+
+      const response = await fetch(`http://localhost:8000/time-entries/?skip=0&limit=100&filter=${filter}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Error response:', errorData);
+        throw new Error(errorData || 'Error al cargar las entradas de tiempo');
+      }
+
+      const data = await response.json();
       setTimeEntries(data);
-    } catch (err) {
-      showNotification('error', err.message);
-    } finally {
-      setLoadingEntries(false);
+      
+      // Calcular estadísticas
+      const calculatedStats = calculateStats(data, projects);
+      setStats(calculatedStats);
+    } catch (error) {
+      console.error('Error al cargar entradas de tiempo:', error);
+      
+      // Manejar específicamente errores de autenticación
+      if (error.message.includes('Unauthorized') || error.message.includes('token')) {
+        alert('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+        // Opcional: Redirigir a la página de login
+        // navigate('/login');
+      } else {
+        alert(error.message || 'Error al cargar las entradas de tiempo');
+      }
     }
-  }, []);
+  };
 
   // Efectos
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
+    if (user?.user_id && projects.length > 0) {
+      fetchTimeEntries(filter);
+    }
+  }, [user?.user_id, filter, projects]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -133,14 +211,14 @@ const TimeTracker = () => {
       });
       if (!response.ok) throw new Error('Error al eliminar la entrada');
       
-      await fetchEntries();
+      await fetchTimeEntries();
       showNotification('success', 'Entrada eliminada correctamente');
     } catch (err) {
       showNotification('error', err.message);
     } finally {
       setConfirmDelete({ open: false, entryId: null, description: '' });
     }
-  }, [confirmDelete.entryId, fetchEntries, showNotification]);
+  }, [confirmDelete.entryId, fetchTimeEntries, showNotification]);
 
   const handleSubmit = useCallback(async (data) => {
     try {
@@ -157,7 +235,7 @@ const TimeTracker = () => {
 
       if (!response.ok) throw new Error('Error al guardar la entrada');
 
-      await fetchEntries();
+      await fetchTimeEntries();
       setEditingEntry(null);
       showNotification(
         'success',
@@ -166,14 +244,14 @@ const TimeTracker = () => {
     } catch (err) {
       showNotification('error', err.message);
     }
-  }, [fetchEntries, showNotification]);
+  }, [fetchTimeEntries, showNotification]);
 
   const handleEditar = useCallback((entry) => {
     setEditingEntry(entry);
   }, []);
 
   // Estadísticas en tiempo real
-  const stats = useMemo(() => getStats(timeEntries), [timeEntries]);
+  const timeStats = useMemo(() => calculateStats(timeEntries, projects), [timeEntries, projects]);
 
   // Animaciones
   const fadeIn = {
@@ -182,8 +260,101 @@ const TimeTracker = () => {
     exit: { opacity: 0, transition: { duration: 0.2 } }
   };
 
+  // Mapa completo de colores de Tailwind
+  const TAILWIND_COLORS = {
+    blue: {
+      500: '#3b82f6',
+      600: '#2563eb',
+      700: '#1d4ed8'
+    },
+    indigo: {
+      500: '#6366f1',
+      600: '#4f46e5',
+      700: '#4338ca'
+    },
+    red: {
+      500: '#ef4444',
+      600: '#dc2626',
+      700: '#b91c1c'
+    },
+    green: {
+      500: '#22c55e',
+      600: '#16a34a',
+      700: '#15803d'
+    },
+    yellow: {
+      500: '#eab308',
+      600: '#ca8a04',
+      700: '#a16207'
+    },
+    orange: {
+      500: '#f97316',
+      600: '#ea580c',
+      700: '#c2410c'
+    },
+    pink: {
+      500: '#ec4899',
+      600: '#db2777',
+      700: '#be185d'
+    },
+    purple: {
+      500: '#a855f7',
+      600: '#9333ea',
+      700: '#7e22ce'
+    },
+    gray: {
+      500: '#6b7280',
+      600: '#4b5563',
+      700: '#374151'
+    },
+    cyan: {
+      500: '#06b6d4',
+      600: '#0891b2',
+      700: '#0e7490'
+    },
+    teal: {
+      500: '#14b8a6',
+      600: '#0d9488',
+      700: '#0f766e'
+    },
+    lime: {
+      500: '#84cc16',
+      600: '#65a30d',
+      700: '#4d7c0f'
+    },
+    stone: {
+      500: '#78716c',
+      600: '#57534e',
+      700: '#44403c'
+    },
+    zinc: {
+      500: '#71717a',
+      600: '#52525b',
+      700: '#3f3f46'
+    },
+    neutral: {
+      500: '#737373',
+      600: '#525252',
+      700: '#404040'
+    }
+  };
+
+  const getGradientStyle = (color) => {
+    const colors = TAILWIND_COLORS[color] || TAILWIND_COLORS.gray;
+    return {
+      background: `linear-gradient(to right, ${colors[600]}, ${colors[500]})`
+    };
+  };
+
+  const getGradientHoverStyle = (color) => {
+    const colors = TAILWIND_COLORS[color] || TAILWIND_COLORS.gray;
+    return {
+      background: `linear-gradient(to right, ${colors[700]}, ${colors[600]})`
+    };
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col relative">
+    <div className={`min-h-screen bg-gray-50 flex flex-col relative ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}>
       {/* Header */}
       <header className={`bg-white shadow-sm sticky top-0 z-20 transition-all duration-300 ${
         isScrolled ? 'py-2 shadow-md' : 'py-4'
@@ -197,9 +368,9 @@ const TimeTracker = () => {
               transition={{ duration: 0.5 }}
             >
               <motion.span 
-                className={`bg-gradient-to-r from-${theme.PRIMARY_COLOR}-600 to-${theme.PRIMARY_COLOR}-500 text-white p-2 rounded-lg mr-3`}
+                className={`text-white p-2 rounded-lg mr-3 ${theme.PRIMARY_GRADIENT_CLASS}`}
                 animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 1, repeat: Infinity, repeatDelay: 5 }}s
+                transition={{ duration: 1, repeat: Infinity, repeatDelay: 5 }}
               >
                 <FiClock className="w-5 h-5 md:w-6 md:h-6" />
               </motion.span>
@@ -219,7 +390,7 @@ const TimeTracker = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex items-center bg-gradient-to-r from-${theme.PRIMARY_COLOR}-600 to-${theme.PRIMARY_COLOR}-500 text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium hover:from-${theme.PRIMARY_COLOR}-700 hover:to-${theme.PRIMARY_COLOR}-600 focus:outline-none transition-all`}
+              className={`flex items-center text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium focus:outline-none ${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`}
               onClick={() => setEditingEntry({})}
             >
               <FiPlus className="mr-2" />
@@ -236,6 +407,16 @@ const TimeTracker = () => {
         tabIndex="0"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Manejo de errores */}
+          {(projectsError || error) && (
+            <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-outlined text-xl">error_outline</span>
+                {projectsError || error}
+              </div>
+            </div>
+          )}
+
           {/* Panel de timer */}
           <motion.section
             initial="hidden"
@@ -246,9 +427,9 @@ const TimeTracker = () => {
             <TimerPanel 
               billable={billable}
               onBillableChange={() => setBillable(b => !b)}
-              onNuevaEntrada={fetchEntries}
+              onNuevaEntrada={fetchTimeEntries}
               onSaveSuccess={() => {
-                fetchEntries();
+                fetchTimeEntries();
                 showNotification('success', 'Tiempo registrado correctamente');
               }}
               onSaveError={(error) => showNotification('error', error.message)}
@@ -285,7 +466,7 @@ const TimeTracker = () => {
               loading={loadingEntries}
               onEditar={handleEditar}
               onEliminar={handleEliminarClick}
-              onRefresh={fetchEntries}
+              onRefresh={fetchTimeEntries}
               currentFilters={currentFilters}
               onFilterChange={handleFilterChange}
             />

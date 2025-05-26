@@ -3,6 +3,7 @@ import { FiPlay, FiPause, FiSquare, FiTag, FiChevronDown, FiCheck, FiX } from 'r
 import { useProjectsAndTags } from './useProjectsAndTags';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import debounce from 'lodash.debounce';
+import activityTypes from '../../config/activityTypes';  // Importar el módulo de tipos de actividad
 
 const MinimunTime = 5; // segundos mínimos para guardar la entrada
 
@@ -17,19 +18,20 @@ const TimerPanel = ({
   onStop = () => {},
   billable = true,
   onBillableChange = () => {},
+  loading = false
 }) => {
   const inputRef = useRef();
   const {
-    projectOptions,
+    projects: projectOptions,
+    clients: clientOptions,
     tagOptions,
-    clientOptions,
-    loading,
     suggestedProject,
     suggestedActivity,
+    error: projectsError,
   } = useProjectsAndTags();
 
   // Estados
-  const [selectedProject, setSelectedProject] = useState('');
+  const [selectedProject, setSelectedProject] = useState(null);
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [desc, setDesc] = useState(description);
@@ -42,13 +44,16 @@ const TimerPanel = ({
     project: false,
     description: false
   });
+  const [billableState, setBillable] = useState(billable);
 
   // Preselección automática de proyecto y categoría
   useEffect(() => {
     if (!selectedProject && suggestedProject && projectOptions.length) {
-      setSelectedProject(suggestedProject);
-      const project = projectOptions.find(p => String(p.value) === String(suggestedProject));
-      setSelectedClient(project ? project.client_id : '');
+      const project = projectOptions.find(p => String(p.project_id) === String(suggestedProject));
+      if (project) {
+        setSelectedProject(project.project_id);
+        setSelectedClient(project.client_id || '');
+      }
     }
   }, [suggestedProject, projectOptions, selectedProject]);
 
@@ -66,6 +71,13 @@ const TimerPanel = ({
     return `${h}:${m}:${s}`;
   }, []);
 
+  // Convertir timestamp a formato time HH:mm:ss
+  const formatTimeFromTimestamp = (timestamp) => {
+    if (!timestamp) return null;
+    const date = new Date(timestamp);
+    return date.toTimeString().split(' ')[0]; // Formato HH:mm:ss
+  };
+
   // Construye los datos para la entrada de tiempo
   const buildEntryData = useCallback(() => {
     const now = new Date();
@@ -76,35 +88,173 @@ const TimerPanel = ({
       project_id: Number(selectedProject),
       client_id: selectedClient ? Number(selectedClient) : null,
       entry_date: now.toISOString().slice(0, 10),
-      activity_type: selectedTag || 'general',
+      activity_type: activityTypes.normalizeActivityType(selectedTag || 'trabajo'),
       start_time: now.toTimeString().slice(0, 8),
       end_time: endTime.toTimeString().slice(0, 8),
       duration: time,
       description: desc.trim(),
       status: 'completed',
       billable: billable,
+      organization_id: session.user.organization_id
     };
   }, [selectedProject, selectedClient, selectedTag, desc, billable, time, userId]);
 
   // Guarda la entrada de tiempo
-  const createTimeEntry = useCallback(async (entryData) => {
+  const handleSaveEntry = async () => {
     try {
-      const response = await fetch('http://localhost:8000/time-entries/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entryData),
-      });
-
-      if (!response.ok) {
-        throw new Error(response.statusText || 'Error al guardar la entrada');
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token || !session?.user) {
+        throw new Error('No hay sesión activa');
       }
 
-      return await response.json();
-    } catch (err) {
-      console.error('Error saving time entry:', err);
-      throw err;
+      // Validaciones previas
+      if (!selectedProject) {
+        throw new Error('Debe seleccionar un proyecto');
+      }
+
+      if (time < MinimunTime) {
+        throw new Error('El tiempo debe ser mayor a 5 segundos');
+      }
+
+      // Calcular tiempos de inicio y fin basados en el tiempo transcurrido
+      const now = new Date();
+      const startTime = new Date(now.getTime() - time * 1000);
+      const endTime = now;
+
+      // Formatear horas como HH:mm:ss
+      const formatTime = (date) => {
+        return date.toTimeString().slice(0, 8);
+      };
+
+      const formattedStartTime = formatTime(startTime);
+      const formattedEndTime = formatTime(endTime);
+
+      const entryData = {
+        user_id: Number(session.user.user_id),
+        project_id: Number(selectedProject),
+        entry_date: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
+        start_time: formattedStartTime,
+        end_time: formattedEndTime,
+        description: desc.trim() || null,
+        activity_type: activityTypes.normalizeActivityType(selectedTag || 'trabajo'),
+        status: 'completado', // Estado por defecto
+        billable: Boolean(billableState),
+        organization_id: Number(session.user.organization_id),
+        ...(selectedTag ? { ticket_id: null } : {}) // Opcional, ajustar según necesidad
+      };
+
+      // Logging detallado para depuración
+      console.group('Datos de entrada de tiempo');
+      console.log('Datos completos:', JSON.stringify(entryData, null, 2));
+      console.log('Tipos de datos:', {
+        user_id: typeof entryData.user_id,
+        project_id: typeof entryData.project_id,
+        entry_date: typeof entryData.entry_date,
+        start_time: typeof entryData.start_time,
+        end_time: typeof entryData.end_time,
+        description: typeof entryData.description,
+        activity_type: typeof entryData.activity_type,
+        status: typeof entryData.status,
+        billable: typeof entryData.billable,
+        organization_id: typeof entryData.organization_id,
+      });
+      console.groupEnd();
+
+      const response = await fetch('http://localhost:8000/time-entries/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.token}`
+        },
+        body: JSON.stringify(entryData),
+        credentials: 'include'
+      });
+
+      // Log de la respuesta del servidor
+      console.group('Respuesta del servidor');
+      console.log('Código de estado:', response.status);
+      
+      if (!response.ok) {
+        // Intentar obtener detalles del error
+        let errorDetail = 'Error desconocido al guardar la entrada de tiempo';
+        let errorBody = null;
+        try {
+          errorBody = await response.json();
+          console.group('Error de validación');
+          console.log('Código de estado:', response.status);
+          console.log('Datos de error (JSON):', errorBody);
+          console.log('Datos enviados:', JSON.stringify(entryData, null, 2));
+          console.groupEnd();
+
+          // Extraer mensaje de error más detallado
+          if (errorBody.detail && Array.isArray(errorBody.detail)) {
+            errorDetail = errorBody.detail.map(err => 
+              `${err.loc ? err.loc.join('.') : 'Campo desconocido'}: ${err.msg}`
+            ).join('; ');
+          } else {
+            errorDetail = errorBody.detail || JSON.stringify(errorBody);
+          }
+        } catch {
+          try {
+            const errorText = await response.text();
+            console.log('Datos de error (texto):', errorText);
+            errorDetail = errorText;
+          } catch {
+            console.log('No se pudo leer el cuerpo del error');
+          }
+        }
+
+        // Log adicional para depuración
+        console.error('Detalles completos del error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorBody: errorBody,
+          errorDetail: errorDetail
+        });
+
+        throw new Error(errorDetail);
+      }
+
+      const savedEntry = await response.json();
+      console.log('Entrada guardada:', savedEntry);
+      console.groupEnd();
+      
+      // Llamar a la función de callback si está definida
+      if (onNuevaEntrada) {
+        onNuevaEntrada(savedEntry);
+      }
+
+      // Resetear estado
+      resetTimer();
+      setDesc('');
+      setSelectedTag(null);
+      setSelectedProject(null);
+      setBillable(true);
+
+    } catch (error) {
+      console.error('Error al guardar entrada de tiempo:', error);
+      
+      // Mostrar mensaje de error al usuario
+      const errorMessage = error.message || 'Error desconocido al guardar la entrada de tiempo';
+      
+      // Usar contexto de notificaciones si está disponible
+      if (window.dispatchEvent) {
+        const event = new CustomEvent('showNotification', {
+          detail: {
+            type: 'error',
+            title: 'Error al guardar entrada de tiempo',
+            message: errorMessage
+          }
+        });
+        window.dispatchEvent(event);
+      } else {
+        alert(errorMessage);
+      }
+
+      // Lanzar el error para que pueda ser capturado por manejadores de errores superiores
+      throw error;
     }
-  }, []);
+  };
 
   // Handler para guardar con validación
   const handleSave = useCallback(async () => {
@@ -127,8 +277,7 @@ const TimerPanel = ({
 
     setSaving(true);
     try {
-      const entryData = buildEntryData();
-      await createTimeEntry(entryData);
+      await handleSaveEntry();
 
       setSaveStatus({ message: 'Entrada guardada con éxito', error: false });
       resetForm();
@@ -141,13 +290,13 @@ const TimerPanel = ({
     } finally {
       setSaving(false);
     }
-  }, [selectedProject, desc, buildEntryData, createTimeEntry, onNuevaEntrada, time]);
+  }, [selectedProject, desc, handleSaveEntry, onNuevaEntrada, time]);
 
   // Reinicia el formulario
   const resetForm = useCallback(() => {
     setTime(0);
     setDesc('');
-    setSelectedProject(suggestedProject || '');
+    setSelectedProject(suggestedProject || null);
     setSelectedClient(
       projectOptions.find(p => String(p.value) === String(suggestedProject))?.client_id || ''
     );
@@ -155,15 +304,21 @@ const TimerPanel = ({
     setRunning(false);
   }, [suggestedProject, suggestedActivity, projectOptions]);
 
-  // Actualiza el cliente cuando cambia el proyecto
-  useEffect(() => {
-    if (selectedProject && projectOptions.length) {
-      const project = projectOptions.find(p => String(p.value) === String(selectedProject));
-      setSelectedClient(project ? project.client_id : '');
-    } else {
-      setSelectedClient('');
-    }
-  }, [selectedProject, projectOptions]);
+  // Obtener cliente de un proyecto específico
+  const getClientForProject = (projectId) => {
+    const project = projectOptions.find(p => String(p.project_id) === String(projectId));
+    return project ? project.client_id : null;
+  };
+
+  // Handler para cambio de proyecto
+  const handleProjectChange = (e) => {
+    const selectedProjectId = e.target.value;
+    setSelectedProject(selectedProjectId);
+    
+    // Actualizar cliente automáticamente
+    const clientId = getClientForProject(selectedProjectId);
+    setSelectedClient(clientId || '');
+  };
 
   // Manejo del temporizador
   useEffect(() => {
@@ -191,17 +346,15 @@ const TimerPanel = ({
   }, 300);
 
   const handleDescChange = (e) => {
-    const value = e.target.value;
-    setDesc(value);
-    debouncedDescriptionChange(value);
-    setValidationErrors(prev => ({ ...prev, description: !value.trim() }));
+    const newDesc = e.target.value;
+    setDesc(newDesc);
+    debouncedDescriptionChange(newDesc);
+    setValidationErrors(prev => ({ ...prev, description: !newDesc.trim() }));
   };
 
-  const handleProjectChange = (e) => {
-    const value = e.target.value;
-    setSelectedProject(value);
-    setValidationErrors(prev => ({ ...prev, project: !value }));
-  };
+  // Obtener cliente del proyecto seleccionado
+  const selectedProjectDetails = (projectOptions || []).find(p => p.project_id === selectedProject);
+  const selectedClientName = selectedProjectDetails?.client_name || 'Sin cliente';
 
   // Controladores de botones del temporizador
   const handlePlay = () => {
@@ -222,7 +375,7 @@ const TimerPanel = ({
 
   // Estilos reutilizables
   const inputStyles = `w-full text-2xl md:text-3xl font-bold border-b-2 focus:outline-none py-2 px-1 bg-transparent transition ${
-    validationErrors.description ? 'border-red-500' : 'border-gray-200 focus:border-blue-500'
+    validationErrors.description ? 'border-red-500' : `border-gray-200 focus:border-${theme.PRIMARY_COLOR}-500`
   }`;
 
   const selectStyles = (hasError = false) =>
@@ -230,13 +383,29 @@ const TimerPanel = ({
       hasError ? 'border-red-500 focus:ring-red-400' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
     }`;
 
+  // Función para reiniciar el temporizador
+  const resetTimer = useCallback(() => {
+    setTime(0);
+    setRunning(false);
+  }, []);
+
   return (
     <section
       aria-label="Panel de temporizador"
-      className="bg-white shadow-lg rounded-2xl p-6 mb-8 border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-8 transition-all"
+      className={`bg-white shadow-lg rounded-2xl p-6 mb-8 border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-8 transition-all ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}
     >
       {/* Sección principal */}
       <div className="flex-1 min-w-0">
+        {/* Manejo de errores de proyectos */}
+        {projectsError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+            <p className="flex items-center gap-2">
+              <span className="material-icons-outlined text-xl">error_outline</span>
+              {projectsError}
+            </p>
+          </div>
+        )}
+
         {/* Input de descripción */}
         <label htmlFor="timer-desc" className="sr-only">
           ¿En qué estás trabajando?
@@ -268,16 +437,21 @@ const TimerPanel = ({
             <select
               id="timer-project"
               className={selectStyles(validationErrors.project)}
-              value={selectedProject}
+              value={selectedProject || ''}
               onChange={handleProjectChange}
               disabled={running || loading}
               aria-label="Proyecto"
               aria-invalid={validationErrors.project}
             >
-              <option value="">{loading ? 'Cargando...' : 'Selecciona proyecto'}</option>
-              {projectOptions.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
+              <option value="" disabled>
+                {loading ? 'Cargando proyectos...' : 'Selecciona un proyecto'}
+              </option>
+              {projectOptions.map(project => (
+                <option 
+                  key={project.project_id} 
+                  value={project.project_id}
+                >
+                  {project.name} - {project.client_name || 'Sin cliente'}
                 </option>
               ))}
             </select>
@@ -295,15 +469,18 @@ const TimerPanel = ({
             <select
               id="timer-client"
               className={selectStyles()}
-              value={selectedClient}
+              value={selectedClient || ''}
               onChange={(e) => setSelectedClient(e.target.value)}
               disabled={running || loading}
               aria-label="Cliente"
             >
-              <option value="">{loading ? 'Cargando...' : 'Cliente'}</option>
-              {clientOptions.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+              <option value="">Sin cliente</option>
+              {clientOptions.map(client => (
+                <option 
+                  key={client.client_id} 
+                  value={client.client_id}
+                >
+                  {client.name}
                 </option>
               ))}
             </select>
@@ -312,7 +489,7 @@ const TimerPanel = ({
 
           {/* Selector de etiquetas */}
           <div className="relative min-w-[120px] flex flex-col">
-            <label htmlFor="timer-category" className="sr-only">
+            <label htmlFor="timer-tag" className="sr-only">
               Categoría
             </label>
             <div className="relative flex items-center">
@@ -321,16 +498,21 @@ const TimerPanel = ({
                 style={{ left: 12, top: '50%', transform: 'translateY(-50%)' }}
               />
               <select
-                id="timer-category"
-                className={`${selectStyles()} pl-12`} // pl-10 para más espacio a la izquierda
-                value={selectedTag}
+                id="timer-tag"
+                className={selectStyles()}
+                value={selectedTag || ''}
                 onChange={(e) => setSelectedTag(e.target.value)}
                 disabled={running || loading}
                 aria-label="Categoría"
-                style={{ minHeight: '40px' }}
               >
-                <option value="">Categoría</option>
-                {tagOptions.map((tag) => (
+                <option value="">Sin categoría</option>
+                {[
+                  ...activityTypes.DEFAULT_ACTIVITY_TYPES,
+                  // Tipos personalizados adicionales
+                  'development', 
+                  'support', 
+                  'meeting'
+                ].map((tag) => (
                   <option key={tag} value={tag}>
                     {tag}
                   </option>
@@ -348,16 +530,16 @@ const TimerPanel = ({
             <input
               type="checkbox"
               className="sr-only peer"
-              checked={billable}
+              checked={billableState}
               onChange={(e) => onBillableChange(e.target.checked)}
               disabled={running}
-              aria-checked={billable}
+              aria-checked={billableState}
               aria-label="Facturable"
             />
             <span
               className={`
                 w-10 h-6 flex items-center rounded-full p-1 transition-colors duration-200
-                ${billable ? 'bg-blue-600' : 'bg-gray-300'}
+                ${billableState ? theme.PRIMARY_BG_MEDIUM : 'bg-gray-300'}
                 ${running ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 peer-focus:ring-2 peer-focus:ring-blue-400
               `}
@@ -365,15 +547,27 @@ const TimerPanel = ({
               <span
                 className={`
                   h-4 w-4 bg-white rounded-full shadow transform transition-transform duration-200
-                  ${billable ? 'translate-x-4' : ''}
+                  ${billableState ? 'translate-x-4' : ''}
                 `}
               ></span>
             </span>
-            <span className={`ml-3 font-medium text-sm select-none ${billable ? `text-${theme.PRIMARY_COLOR}-700` : 'text-gray-700'}`}>
+            <span className={`ml-3 font-medium text-sm select-none ${billableState ? theme.PRIMARY_COLOR_CLASS : 'text-gray-700'}`}>
               Facturable
             </span>
           </label>
         </div>
+
+        {/* Información adicional del proyecto */}
+        {selectedProjectDetails && (
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
+            <p>
+              <span className="font-semibold">Cliente:</span> {selectedClientName}
+            </p>
+            <p>
+              <span className="font-semibold">Tipo:</span> {selectedProjectDetails.project_type}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Panel de temporizador y controles */}
@@ -381,7 +575,7 @@ const TimerPanel = ({
         {/* Temporizador */}
         <div
           className={`text-4xl font-extrabold mb-2 tracking-tight ${
-            running ? 'text-blue-700 animate-pulse' : 'text-gray-800'
+            running ? `${theme.PRIMARY_COLOR_CLASS} animate-pulse` : 'text-gray-800'
           }`}
           aria-live="polite"
         >
@@ -421,8 +615,8 @@ const TimerPanel = ({
           onClick={handleSave}
           className={`flex items-center justify-center w-full py-2 px-4 rounded-md transition ${
             saving
-              ? `bg-${theme.PRIMARY_COLOR}-400 cursor-not-allowed`
-              : `bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 focus:ring-2 focus:ring-${theme.PRIMARY_COLOR}-500`
+              ? `${theme.PRIMARY_BG_MEDIUM} opacity-70 cursor-not-allowed`
+              : `${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`
           } text-white font-medium`}
           disabled={saving || running}
           aria-label="Guardar entrada"

@@ -1,0 +1,9 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+
+node_modules/
+.gitignore
+.cursorignore
+.env
+.env.local
+.env_home
+docker-compose.yml

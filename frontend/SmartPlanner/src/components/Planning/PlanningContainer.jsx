@@ -3,9 +3,11 @@ import PlanningBoard from "./PlanningBoard";
 import KanbanStatesManager from "./KanbanStatesManager";
 import { useAppTheme } from "../../context/ThemeContext";
 import { v4 as uuidv4 } from 'uuid';
+import { Routes, Route } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 // --- Configuración dinámica de estados Kanban ---
-const KANBAN_STATES_KEY = "smartplanner_kanban_states";
 const DEFAULT_KANBAN_STATES = [
   { key: "nuevo", label: "Nuevo", color: "bg-gray-100", textColor: "text-gray-700" },
   { key: "en_progreso", label: "En Progreso", color: "bg-blue-50", textColor: "text-blue-700" },
@@ -14,19 +16,13 @@ const DEFAULT_KANBAN_STATES = [
 ];
 
 function getInitialKanbanStates() {
-  const stored = localStorage.getItem(KANBAN_STATES_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return DEFAULT_KANBAN_STATES;
-    }
-  }
-  return DEFAULT_KANBAN_STATES;
+  // Siempre retornar los estados por defecto
+  return [...DEFAULT_KANBAN_STATES];
 }
 
 // --- Mock data empresarial ---
 const generateMockData = () => {
+  // Generar usuarios mock
   const MOCK_USERS = Array.from({ length: 20 }, (_, i) => ({
     id: uuidv4(),
     nombre: [
@@ -35,245 +31,161 @@ const generateMockData = () => {
       "Miguel González", "Carmen Jiménez", "Pablo Hernández", "Isabel Moreno", "Jorge Álvarez",
       "Lucía Romero", "Daniel Navarro", "Adriana Molina", "Raúl Ortega", "Patricia Rubio"
     ][i],
-    email: [
-      "ana.torres@empresa.com", "luis.perez@empresa.com", "carlos.ruiz@empresa.com",
-      "maria.gomez@empresa.com", "pedro.sanchez@empresa.com", "laura.diaz@empresa.com",
-      "javier.lopez@empresa.com", "sofia.martinez@empresa.com", "diego.rodriguez@empresa.com",
-      "elena.fernandez@empresa.com", "miguel.gonzalez@empresa.com", "carmen.jimenez@empresa.com",
-      "pablo.hernandez@empresa.com", "isabel.moreno@empresa.com", "jorge.alvarez@empresa.com",
-      "lucia.romero@empresa.com", "daniel.navarro@empresa.com", "adriana.molina@empresa.com",
-      "raul.ortega@empresa.com", "patricia.rubio@empresa.com"
-    ][i],
-    role: ["Developer", "QA", "UX Designer", "Product Owner", "Scrum Master"][Math.floor(Math.random() * 5)],
-    isActive: true,
-    lastActive: new Date(Date.now() - Math.floor(Math.random() * 7) * 24 * 60 * 60 * 1000).toISOString()
+    email: `usuario${i + 1}@empresa.com`,
+    role: ["Developer", "QA", "UX Designer", "Product Owner", "Scrum Master"][Math.floor(Math.random() * 5)]
   }));
 
-  const MOCK_PROJECTS = Array.from({ length: 5 }, (_, i) => ({
-    id: uuidv4(),
-    nombre: [
-      "Plataforma de Gestión Empresarial", 
-      "Portal del Cliente", 
-      "Sistema de Análisis de Datos",
-      "Aplicación Móvil Corporativa",
-      "Herramienta de Colaboración Interna"
-    ][i],
-    descripcion: [
-      "Plataforma integral para la gestión de proyectos y recursos empresariales",
-      "Portal autogestionable para clientes con acceso a servicios y documentación",
-      "Sistema avanzado de análisis y visualización de datos corporativos",
-      "Aplicación móvil para acceso remoto a los sistemas de la empresa",
-      "Herramienta para mejorar la colaboración entre equipos distribuidos"
-    ][i],
-    estado: ["activo", "en_pausa", "completado", "activo", "activo"][i],
-    fechaInicio: new Date(Date.now() - Math.floor(Math.random() * 180) * 24 * 60 * 60 * 1000).toISOString(),
-    fechaFin: new Date(Date.now() + Math.floor(Math.random() * 180) * 24 * 60 * 60 * 1000).toISOString(),
-    liderId: MOCK_USERS[Math.floor(Math.random() * MOCK_USERS.length)].id,
-    presupuesto: [50000, 75000, 120000, 90000, 60000][i],
-    cliente: [
-      "Interno", 
-      "Corporación Acme", 
-      "Global Solutions", 
-      "Industrias Beta", 
-      "Tech Innovations"
-    ][i]
-  }));
+  // Generar proyectos mock
+  const MOCK_PROJECTS = [
+    { id: uuidv4(), nombre: "Sistema de Gestión v2.0", descripcion: "Nueva versión del sistema de gestión" },
+    { id: uuidv4(), nombre: "App Móvil Cliente", descripcion: "Aplicación móvil para clientes" },
+    { id: uuidv4(), nombre: "Portal Empleados", descripcion: "Portal interno para empleados" }
+  ];
 
-  const MOCK_EPICS = MOCK_PROJECTS.flatMap(project => 
-    Array.from({ length: 3 }, (_, i) => ({
+  // Generar épicas mock
+  const MOCK_EPICS = [
+    { 
+      id: uuidv4(), 
+      nombre: "Autenticación y Seguridad",
+      descripcion: "Implementación del sistema de autenticación y seguridad",
+      proyecto_id: MOCK_PROJECTS[0].id
+    },
+    { 
+      id: uuidv4(), 
+      nombre: "Gestión de Usuarios",
+      descripcion: "Módulo de gestión de usuarios y permisos",
+      proyecto_id: MOCK_PROJECTS[0].id
+    },
+    { 
+      id: uuidv4(), 
+      nombre: "Dashboard Analytics",
+      descripcion: "Panel de análisis y métricas",
+      proyecto_id: MOCK_PROJECTS[1].id
+    }
+  ];
+
+  // Generar sprints mock
+  const MOCK_SPRINTS = [
+    {
       id: uuidv4(),
-      nombre: [
-        "Onboarding Platform", "Project Management Core", "Documentation Hub",
-        "Reporting Dashboard", "Admin Console", "API Gateway", "Notification System",
-        "User Profile Management", "Billing Module", "Security Framework",
-        "Mobile App Sync", "Data Export Engine", "Integration Marketplace",
-        "AI Assistant", "Customization Studio"
-      ][i % 15],
-      descripcion: [
-        "Flujo completo de registro y bienvenida de nuevos usuarios",
-        "Funcionalidades centrales de gestión de proyectos y tareas",
-        "Centralización de documentación técnica y de usuario",
-        "Tableros analíticos y reportes ejecutivos",
-        "Herramientas de administración del sistema",
-        "Gestión centralizada de APIs y endpoints",
-        "Sistema de notificaciones multicanal",
-        "Gestión de perfiles de usuario y preferencias",
-        "Módulo de facturación y pagos",
-        "Marco de seguridad y control de accesos",
-        "Sincronización con aplicación móvil nativa",
-        "Motor de exportación de datos en múltiples formatos",
-        "Plataforma de integraciones con terceros",
-        "Asistente inteligente para soporte y productividad",
-        "Herramientas de personalización de la plataforma"
-      ][i % 15],
-      status: ["planned", "in_progress", "completed"][Math.floor(Math.random() * 3)],
-      startDate: new Date(Date.now() - Math.floor(Math.random() * 90) * 24 * 60 * 60 * 1000).toISOString(),
-      targetRelease: `Q${Math.floor(Math.random() * 4) + 1} ${new Date().getFullYear() + Math.floor(Math.random() * 2)}`,
-      priority: ["high", "medium", "low"][Math.floor(Math.random() * 3)],
-      ownerId: MOCK_USERS[Math.floor(Math.random() * MOCK_USERS.length)].id,
-      projectId: project.id
-    }))
-  );
+      nombre: "Sprint 1",
+      fecha_inicio: "2024-03-01",
+      fecha_fin: "2024-03-15",
+      estado: "Completado"
+    },
+    {
+      id: uuidv4(),
+      nombre: "Sprint 2",
+      fecha_inicio: "2024-03-16",
+      fecha_fin: "2024-03-30",
+      estado: "Activo"
+    },
+    {
+      id: uuidv4(),
+      nombre: "Sprint 3",
+      fecha_inicio: "2024-03-31",
+      fecha_fin: "2024-04-14",
+      estado: "Planificado"
+    }
+  ];
 
-  const MOCK_SPRINTS = MOCK_PROJECTS.flatMap(project => 
-    Array.from({ length: 12 }, (_, i) => {
-      const startDate = new Date(Date.now() - (11 - i) * 90 * 24 * 60 * 60 * 1000);
-      const endDate = new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000);
-      return {
-        id: uuidv4(),
-        nombre: `Sprint ${i + 1} - Q${Math.floor(i/3) + 1}`,
-        fecha_inicio: startDate.toISOString().split('T')[0],
-        fecha_fin: endDate.toISOString().split('T')[0],
-        estado: i === 11 ? "Activo" : i > 8 ? "Pendiente" : "Completado",
-        goal: [
-          "Implementar flujo de onboarding básico",
-          "Desarrollar core de gestión de proyectos",
-          "Crear sistema de permisos básico",
-          "Implementar notificaciones por email",
-          "Desarrollar módulo de reportes básicos",
-          "Crear API de integración inicial",
-          "Implementar sistema de documentación técnica",
-          "Desarrollar panel de administración",
-          "Crear módulo de facturación inicial",
-          "Implementar seguridad básica",
-          "Preparar lanzamiento MVP",
-          "Optimizar rendimiento general"
-        ][i],
-        velocity: Math.floor(Math.random() * 40) + 20,
-        completedPoints: Math.floor(Math.random() * 40) + 15,
-        projectId: project.id
-      };
-    })
-  );
+  // Generar historias mock
+  const MOCK_STORIES = [
+    {
+      id: uuidv4(),
+      titulo: "Implementar autenticación JWT",
+      descripcion: "Configurar sistema de autenticación con JWT",
+      estado: "nuevo",
+      prioridad: "Alta",
+      usuario_asignado: MOCK_USERS[0].id,
+      sprint_id: MOCK_SPRINTS[1].id,
+      epica_id: MOCK_EPICS[0].id,
+      etiquetas: ["backend", "seguridad"],
+      estimaciones: { UI: 0, Desarrollo: 8, Testing: 4 }
+    },
+    {
+      id: uuidv4(),
+      titulo: "Diseñar interfaz de login",
+      descripcion: "Crear diseño responsive para la pantalla de login",
+      estado: "en_progreso",
+      prioridad: "Media",
+      usuario_asignado: MOCK_USERS[2].id,
+      sprint_id: MOCK_SPRINTS[1].id,
+      epica_id: MOCK_EPICS[0].id,
+      etiquetas: ["frontend", "diseño"],
+      estimaciones: { UI: 4, Desarrollo: 4, Testing: 2 }
+    },
+    {
+      id: uuidv4(),
+      titulo: "Implementar recuperación de contraseña",
+      descripcion: "Sistema de recuperación de contraseña por email",
+      estado: "listo_pruebas",
+      prioridad: "Media",
+      usuario_asignado: MOCK_USERS[1].id,
+      sprint_id: MOCK_SPRINTS[1].id,
+      epica_id: MOCK_EPICS[0].id,
+      etiquetas: ["backend", "email"],
+      estimaciones: { UI: 2, Desarrollo: 6, Testing: 4 }
+    },
+    {
+      id: uuidv4(),
+      titulo: "Gestión de roles y permisos",
+      descripcion: "Implementar sistema de roles y permisos",
+      estado: "nuevo",
+      prioridad: "Alta",
+      usuario_asignado: MOCK_USERS[3].id,
+      sprint_id: MOCK_SPRINTS[1].id,
+      epica_id: MOCK_EPICS[1].id,
+      etiquetas: ["backend", "seguridad"],
+      estimaciones: { UI: 0, Desarrollo: 12, Testing: 6 }
+    }
+  ];
 
-  const MOCK_STORIES = MOCK_PROJECTS.flatMap(project => {
-    const projectEpics = MOCK_EPICS.filter(epic => epic.projectId === project.id);
-    const projectSprints = MOCK_SPRINTS.filter(sprint => sprint.projectId === project.id);
-    return Array.from({ length: 50 }, (_, i) => {
-      const epic = projectEpics[Math.floor(Math.random() * projectEpics.length)];
-      const statusOptions = ["nuevo", "en_progreso", "listo_pruebas", "cerrado"];
-      const status = statusOptions[Math.floor(Math.random() * statusOptions.length)];
-      const sprint = status === "nuevo" ? null : 
-        projectSprints[Math.floor(Math.random() * projectSprints.length)];
-      return {
-        id: uuidv4(),
-        titulo: [
-          "Implementar autenticación con Google",
-          "Crear formulario de nuevo proyecto",
-          "Diseñar tabla de proyectos",
-          "Agregar filtros a la vista de proyectos",
-          "Implementar exportación a PDF",
-          "Crear API para listar usuarios",
-          "Diseñar panel de administración",
-          "Implementar notificaciones en-app",
-          "Crear sistema de permisos básico",
-          "Optimizar carga de dashboard",
-          "Implementar búsqueda global",
-          "Diseñar flujo de onboarding",
-          "Crear documentación API",
-          "Implementar dark mode",
-          "Agregar tooltips a elementos UI"
-        ][Math.floor(Math.random() * 15)] + ` ${Math.floor(Math.random() * 5) + 1}`,
-        descripcion: `Como ${["usuario", "admin", "cliente", "desarrollador", "PO"][Math.floor(Math.random() * 5)]} quiero ${[
-          "poder autenticarme con mi cuenta de Google",
-          "crear nuevos proyectos con campos básicos",
-          "ver todos mis proyectos en una tabla ordenable",
-          "filtrar proyectos por estado y fecha",
-          "exportar reportes en formato PDF",
-          "obtener una lista de usuarios del sistema",
-          "acceder a herramientas de administración",
-          "recibir notificaciones dentro de la aplicación",
-          "tener permisos diferenciados por rol",
-          "experimentar tiempos de carga más rápidos",
-          "buscar contenido en toda la plataforma",
-          "completar un flujo de onboarding guiado",
-          "acceder a documentación técnica completa",
-          "cambiar el tema de la interfaz a oscuro",
-          "ver información contextual al hacer hover"
-        ][Math.floor(Math.random() * 15)]} para ${[
-          "mejorar mi productividad",
-          "acceder más rápido a la información",
-          "tener más control sobre mis datos",
-          "personalizar mi experiencia",
-          "compartir información con mi equipo",
-          "tomar mejores decisiones",
-          "reducir errores en el sistema",
-          "cumplir con requisitos regulatorios",
-          "mejorar la experiencia general",
-          "optimizar mis flujos de trabajo"
-        ][Math.floor(Math.random() * 10)]}.`,
-        epica_id: epic.id,
-        proyecto_id: project.id,
-        estado: status,
-        prioridad: ["Alta", "Media", "Baja"][Math.floor(Math.random() * 3)],
-        estimaciones: {
-          UI: Math.floor(Math.random() * 3),
-          Desarrollo: Math.floor(Math.random() * 8) + 2,
-          Documentación: Math.floor(Math.random() * 2),
-          Reuniones: Math.floor(Math.random() * 2),
-          Otros: Math.floor(Math.random() * 2)
-        },
-        usuario_asignado: status === "nuevo" ? null : MOCK_USERS[Math.floor(Math.random() * MOCK_USERS.length)].id,
-        sprint_id: sprint?.id || null,
-        etiquetas: Array.from(new Set([
-          ["auth", "ui", "api", "security", "devops"][Math.floor(Math.random() * 5)],
-          ["urgente", "mejora", "bug", "feature"][Math.floor(Math.random() * 4)]
-        ])),
-        createdAt: new Date(Date.now() - Math.floor(Math.random() * 180) * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString(),
-        points: Math.floor(Math.random() * 8) + 1,
-        dependencies: Math.random() > 0.7 ? [uuidv4(), uuidv4()] : [],
-        acceptanceCriteria: [
-          "Debe funcionar en los últimos 3 versiones de Chrome",
-          "El tiempo de respuesta debe ser menor a 2 segundos",
-          "Debe pasar todos los tests unitarios",
-          "Debe cumplir con las guías de accesibilidad WCAG 2.1",
-          "Debe incluir documentación técnica"
-        ].slice(0, Math.floor(Math.random() * 3) + 1)
-      };
-    });
-  });
-
-  return { MOCK_USERS, MOCK_PROJECTS, MOCK_EPICS, MOCK_SPRINTS, MOCK_STORIES };
+  return {
+    users: MOCK_USERS,
+    projects: MOCK_PROJECTS,
+    epics: MOCK_EPICS,
+    sprints: MOCK_SPRINTS,
+    stories: MOCK_STORIES
+  };
 };
 
 export default function PlanningContainer() {
-  const theme = useAppTheme();
+  const [stories, setStories] = useState([]);
   const [epics, setEpics] = useState([]);
   const [sprints, setSprints] = useState([]);
   const [users, setUsers] = useState([]);
-  const [stories, setStories] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [filters, setFilters] = useState({});
   const [kanbanStates, setKanbanStates] = useState(getInitialKanbanStates());
-  const [showStatesManager, setShowStatesManager] = useState(false);
-  const [filters, setFilters] = useState({
-    status: undefined,
-    priority: undefined,
-    assignedTo: undefined,
-    project: undefined
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const theme = useAppTheme();
+  const navigate = useNavigate();
 
-  // Persistir cambios de estados Kanban
+  // Cargar datos iniciales
   useEffect(() => {
-    localStorage.setItem(KANBAN_STATES_KEY, JSON.stringify(kanbanStates));
-  }, [kanbanStates]);
-
-  // Simular carga inicial de datos
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const { MOCK_USERS, MOCK_PROJECTS, MOCK_EPICS, MOCK_SPRINTS, MOCK_STORIES } = generateMockData();
-      setUsers(MOCK_USERS);
-      setProjects(MOCK_PROJECTS);
-      setEpics(MOCK_EPICS);
-      setSprints(MOCK_SPRINTS);
-      setStories(MOCK_STORIES);
-      setIsLoading(false);
-    };
     loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      // Simular delay de red
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Simular carga desde API
+      const mockData = generateMockData();
+      setStories(mockData.stories || []);
+      setEpics(mockData.epics || []);
+      setSprints(mockData.sprints || []);
+      setUsers(mockData.users || []);
+      setProjects(mockData.projects || []);
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // CRUD Handlers
   const handleUpdateStory = (updatedStory) => {
@@ -322,63 +234,95 @@ export default function PlanningContainer() {
     setFilters(prev => ({ ...prev, ...newFilters }));
   };
 
+  const handleUpdateKanbanStates = (newStates) => {
+    setKanbanStates(newStates);
+    
+    // Actualizar historias solo si un estado ha sido eliminado
+    setStories(prevStories => 
+      prevStories.map(story => {
+        // Buscar el estado actual de la historia
+        const currentState = newStates.find(state => state.key === story.estado);
+        
+        // Si el estado ya no existe, mover la historia al primer estado disponible
+        if (!currentState) {
+          return {
+            ...story,
+            estado: newStates[0]?.key || 'nuevo'
+          };
+        }
+        
+        // Si el estado existe, mantener la historia en su estado actual
+        return story;
+      })
+    );
+  };
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#f6f7fb] to-[#e9eaf3]">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-lg font-medium text-gray-700">Cargando datos del proyecto...</p>
+          <div className={`w-16 h-16 border-4 border-t-${theme.PRIMARY_COLOR}-600 border-${theme.PRIMARY_COLOR}-200 rounded-full animate-spin mx-auto mb-4`} />
+          <h2 className={`text-xl font-semibold ${theme.PRIMARY_COLOR_CLASS} mb-2`}>
+            Cargando SmartPlanner
+          </h2>
+          <p className="text-gray-500 text-sm">
+            Preparando el espacio de trabajo...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative h-full">
-      {/* Botón para abrir el gestor de estados Kanban */}
-      <button
-        className={`absolute top-16 right-4 z-10 bg-${theme.PRIMARY_COLOR}-600 text-white px-4 py-2 rounded-lg hover:bg-${theme.PRIMARY_COLOR}-700 transition-colors text-sm font-medium`}
-        onClick={() => setShowStatesManager(true)}
-      >
-        Gestionar Estados Kanban
-      </button>
-
-      {/* Modal del gestor */}
-      {showStatesManager && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg px-6 pt-6 pb-6 relative min-w-[350px]">
-            <button
-              className="absolute top-9 right-10 text-gray-500 hover:text-gray-700 text-2xl"
-              onClick={() => setShowStatesManager(false)}
-              aria-label="Cerrar gestor de estados"
-              type="button"
-            >
-              ✕
-            </button>
-            <KanbanStatesManager
-              states={kanbanStates}
-              setStates={setKanbanStates}
+    <div className="flex flex-col h-screen overflow-hidden">
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <PlanningBoard
+              epics={epics}
+              sprints={sprints}
+              stories={stories}
+              users={users}
+              projects={projects}
+              setStories={setStories}
+              onUpdateStory={handleUpdateStory}
+              onCreateStory={handleCreateStory}
+              kanbanStates={kanbanStates}
+              onEditKanbanStates={handleUpdateKanbanStates}
+              filters={filters}
+              onFilterChange={handleFilterChange}
             />
-          </div>
-        </div>
-      )}
-
-      <PlanningBoard
-        epics={epics}
-        sprints={sprints}
-        stories={stories}
-        users={users}
-        projects={projects}
-        setStories={setStories}
-        onUpdateStory={handleUpdateStory}
-        onCreateStory={handleCreateStory}
-        onCreateEpic={handleCreateEpic}
-        onCreateProject={handleCreateProject}
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        kanbanStates={kanbanStates}
-        onEditKanbanStates={setKanbanStates}
-      />
+          }
+        />
+        <Route
+          path="/kanban-states"
+          element={
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="p-6"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <button
+                  onClick={() => navigate('/manager/planning')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                </button>
+                <h1 className="text-2xl font-bold text-gray-800">Gestión de Estados Kanban</h1>
+              </div>
+              <KanbanStatesManager
+                states={kanbanStates}
+                setStates={handleUpdateKanbanStates}
+              />
+            </motion.div>
+          }
+        />
+      </Routes>
     </div>
   );
 }

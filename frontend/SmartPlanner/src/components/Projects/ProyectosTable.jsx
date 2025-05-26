@@ -1,27 +1,67 @@
 import React, { useEffect, useState } from 'react';
 import { useAppTheme } from '../../context/ThemeContext';
 
-function ProyectosTable() {
+export default function ProyectosTable() {
   const theme = useAppTheme();
   const [proyectos, setProyectos] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
-    nombre: "",
-    tipo: "",
-    fechaInicio: "",
-    fechaFin: "",
-    estado: "",
-    montoFacturado: ""
+    name: "",
+    project_type: "",
+    client_id: "",
+    status: "",
+    start_date: "",
+    end_date: "",
+    description: "",
+    code: ""
   });
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState(null);
 
   // Cargar proyectos
-  const fetchProyectos = () => {
-    fetch('http://localhost:8000/projects/')
-      .then((response) => response.json())
-      .then((data) => setProyectos(data))
-      .catch((error) => console.error('Error al cargar los proyectos:', error));
+  const fetchProyectos = async () => {
+    try {
+      const session = localStorage.getItem('session');
+      console.log('Sesión almacenada:', session); // Log de la sesión completa
+
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const parsedSession = JSON.parse(session);
+      console.log('Token:', parsedSession.token); // Log del token
+      console.log('Usuario:', parsedSession.user); // Log del usuario
+
+      if (!parsedSession.token) {
+        throw new Error('Token de autenticación no encontrado');
+      }
+
+      const response = await fetch('http://localhost:8000/projects/', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${parsedSession.token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      console.log('Respuesta completa:', response);
+      console.log('Estado de la respuesta:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.text(); // Cambiar a .text() para ver el contenido completo
+        console.error('Datos de error:', errorData);
+        throw new Error(errorData || 'Error al cargar los proyectos');
+      }
+
+      const data = await response.json();
+      console.log('Proyectos cargados:', data);
+      setProyectos(data);
+    } catch (error) {
+      console.error('Error completo al cargar los proyectos:', error);
+      alert(`Error al cargar proyectos: ${error.message}`);
+      setProyectos([]); 
+    }
   };
 
   useEffect(() => {
@@ -36,210 +76,365 @@ function ProyectosTable() {
   const handleCreateOrUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const url = editId
-      ? `http://localhost:8000/projects/${editId}`
-      : 'http://localhost:8000/projects/';
-    const method = editId ? 'PUT' : 'POST';
 
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        montoFacturado: parseFloat(form.montoFacturado) || 0
-      })
-    });
-    setShowForm(false);
-    setEditId(null);
-    setForm({
-      nombre: "",
-      tipo: "",
-      fechaInicio: "",
-      fechaFin: "",
-      estado: "",
-      montoFacturado: ""
-    });
-    fetchProyectos();
-    setLoading(false);
+    try {
+      const session = localStorage.getItem('session');
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const { token } = JSON.parse(session);
+      if (!token) {
+        throw new Error('Token de autenticación no encontrado');
+      }
+
+      const url = editId
+        ? `http://localhost:8000/projects/${editId}`
+        : 'http://localhost:8000/projects/';
+      const method = editId ? 'PUT' : 'POST';
+
+      const projectData = {
+        name: form.name,
+        project_type: form.project_type,
+        client_id: parseInt(form.client_id, 10),
+        status: form.status,
+        start_date: form.start_date ? new Date(form.start_date).toISOString().split('T')[0] : null,
+        end_date: form.end_date ? new Date(form.end_date).toISOString().split('T')[0] : null,
+        description: form.description || null,
+        code: form.code || null
+      };
+
+      const response = await fetch(url, {
+        method,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(projectData),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Error response:', errorData);
+        throw new Error(errorData || 'Error al procesar el proyecto');
+      }
+
+      setShowForm(false);
+      setEditId(null);
+      setForm({
+        name: "",
+        project_type: "",
+        client_id: "",
+        status: "",
+        start_date: "",
+        end_date: "",
+        description: "",
+        code: ""
+      });
+      await fetchProyectos();
+    } catch (error) {
+      console.error('Error completo:', error);
+      
+      // Manejar específicamente errores de autenticación o CORS
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        alert('Error de conexión. Por favor, verifica tu conexión de red o el servidor.');
+      } else if (error.message.includes('Unauthorized') || error.message.includes('token')) {
+        alert('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+        // Opcional: Redirigir a la página de login
+        // navigate('/login');
+      } else {
+        alert(error.message || 'Error al crear/actualizar el proyecto');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Eliminar proyecto
   const handleDelete = async (id, nombre) => {
     if (window.confirm(`¿Seguro que deseas eliminar el proyecto "${nombre}" (ID: ${id})?`)) {
-      await fetch(`http://localhost:8000/projects/${id}`, {
-        method: 'DELETE'
-      });
-      fetchProyectos();
+      try {
+        const session = localStorage.getItem('session');
+        if (!session) {
+          throw new Error('No hay sesión activa');
+        }
+
+        const { token } = JSON.parse(session);
+        if (!token) {
+          throw new Error('Token de autenticación no encontrado');
+        }
+
+        const response = await fetch(`http://localhost:8000/projects/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Error al eliminar el proyecto');
+        }
+
+        await fetchProyectos();
+      } catch (error) {
+        console.error('Error:', error);
+        
+        // Manejar específicamente errores de autenticación
+        if (error.message.includes('Unauthorized') || error.message.includes('token')) {
+          alert('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+          // Opcional: Redirigir a la página de login
+          // navigate('/login');
+        } else {
+          alert(error.message);
+        }
+      }
     }
   };
 
   // Editar proyecto
   const handleEdit = (proyecto) => {
     setForm({
-      nombre: proyecto.nombre,
-      idCliente: proyecto.idCliente,
-      fechaInicio: proyecto.fechaInicio,
-      fechaFin: proyecto.fechaFin,
-      estado: proyecto.estado,
-      montoFacturado: proyecto.montoFacturado
+      name: proyecto.name,
+      project_type: proyecto.project_type,
+      client_id: proyecto.client_id,
+      status: proyecto.status,
+      start_date: proyecto.start_date,
+      end_date: proyecto.end_date,
+      description: proyecto.description || "",
+      code: proyecto.code || ""
     });
-    setEditId(proyecto.id);
+    setEditId(proyecto.project_id);
     setShowForm(true);
   };
 
   return (
-    <div className="overflow-x-auto">
-      
-      <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-4 gap-2">
-        <h2 className="text-lg font-bold text-gray-700">Proyectos</h2>
-        <button
-          className={`bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition`}
-          onClick={() => {
-            setShowForm(true);
-            setEditId(null);
-            setForm({
-              nombre: "",
-              idCliente: "",
-              fechaInicio: "",
-              fechaFin: "",
-              estado: "",
-              montoFacturado: ""
-            });
-          }}
-        >
-          + Nuevo Proyecto
-        </button>
+    <div className={`${theme.FONT_CLASS}`}>
+      <div className="overflow-x-auto">
+        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-4 gap-2">
+          <h2 className="text-lg font-bold text-gray-700">Proyectos</h2>
+          <button
+            className={`bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition`}
+            onClick={() => {
+              setShowForm(true);
+              setEditId(null);
+              setForm({
+                name: "",
+                project_type: "",
+                client_id: "",
+                status: "",
+                start_date: "",
+                end_date: "",
+                description: "",
+                code: ""
+              });
+            }}
+          >
+            + Nuevo Proyecto
+          </button>
+        </div>
+
+        {showForm && (
+          <form
+            className="mb-8 rounded-xl border border-gray-100 bg-white/50 backdrop-blur-sm p-6"
+            onSubmit={handleCreateOrUpdate}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del Proyecto</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="name"
+                  placeholder="Nombre"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Proyecto</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="project_type"
+                  value={form.project_type}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="" disabled hidden>Selecciona un tipo</option>
+                  <option value="desarrollo">Desarrollo</option>
+                  <option value="soporte">Soporte</option>
+                  <option value="reunion">Reunión</option>
+                  <option value="capacitacion">Capacitación</option>
+                  <option value="consultoria">Consultoría</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">ID Cliente</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="client_id"
+                  type="number"
+                  placeholder="ID Cliente"
+                  value={form.client_id}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha Inicio</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="start_date"
+                  type="date"
+                  placeholder="Fecha Inicio"
+                  value={form.start_date}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha Fin</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="end_date"
+                  type="date"
+                  placeholder="Fecha Fin"
+                  value={form.end_date}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="status"
+                  value={form.status}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="" disabled hidden>Selecciona un estado</option>
+                  <option value="nuevo">Nuevo</option>
+                  <option value="en_progreso">En Progreso</option>
+                  <option value="completado">Completado</option>
+                  <option value="pausado">Pausado</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="description"
+                  placeholder="Descripción del proyecto"
+                  value={form.description}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Código</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  name="code"
+                  placeholder="Código del proyecto"
+                  value={form.code}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                className={`${theme.PRIMARY_BUTTON_CLASS} px-4 py-2 rounded-lg flex items-center gap-2`}
+                disabled={loading}
+              >
+                <span className="material-icons-outlined text-xl">
+                  {editId ? 'save' : 'add'}
+                </span>
+                {loading ? (editId ? "Actualizando..." : "Creando...") : (editId ? "Actualizar" : "Crear")}
+              </button>
+              <button
+                type="button"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditId(null);
+                  setForm({
+                    name: "",
+                    project_type: "",
+                    client_id: "",
+                    status: "",
+                    start_date: "",
+                    end_date: "",
+                    description: "",
+                    code: ""
+                  });
+                }}
+                disabled={loading}
+              >
+                <span className="material-icons-outlined text-xl">close</span>
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="rounded-xl border border-gray-100 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50/50 backdrop-blur-sm">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nombre</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tipo</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha Inicio</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha Fin</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Estado</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white/50 backdrop-blur-sm divide-y divide-gray-200">
+              {proyectos.map((proyecto) => (
+                <tr key={proyecto.project_id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_id}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_type}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.start_date}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.end_date}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      ${proyecto.status === 'nuevo' ? 'bg-blue-100 text-blue-800' : ''}
+                      ${proyecto.status === 'en_progreso' ? 'bg-yellow-100 text-yellow-800' : ''}
+                      ${proyecto.status === 'completado' ? 'bg-green-100 text-green-800' : ''}
+                      ${proyecto.status === 'pausado' ? 'bg-gray-100 text-gray-800' : ''}
+                      ${proyecto.status === 'cancelado' ? 'bg-red-100 text-red-800' : ''}
+                    `}>
+                      {proyecto.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                    <button
+                      className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
+                      onClick={() => handleEdit(proyecto)}
+                    >
+                      <span className="material-icons-outlined text-base">edit</span>
+                      Editar
+                    </button>
+                    <button
+                      className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
+                      onClick={() => handleDelete(proyecto.project_id, proyecto.name)}
+                    >
+                      <span className="material-icons-outlined text-base">delete</span>
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-
-      {showForm && (
-        <form
-          className="bg-white border border-gray-200 rounded-lg p-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-4"
-          onSubmit={handleCreateOrUpdate}
-        >
-          <input
-            className="border rounded px-3 py-2"
-            name="nombre"
-            placeholder="Nombre"
-            value={form.nombre}
-            onChange={handleChange}
-            required
-          />
-          <input
-            className="border rounded px-3 py-2"
-            name="idCliente"
-            placeholder="ID Cliente"
-            value={form.idCliente}
-            onChange={handleChange}
-            required
-          />
-          <input
-            className="border rounded px-3 py-2"
-            name="fechaInicio"
-            type={form.fechaInicio ? "date" : "text"}
-            placeholder="Fecha Inicio"
-            value={form.fechaInicio}
-            onFocus={e => e.target.type = "date"}
-            onBlur={e => { if (!form.fechaInicio) e.target.type = "text"; }}
-            onChange={handleChange}
-          />
-          <input
-            className="border rounded px-3 py-2"
-            name="fechaFin"
-            type={form.fechaFin ? "date" : "text"}
-            placeholder="Fecha Fin"
-            value={form.fechaFin}
-            onFocus={e => e.target.type = "date"}
-            onBlur={e => { if (!form.fechaFin) e.target.type = "text"; }}
-            onChange={handleChange}
-          />
-          <input
-            className="border rounded px-3 py-2"
-            name="estado"
-            placeholder="Estado"
-            value={form.estado}
-            onChange={handleChange}
-          />
-          <input
-            className="border rounded px-3 py-2"
-            name="montoFacturado"
-            type="number"
-            step="0.01"
-            placeholder="Monto Facturado"
-            value={form.montoFacturado}
-            onChange={handleChange}
-          />
-          <div className="flex gap-2 col-span-1 md:col-span-3">
-            <button
-              type="submit"
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-              disabled={loading}
-            >
-              {loading ? (editId ? "Actualizando..." : "Creando...") : (editId ? "Actualizar" : "Crear")}
-            </button>
-            <button
-              type="button"
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded"
-              onClick={() => {
-                setShowForm(false);
-                setEditId(null);
-                setForm({
-                  nombre: "",
-                  tipo: "",
-                  fechaInicio: "",
-                  fechaFin: "",
-                  estado: "",
-                  montoFacturado: ""
-                });
-              }}
-              disabled={loading}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      )}
-
-      <table className="min-w-full bg-white rounded-lg overflow-hidden">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">ID</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Nombre</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Fecha Inicio</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Fecha Fin</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Estado</th>
-            <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {proyectos.map((proyecto) => (
-            <tr key={proyecto.id} className="hover:bg-blue-50 transition">
-              <td className="px-4 py-2">{proyecto.project_id}</td>
-              <td className="px-4 py-2">{proyecto.name}</td>
-              <td className="px-4 py-2">{proyecto.project_type}</td>
-              <td className="px-4 py-2">{proyecto.start_date}</td>
-              <td className="px-4 py-2">{proyecto.end_date}</td>
-              <td className="px-4 py-2">{proyecto.status}</td>
-              <td className="px-4 py-2 flex gap-2">
-                <button
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
-                  onClick={() => handleEdit(proyecto)}
-                >
-                  Editar
-                </button>
-                <button
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
-                  onClick={() => handleDelete(proyecto.project_id, proyecto.name)}
-                >
-                  Eliminar
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
-
-export default ProyectosTable;

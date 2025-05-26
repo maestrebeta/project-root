@@ -1,11 +1,14 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 // Hook reutilizable para obtener proyectos, tipos/categorías y clientes
-export function useProjectsAndTags() {
+export function useProjectsAndTags(entries = []) {
   const [projectOptions, setProjectOptions] = useState([]);
   const [tagOptions, setTagOptions] = useState([]);
   const [clientOptions, setClientOptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { user } = useAuth();
 
   // Nuevos estados para sugerencias y status únicos
   const [suggestedProject, setSuggestedProject] = useState('');
@@ -13,37 +16,73 @@ export function useProjectsAndTags() {
   const [statusOptions, setStatusOptions] = useState([]);
 
   useEffect(() => {
-    setLoading(true);
+    const fetchProjectsAndClients = async () => {
+      try {
+        // Obtener token de la sesión
+        const session = localStorage.getItem('session');
+        if (!session) {
+          throw new Error('No hay sesión activa');
+        }
 
-    // Fetch proyectos, clientes y time-entries en paralelo
-    Promise.all([
-      fetch('http://localhost:8000/projects/').then(res => res.json()),
-      fetch('http://localhost:8000/clients/').then(res => res.json()),
-      fetch('http://localhost:8000/time-entries/').then(res => res.json())
-    ])
-      .then(([projects, clients, entries]) => {
-        // Proyectos
-        setProjectOptions(
-          projects.map(p => ({
-            value: p.project_id || p.id || p.id_project || p.name,
-            label: p.name,
-            client_id: p.client_id,
-            category: p.project_type || p.type || '',
-            raw: p,
-          }))
-        );
-        // Clientes
-        setClientOptions(
-          clients.map(c => ({
-            value: c.client_id || c.id || c.name,
-            label: c.name,
-            raw: c,
-          }))
-        );
+        const { token, user } = JSON.parse(session);
+        if (!user?.organization_id) {
+          throw new Error('El usuario no tiene una organización asignada');
+        }
+
+        // Cargar proyectos de la organización
+        const projectsResponse = await fetch('http://localhost:8000/projects/', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+
+        if (!projectsResponse.ok) {
+          const errorData = await projectsResponse.text();
+          throw new Error(errorData || 'Error al cargar los proyectos');
+        }
+
+        const projectsData = await projectsResponse.json();
+
+        // Cargar clientes de la organización
+        const clientsResponse = await fetch('http://localhost:8000/clients/', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+
+        if (!clientsResponse.ok) {
+          const errorData = await clientsResponse.text();
+          throw new Error(errorData || 'Error al cargar los clientes');
+        }
+
+        const clientsData = await clientsResponse.json();
+
+        // Mapear proyectos con información de cliente
+        const projectsWithClients = projectsData.map(project => {
+          const client = clientsData.find(c => c.client_id === project.client_id);
+          return {
+            ...project,
+            client_name: client ? client.name : 'Sin cliente'
+          };
+        });
+
+        console.log('Proyectos cargados:', projectsWithClients);
+        console.log('Clientes cargados:', clientsData);
+
+        setProjectOptions(projectsWithClients);
+        setClientOptions(clientsData);
+        setLoading(false);
+
         // Tags (categorías)
         const tags = Array.from(
           new Set(
-            projects
+            projectsWithClients
               .map(p => p.project_type || p.type)
               .filter(Boolean)
           )
@@ -85,43 +124,59 @@ export function useProjectsAndTags() {
           setSuggestedActivity('');
           setStatusOptions([]);
         }
-      })
-      .catch(() => {
-        setProjectOptions([]);
-        setTagOptions([]);
-        setClientOptions([]);
-        setSuggestedProject('');
-        setSuggestedActivity('');
-        setStatusOptions([]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      } catch (error) {
+        console.error('Error al cargar proyectos y clientes:', error);
+        
+        // Manejar específicamente errores de autenticación
+        if (error.message.includes('Unauthorized') || error.message.includes('token')) {
+          setError('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          setError('Error de conexión. Por favor, verifica tu conexión de red o el servidor.');
+        } else {
+          setError(error.message || 'Error al cargar proyectos y clientes');
+        }
+        
+        setLoading(false);
+      }
+    };
+
+    // Solo cargar si hay una sesión de usuario
+    if (user?.organization_id) {
+      fetchProjectsAndClients();
+    }
+  }, [user?.organization_id]);
 
   // Helper: obtener cliente de un proyecto
   const getClientByProject = (projectId) => {
-    const project = projectOptions.find(p => String(p.value) === String(projectId));
-    if (!project) return null;
-    return clientOptions.find(c => String(c.value) === String(project.client_id)) || null;
+    const project = projectOptions.find(p => String(p.project_id) === String(projectId));
+    return project ? project.client_name : 'Sin cliente';
   };
 
   // Mapa de project_id a project_name
   const projectIdToName = useMemo(() => {
     const map = {};
     projectOptions.forEach(p => {
-      map[String(p.value)] = p.label;
+      map[String(p.project_id)] = p.name;
     });
     return map;
   }, [projectOptions]);
 
   return {
-    projectOptions,
+    projects: projectOptions,
+    clients: clientOptions,
+    loading: loading,
+    error: error,
     tagOptions,
-    clientOptions,
-    getClientByProject,
-    projectIdToName,
-    loading,
-    suggestedProject,      // <-- Proyecto con mayor duración
-    suggestedActivity,     // <-- Actividad con mayor duración
-    statusOptions          // <-- Status únicos para filtros
+    getClientByProject: (projectId) => {
+      const project = projectOptions.find(p => String(p.project_id) === String(projectId));
+      return project ? project.client_name : 'Sin cliente';
+    },
+    projectIdToName: (projectId) => {
+      const project = projectOptions.find(p => String(p.project_id) === String(projectId));
+      return project ? project.name : 'Proyecto no encontrado';
+    },
+    suggestedProject,
+    suggestedActivity,
+    statusOptions,
   };
 }
