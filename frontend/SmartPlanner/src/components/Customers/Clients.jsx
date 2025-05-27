@@ -5,54 +5,53 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function ClientsResume() {
   const [stats, setStats] = useState({
-    total: 0,
-    activos: 0,
-    inactivos: 0,
-    nuevosMes: 0
+    total_clients: { value: '0', change: '0' },
+    active_clients: { value: '0', change: '0' },
+    inactive_clients: { value: '0', change: '0' },
+    clients_with_projects: { value: '0', change: '0' }
   });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const theme = useAppTheme();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
-  const fetchClientStats = async () => {
+  // Obtener token de la sesión
+  const getAuthHeaders = () => {
     try {
-      // Obtener token de la sesión
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
         throw new Error('No hay sesión activa');
       }
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.token}`
+      };
+    } catch (error) {
+      throw new Error('Error de autenticación');
+    }
+  };
 
-      const response = await fetch('http://localhost:8000/clients/', {
-        headers: {
-          'Authorization': `Bearer ${session.token}`,
-          'Content-Type': 'application/json'
-        },
+  // Cargar estadísticas
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const headers = getAuthHeaders();
+      const response = await fetch('http://localhost:8000/clients/stats', {
+        headers,
         credentials: 'include'
       });
-
+      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al cargar los clientes');
+        throw new Error(errorData.detail || 'Error al cargar las estadísticas');
       }
-
-      const data = await response.json();
-        const total = data.length;
-        const activos = data.filter(c => c.is_active).length;
-        const inactivos = data.filter(c => !c.is_active).length;
       
-        // Nuevos este mes (requiere campo created_at tipo fecha)
-        const now = new Date();
-        const nuevosMes = data.filter(c => {
-          if (!c.created_at) return false;
-          const created = new Date(c.created_at);
-          return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
-        }).length;
-
-        setStats({ total, activos, inactivos, nuevosMes });
+      const data = await response.json();
+      setStats(data);
       setError('');
     } catch (error) {
-      console.error('Error al cargar estadísticas de clientes:', error);
+      console.error('Error al cargar las estadísticas:', error);
       
       // Manejar específicamente errores de autenticación
       if (error.message.includes('Unauthorized') || error.message.includes('token')) {
@@ -62,23 +61,46 @@ export default function ClientsResume() {
       } else {
         setError(error.message || 'Error al cargar las estadísticas de clientes');
       }
-
-      // Restablecer estadísticas
-      setStats({ total: 0, activos: 0, inactivos: 0, nuevosMes: 0 });
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchClientStats();
+    if (isAuthenticated && user?.organization_id) {
+      fetchStats();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   const statsData = [
-    { title: 'Total Clientes', value: stats.total, icon: 'groups', color: theme.PRIMARY_COLOR },
-    { title: 'Activos', value: stats.activos, icon: 'check_circle', color: 'green' },
-    { title: 'Inactivos', value: stats.inactivos, icon: 'block', color: 'red' },
-    { title: 'Nuevos este mes', value: stats.nuevosMes, icon: 'person_add', color: 'purple' }
+    { 
+      title: 'Total Clientes', 
+      value: stats.total_clients.value, 
+      change: stats.total_clients.change, 
+      icon: 'groups', 
+      color: theme.PRIMARY_COLOR 
+    },
+    { 
+      title: 'Activos', 
+      value: stats.active_clients.value, 
+      change: stats.active_clients.change, 
+      icon: 'check_circle', 
+      color: 'green' 
+    },
+    { 
+      title: 'Inactivos', 
+      value: stats.inactive_clients.value, 
+      change: stats.inactive_clients.change, 
+      icon: 'block', 
+      color: 'red' 
+    },
+    { 
+      title: 'Con Proyectos', 
+      value: stats.clients_with_projects.value, 
+      change: stats.clients_with_projects.change, 
+      icon: 'work', 
+      color: 'purple' 
+    }
   ];
 
   return (
@@ -112,6 +134,7 @@ export default function ClientsResume() {
               border border-gray-100
               ${stat.color === theme.PRIMARY_COLOR ? `bg-${theme.PRIMARY_COLOR}-50` : `bg-${stat.color}-50`}
               transition-all duration-300 hover:shadow-lg hover:scale-[1.02]
+              ${loading ? 'animate-pulse' : ''}
             `}
           >
             <div className="flex items-center gap-4">
@@ -126,7 +149,15 @@ export default function ClientsResume() {
               </div>
               <div>
                 <p className="text-sm text-gray-500 font-medium">{stat.title}</p>
-                <h3 className="text-2xl font-bold text-gray-800">{stat.value}</h3>
+                <h3 className="text-2xl font-bold text-gray-800">
+                  {loading ? '...' : stat.value}
+                </h3>
+                <p className={`text-sm mt-1 font-medium ${
+                  stat.change.startsWith('+') ? 'text-green-600' : 
+                  stat.change.startsWith('-') ? 'text-red-600' : 'text-gray-600'
+                }`}>
+                  {loading ? '...' : `${stat.change} este mes`}
+                </p>
               </div>
             </div>
           </div>

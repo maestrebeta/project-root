@@ -252,9 +252,80 @@ export default function ProyectosTable() {
 
   // Función para obtener el nombre del cliente por su ID
   const getClientName = (clientId) => {
-    if (!clientId) return 'Sin cliente';
     const cliente = clientes.find(c => c.client_id === clientId);
-    return cliente ? cliente.name : `Cliente ID: ${clientId}`;
+    return cliente ? cliente.name : 'Sin cliente';
+  };
+
+  // Función para traducir tipos de proyecto
+  const getProjectTypeLabel = (projectType) => {
+    const typeLabels = {
+      'development': 'Desarrollo',
+      'support': 'Soporte',
+      'meeting': 'Reunión',
+      'training': 'Capacitación',
+      'other': 'Otro'
+    };
+    return typeLabels[projectType] || projectType;
+  };
+
+  // Función para traducir estados del inglés al español
+  const getStatusLabel = (status) => {
+    const statusLabels = {
+      'registered_initiative': 'Iniciativa registrada',
+      'in_quotation': 'En cotización',
+      'proposal_approved': 'Propuesta aprobada',
+      'in_planning': 'En planeación',
+      'in_progress': 'En curso',
+      'at_risk': 'En riesgo',
+      'suspended': 'Suspendido',
+      'completed': 'Completado',
+      'canceled': 'Cancelado',
+      'post_delivery_support': 'Soporte Post-Entrega',
+      // Mantener compatibilidad con estados anteriores
+      'nuevo': 'Nuevo',
+      'en_progreso': 'En Progreso',
+      'completado': 'Completado',
+      'pausado': 'Pausado',
+      'cancelado': 'Cancelado'
+    };
+    return statusLabels[status] || status;
+  };
+
+  // Función para obtener el color del estado
+  const getStatusColor = (status) => {
+    const statusColors = {
+      // Estados iniciales - Azules (información/inicio)
+      'registered_initiative': 'bg-blue-100 text-blue-800',      // Azul claro - Inicio del proceso
+      'in_quotation': 'bg-blue-200 text-blue-900',               // Azul medio - En proceso comercial
+      
+      // Estados de aprobación - Verdes (positivo/aprobado)
+      'proposal_approved': 'bg-green-100 text-green-800',        // Verde claro - Aprobado
+      'in_planning': 'bg-emerald-100 text-emerald-800',          // Verde esmeralda - Planificando
+      
+      // Estados activos - Índigo/Púrpura (trabajo activo)
+      'in_progress': 'bg-indigo-100 text-indigo-800',            // Índigo - Trabajo activo
+      
+      // Estados de alerta - Amarillo/Naranja (atención)
+      'at_risk': 'bg-orange-100 text-orange-800',                // Naranja - Requiere atención
+      
+      // Estados pausados - Gris (neutro/pausado)
+      'suspended': 'bg-gray-200 text-gray-800',                  // Gris - Pausado temporalmente
+      
+      // Estados finales positivos - Verde oscuro (éxito)
+      'completed': 'bg-green-200 text-green-900',                // Verde oscuro - Completado exitosamente
+      'post_delivery_support': 'bg-teal-100 text-teal-800',      // Verde azulado - Soporte post-entrega
+      
+      // Estados finales negativos - Rojo (cancelado/error)
+      'canceled': 'bg-red-100 text-red-800',                     // Rojo - Cancelado
+      
+      // Mantener compatibilidad con estados anteriores
+      'nuevo': 'bg-blue-100 text-blue-800',
+      'en_progreso': 'bg-indigo-100 text-indigo-800',
+      'completado': 'bg-green-200 text-green-900',
+      'pausado': 'bg-gray-200 text-gray-800',
+      'cancelado': 'bg-red-100 text-red-800'
+    };
+    return statusColors[status] || 'bg-gray-100 text-gray-800';
   };
 
   return (
@@ -310,12 +381,11 @@ export default function ProyectosTable() {
                   required
                 >
                   <option value="" disabled hidden>Selecciona un tipo</option>
-                  <option value="desarrollo">Desarrollo</option>
-                  <option value="soporte">Soporte</option>
-                  <option value="reunion">Reunión</option>
-                  <option value="capacitacion">Capacitación</option>
-                  <option value="consultoria">Consultoría</option>
-                  <option value="otro">Otro</option>
+                  <option value="development">Desarrollo</option>
+                  <option value="support">Soporte</option>
+                  <option value="meeting">Reunión</option>
+                  <option value="training">Capacitación</option>
+                  <option value="other">Otro</option>
                 </select>
               </div>
               <div>
@@ -367,11 +437,16 @@ export default function ProyectosTable() {
                   required
                 >
                   <option value="" disabled hidden>Selecciona un estado</option>
-                  <option value="nuevo">Nuevo</option>
-                  <option value="en_progreso">En Progreso</option>
-                  <option value="completado">Completado</option>
-                  <option value="pausado">Pausado</option>
-                  <option value="cancelado">Cancelado</option>
+                  <option value="registered_initiative">Iniciativa registrada</option>
+                  <option value="in_quotation">En cotización</option>
+                  <option value="proposal_approved">Propuesta aprobada</option>
+                  <option value="in_planning">En planeación</option>
+                  <option value="in_progress">En curso</option>
+                  <option value="at_risk">En riesgo</option>
+                  <option value="suspended">Suspendido</option>
+                  <option value="completed">Completado</option>
+                  <option value="canceled">Cancelado</option>
+                  <option value="post_delivery_support">Soporte Post-Entrega</option>
                 </select>
               </div>
               <div>
@@ -452,18 +527,12 @@ export default function ProyectosTable() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getClientName(proyecto.client_id)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_type}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getProjectTypeLabel(proyecto.project_type)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.start_date}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.end_date}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                      ${proyecto.status === 'nuevo' ? 'bg-blue-100 text-blue-800' : ''}
-                      ${proyecto.status === 'en_progreso' ? 'bg-yellow-100 text-yellow-800' : ''}
-                      ${proyecto.status === 'completado' ? 'bg-green-100 text-green-800' : ''}
-                      ${proyecto.status === 'pausado' ? 'bg-gray-100 text-gray-800' : ''}
-                      ${proyecto.status === 'cancelado' ? 'bg-red-100 text-red-800' : ''}
-                    `}>
-                      {proyecto.status}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getStatusColor(proyecto.status)}`}>
+                      {getStatusLabel(proyecto.status)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">

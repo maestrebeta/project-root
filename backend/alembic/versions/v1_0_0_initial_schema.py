@@ -119,7 +119,7 @@ def upgrade() -> None:
         sa.Column('code', sa.String(length=20), unique=True, nullable=True),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('project_type', sa.String(length=50), nullable=False),
-        sa.Column('status', sa.String(length=20), nullable=False),
+        sa.Column('status', sa.String(length=30), nullable=False),
         sa.Column('start_date', sa.Date(), nullable=True),
         sa.Column('end_date', sa.Date(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()')),
@@ -132,7 +132,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('project_id'),
         sa.UniqueConstraint('name', 'client_id', name='unique_project_client'),
         sa.CheckConstraint("project_type IN ('development', 'support', 'meeting', 'training', 'other')", name='projects_project_type_check'),
-        sa.CheckConstraint("status IN ('active', 'paused', 'completed', 'archived')", name='projects_status_check')
+        sa.CheckConstraint("status IN ('registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support')", name='projects_status_check')
     )
 
     # Crear tabla project_organizations (relación muchos a muchos)

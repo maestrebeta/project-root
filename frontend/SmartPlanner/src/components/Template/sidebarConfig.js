@@ -32,7 +32,7 @@ export const sidebarItems = [
         children: [
           { icon: FiGrid, text: "Organizaciones", to: "/admin/organizations" },
           { icon: FiUsers, text: "Clientes", to: "/admin/customers" },
-          { icon: FiLayers, text: "Proyectos", to: "/admin/projects" },
+          { icon: FiLayers, text: "Centro de Proyectos", to: "/admin/projects" },
           { icon: FiUser, text: "Usuarios", to: "/admin/users" },
           { icon: FiImage, text: "Logo Empresa", to: "/config/logo" },
         ]

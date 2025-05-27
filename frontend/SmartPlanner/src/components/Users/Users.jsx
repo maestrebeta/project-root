@@ -1,15 +1,95 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import UsersTable from './UsersTable';
 import { useAppTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Users() {
   const theme = useAppTheme();
+  const { user, isAuthenticated } = useAuth();
+  const [stats, setStats] = useState({
+    total_users: { value: '0', change: '0' },
+    active_users: { value: '0', change: '0' },
+    suspended_users: { value: '0', change: '0' },
+    new_this_month: { value: '0', change: '0' }
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Obtener token de la sesión
+  const getAuthHeaders = () => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
+      }
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.token}`
+      };
+    } catch (error) {
+      throw new Error('Error de autenticación');
+    }
+  };
+
+  // Cargar estadísticas
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const headers = getAuthHeaders();
+      const response = await fetch('http://localhost:8000/users/stats', {
+        headers,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al cargar las estadísticas');
+      }
+      
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      console.error('Error al cargar las estadísticas:', error);
+      // Mantener valores por defecto en caso de error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && user?.organization_id) {
+      fetchStats();
+    }
+  }, [isAuthenticated, user]);
 
   const statsData = [
-    { title: 'Total Usuarios', value: '120', change: '+8', icon: 'group', color: theme.PRIMARY_COLOR },
-    { title: 'Activos', value: '110', change: '+5', icon: 'check_circle', color: 'green' },
-    { title: 'Suspendidos', value: '5', change: '+1', icon: 'block', color: 'red' },
-    { title: 'Nuevos este mes', value: '8', change: '+8', icon: 'person_add', color: 'purple' }
+    { 
+      title: 'Total Usuarios', 
+      value: stats.total_users.value, 
+      change: stats.total_users.change, 
+      icon: 'group', 
+      color: theme.PRIMARY_COLOR 
+    },
+    { 
+      title: 'Activos', 
+      value: stats.active_users.value, 
+      change: stats.active_users.change, 
+      icon: 'check_circle', 
+      color: 'green' 
+    },
+    { 
+      title: 'Suspendidos', 
+      value: stats.suspended_users.value, 
+      change: stats.suspended_users.change, 
+      icon: 'block', 
+      color: 'red' 
+    },
+    { 
+      title: 'Nuevos este mes', 
+      value: stats.new_this_month.value, 
+      change: stats.new_this_month.change, 
+      icon: 'person_add', 
+      color: 'purple' 
+    }
   ];
 
   return (
@@ -31,6 +111,7 @@ export default function Users() {
               border border-gray-100
               ${stat.color === theme.PRIMARY_COLOR ? `bg-${theme.PRIMARY_COLOR}-50` : `bg-${stat.color}-50`}
               transition-all duration-300 hover:shadow-lg hover:scale-[1.02]
+              ${loading ? 'animate-pulse' : ''}
             `}
           >
             <div className="flex items-center gap-4">
@@ -45,9 +126,14 @@ export default function Users() {
               </div>
               <div>
                 <p className="text-sm text-gray-500 font-medium">{stat.title}</p>
-                <h3 className="text-2xl font-bold text-gray-800">{stat.value}</h3>
-                <p className={`text-sm mt-1 font-medium ${stat.change.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
-                  {stat.change} este mes
+                <h3 className="text-2xl font-bold text-gray-800">
+                  {loading ? '...' : stat.value}
+                </h3>
+                <p className={`text-sm mt-1 font-medium ${
+                  stat.change.startsWith('+') ? 'text-green-600' : 
+                  stat.change.startsWith('-') ? 'text-red-600' : 'text-gray-600'
+                }`}>
+                  {loading ? '...' : `${stat.change} este mes`}
                 </p>
               </div>
             </div>

@@ -50,21 +50,29 @@ class ProjectBase(BaseModel):
     def validate_status(cls, v):
         # Estados válidos según la definición SQL
         valid_statuses = [
-            'active', 'paused', 'completed', 'archived'
+            'registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 
+            'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support'
         ]
         
-        # Mapeo de estados
+        # Mapeo de estados desde español a inglés
         status_mapping = {
-            'nuevo': 'active',
-            'en_progreso': 'active', 
+            'iniciativa_registrada': 'registered_initiative',
+            'en_cotizacion': 'in_quotation',
+            'propuesta_aprobada': 'proposal_approved',
+            'en_planeacion': 'in_planning',
+            'en_curso': 'in_progress',
+            'en_riesgo': 'at_risk',
+            'suspendido': 'suspended',
             'completado': 'completed',
-            'pausado': 'paused',
-            'cancelado': 'archived',
-            'new': 'active',
-            'in_progress': 'active',
-            'completed': 'completed',
-            'paused': 'paused',
-            'canceled': 'archived'
+            'cancelado': 'canceled',
+            'soporte_post_entrega': 'post_delivery_support',
+            # Mantener compatibilidad con estados anteriores
+            'nuevo': 'registered_initiative',
+            'en_progreso': 'in_progress', 
+            'pausado': 'suspended',
+            'active': 'in_progress',
+            'paused': 'suspended',
+            'archived': 'canceled'
         }
         
         # Convertir a minúsculas para comparación

@@ -41,12 +41,12 @@ const TimeTracker = () => {
       const data = await response.json();
       console.log('Tareas cargadas:', data);
       setTasks(data);
-    } catch (err) {
+      } catch (err) {
       console.error('Error al cargar tareas:', err);
       setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      } finally {
+        setLoading(false);
+      }
   }, []);
 
   // Efecto para recargar cuando cambien los estados
@@ -76,7 +76,7 @@ const TimeTracker = () => {
       setError('ID de tarea inválido');
       return;
     }
-
+    
     if (!window.confirm('¿Estás seguro de que quieres eliminar esta entrada?')) {
       return;
     }

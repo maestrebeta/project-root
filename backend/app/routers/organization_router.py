@@ -83,6 +83,82 @@ def read_organizations(
     
     return organization_crud.get_organizations(db, skip=skip, limit=limit)
 
+@router.get("/stats", response_model=Dict[str, Any])
+def get_organizations_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtener estadísticas de organizaciones (solo para super usuarios)
+    """
+    # Solo super usuarios pueden ver estadísticas de organizaciones
+    if current_user.role != 'super_user':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los super usuarios pueden ver estadísticas de organizaciones"
+        )
+    
+    try:
+        from sqlalchemy import func
+        from app.models.user_models import User
+        from app.models.client_models import Client
+        from app.models.project_models import Project
+        from datetime import datetime, timedelta
+        
+        # Total de organizaciones
+        total_orgs = db.query(func.count(Organization.organization_id)).scalar()
+        
+        # Organizaciones activas
+        active_orgs = db.query(func.count(Organization.organization_id)).filter(
+            Organization.is_active == True
+        ).scalar()
+        
+        # Organizaciones inactivas
+        inactive_orgs = total_orgs - active_orgs
+        
+        # Organizaciones creadas este mes
+        current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        new_this_month = db.query(func.count(Organization.organization_id)).filter(
+            Organization.created_at >= current_month
+        ).scalar()
+        
+        # Organizaciones creadas el mes pasado para calcular el cambio
+        last_month = (current_month - timedelta(days=1)).replace(day=1)
+        new_last_month = db.query(func.count(Organization.organization_id)).filter(
+            Organization.created_at >= last_month,
+            Organization.created_at < current_month
+        ).scalar()
+        
+        # Calcular cambios
+        total_change = f"+{new_this_month}" if new_this_month > 0 else "0"
+        active_change = f"+{max(0, new_this_month)}" if new_this_month > 0 else "0"
+        inactive_change = f"+{max(0, inactive_orgs - (total_orgs - new_this_month))}" if inactive_orgs > 0 else "0"
+        new_change = f"+{new_this_month}" if new_this_month > 0 else "0"
+        
+        return {
+            "total_organizations": {
+                "value": str(total_orgs),
+                "change": total_change
+            },
+            "active_organizations": {
+                "value": str(active_orgs),
+                "change": active_change
+            },
+            "inactive_organizations": {
+                "value": str(inactive_orgs),
+                "change": inactive_change
+            },
+            "new_this_month": {
+                "value": str(new_this_month),
+                "change": new_change
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener estadísticas: {str(e)}"
+        )
+
 @router.get("/{organization_id}", response_model=OrganizationWithDetails)
 def read_organization(
     organization_id: int,

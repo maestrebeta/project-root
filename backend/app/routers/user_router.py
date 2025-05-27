@@ -31,6 +31,80 @@ def validate_user_role(current_user: User, target_role: str):
                 detail="Solo administradores pueden crear usuarios con rol de administrador o super usuario"
             )
 
+@router.get("/stats", response_model=dict)
+def get_users_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Obtener estadísticas de usuarios de la organización actual
+    """
+    try:
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+        
+        organization_id = current_user.organization_id
+        
+        # Total de usuarios en la organización
+        total_users = db.query(func.count(User.user_id)).filter(
+            User.organization_id == organization_id
+        ).scalar()
+        
+        # Usuarios activos
+        active_users = db.query(func.count(User.user_id)).filter(
+            User.organization_id == organization_id,
+            User.is_active == True
+        ).scalar()
+        
+        # Usuarios suspendidos/inactivos
+        suspended_users = total_users - active_users
+        
+        # Usuarios creados este mes
+        current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        new_this_month = db.query(func.count(User.user_id)).filter(
+            User.organization_id == organization_id,
+            User.created_at >= current_month
+        ).scalar()
+        
+        # Usuarios creados el mes pasado para calcular el cambio
+        last_month = (current_month - timedelta(days=1)).replace(day=1)
+        new_last_month = db.query(func.count(User.user_id)).filter(
+            User.organization_id == organization_id,
+            User.created_at >= last_month,
+            User.created_at < current_month
+        ).scalar()
+        
+        # Calcular cambios
+        total_change = new_this_month - new_last_month if new_last_month > 0 else new_this_month
+        active_change = max(0, new_this_month)  # Asumimos que los nuevos usuarios están activos
+        suspended_change = max(0, suspended_users - (total_users - new_this_month))
+        new_change = new_this_month
+        
+        return {
+            "total_users": {
+                "value": str(total_users),
+                "change": f"+{total_change}" if total_change > 0 else str(total_change)
+            },
+            "active_users": {
+                "value": str(active_users),
+                "change": f"+{active_change}" if active_change > 0 else str(active_change)
+            },
+            "suspended_users": {
+                "value": str(suspended_users),
+                "change": f"+{suspended_change}" if suspended_change > 0 else str(suspended_change)
+            },
+            "new_this_month": {
+                "value": str(new_this_month),
+                "change": f"+{new_change}" if new_change > 0 else str(new_change)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error al obtener estadísticas de usuarios: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener estadísticas: {str(e)}"
+        )
+
 @router.get("", response_model=List[UserOut])
 def get_users(
     skip: int = 0,

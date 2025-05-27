@@ -19,7 +19,7 @@ class Project(Base):
     code = Column(String(20), unique=True, nullable=True)
     description = Column(Text, nullable=True)
     project_type = Column(String(50), nullable=False)
-    status = Column(String(20), nullable=False)
+    status = Column(String(30), nullable=False)
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -33,7 +33,7 @@ class Project(Base):
     __table_args__ = (
         # Restricciones de tipos de proyecto y estado según la definición SQL
         CheckConstraint("project_type IN ('development', 'support', 'meeting', 'training', 'other')", name='projects_project_type_check'),
-        CheckConstraint("status IN ('active', 'paused', 'completed', 'archived')", name='projects_status_check'),
+        CheckConstraint("status IN ('registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support')", name='projects_status_check'),
         UniqueConstraint('name', 'client_id', name='unique_project_client')
     )
 

@@ -59,9 +59,9 @@ const formatDateForInput = (dateString) => {
     return date.toLocaleDateString('en-CA'); // Formato YYYY-MM-DD
   } catch (e) {
     console.error('Error formateando fecha:', e);
-    return '';
-  }
-};
+      return '';
+    }
+  };
 
 // Función para formatear hora UTC del backend a hora local para input
 const formatTimeForInput = (isoString) => {
@@ -265,14 +265,14 @@ const FormularioEntrada = ({
 
     const entryData = {
       user_id: Number(session.user.user_id),
-      project_id: Number(form.project_id),
-      entry_date: form.entry_date,
+        project_id: Number(form.project_id),
+        entry_date: form.entry_date,
       start_time: startTime?.toISOString(),
       end_time: endTime?.toISOString(),
       description: form.description.trim() || null,
-      activity_type: form.activity_type,
+        activity_type: form.activity_type,
       status: form.status,
-      billable: form.billable,
+        billable: form.billable,
       organization_id: Number(session.user.organization_id),
       ticket_id: null
     };
@@ -351,7 +351,7 @@ const FormularioEntrada = ({
         onSubmit(savedEntry);
       }
 
-      onClose();
+        onClose();
       setSaveStatus({ message: 'Entrada guardada con éxito', error: false });
 
     } catch (error) {
@@ -361,7 +361,7 @@ const FormularioEntrada = ({
         error: true 
       });
     } finally {
-      setSaving(false);
+        setSaving(false);
     }
   };
 
@@ -383,13 +383,13 @@ const FormularioEntrada = ({
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-semibold text-gray-900">
               {editId ? 'Editar Entrada' : 'Nueva Entrada'}
-            </h3>
-            <button
-              onClick={onClose}
+          </h3>
+          <button
+            onClick={onClose}
               className="text-gray-400 hover:text-gray-500 transition-colors"
-            >
+          >
               <FiX size={24} />
-            </button>
+          </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -411,39 +411,39 @@ const FormularioEntrada = ({
 
             {/* Proyecto y Cliente */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
+            <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <FiFolder className="text-gray-400" />
-                  Proyecto
-                </label>
-                <select
-                  name="project_id"
-                  value={form.project_id}
-                  onChange={handleChange}
+                Proyecto
+              </label>
+              <select
+                name="project_id"
+                value={form.project_id}
+                onChange={handleChange}
                   className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                  required
-                >
+                required
+              >
                   <option value="">Selecciona un proyecto</option>
-                  {projectOptions.map((project) => (
+                {projectOptions.map((project) => (
                     <option key={project.project_id} value={project.project_id}>
                       {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
+            <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <FiUser className="text-gray-400" />
-                  Cliente
-                </label>
-                <select
-                  name="client_id"
-                  value={form.client_id}
+                Cliente
+              </label>
+              <select
+                name="client_id"
+                value={form.client_id}
                   className="w-full px-4 py-3 rounded-lg border bg-gray-50 text-gray-500 cursor-not-allowed"
-                  disabled
-                >
-                  <option value="">
+                disabled
+              >
+                <option value="">
                     {loading ? 'Cargando...' : form.client_id ? 
                       clientOptions.find(c => String(c.client_id) === form.client_id)?.name || 'Cliente no encontrado' 
                       : 'Sin cliente'}
@@ -484,47 +484,47 @@ const FormularioEntrada = ({
                   {DEFAULT_CATEGORIES.map((category) => (
                     <option key={category.value} value={category.value}>
                       {category.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
 
             {/* Hora inicio y fin */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
+            <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <FiClock className="text-gray-400" />
-                  Hora inicio
-                </label>
-                <input
+                Hora inicio
+              </label>
+              <input
                   type="time"
-                  name="start_time"
-                  value={form.start_time}
-                  onChange={handleChange}
+                name="start_time"
+                value={form.start_time}
+                onChange={handleChange}
                   className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiClock className="text-gray-400" />
-                  Hora fin
-                </label>
-                <input
-                  type="time"
-                  name="end_time"
-                  value={form.end_time}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                />
-              </div>
+                required
+              />
             </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <FiClock className="text-gray-400" />
+                Hora fin
+              </label>
+              <input
+                  type="time"
+                name="end_time"
+                value={form.end_time}
+                onChange={handleChange}
+                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
+              />
+            </div>
+          </div>
 
             {/* Estado y Facturación */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
+          <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <FiCheckCircle className="text-gray-400" />
                   Estado
@@ -542,39 +542,39 @@ const FormularioEntrada = ({
                     </option>
                   ))}
                 </select>
-              </div>
+            </div>
 
-              <div className="flex items-center">
+          <div className="flex items-center">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="billable"
-                    checked={form.billable}
+            <input
+              type="checkbox"
+              name="billable"
+              checked={form.billable}
                     onChange={(e) => setForm(prev => ({ ...prev, billable: e.target.checked }))}
                     className={`h-5 w-5 rounded border-gray-300 text-${theme.PRIMARY_COLOR}-600 focus:ring-${theme.PRIMARY_COLOR}-500`}
-                  />
+            />
                   <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <FiDollarSign className="text-gray-400" />
-                    Facturable
+              Facturable
                   </span>
-                </label>
-              </div>
+            </label>
+          </div>
             </div>
 
             {/* Botones de acción */}
             <div className="flex justify-end gap-3 pt-6">
-              <button
-                type="button"
-                onClick={onClose}
+            <button
+              type="button"
+              onClick={onClose}
                 className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
                 className={`px-4 py-2 text-white rounded-lg flex items-center gap-2 ${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`}
-                disabled={saving}
-              >
+              disabled={saving}
+            >
                 {saving ? (
                   <>
                     <div className="w-5 h-5 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
@@ -586,10 +586,10 @@ const FormularioEntrada = ({
                     {editId ? 'Actualizar' : 'Guardar'}
                   </>
                 )}
-              </button>
+            </button>
             </div>
-          </form>
-        </div>
+        </form>
+      </div>
       </motion.div>
     </motion.div>
   );

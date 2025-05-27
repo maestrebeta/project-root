@@ -56,7 +56,8 @@ def create_project(db: Session, project: ProjectCreate):
     
     # Estados válidos según la definición SQL
     valid_statuses = [
-        'active', 'paused', 'completed', 'archived'
+        'registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 
+        'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support'
     ]
 
     # Mapeo de tipos de proyecto (si es necesario)
@@ -70,11 +71,14 @@ def create_project(db: Session, project: ProjectCreate):
 
     # Mapeo de estados (si es necesario)
     status_mapping = {
-        'nuevo': 'active',
-        'en_progreso': 'active', 
+        'nuevo': 'registered_initiative',
+        'en_progreso': 'in_progress', 
         'completado': 'completed',
-        'pausado': 'paused',
-        'cancelado': 'archived'
+        'pausado': 'suspended',
+        'cancelado': 'canceled',
+        'active': 'in_progress',
+        'paused': 'suspended',
+        'archived': 'canceled'
     }
 
     # Normalizar tipo de proyecto
@@ -102,6 +106,12 @@ def create_project(db: Session, project: ProjectCreate):
     if not organization:
         raise ValueError("Organización no encontrada")
     
+    # Verificar si el código del proyecto ya existe (si se proporciona)
+    if project.code:
+        existing_project = db.query(Project).filter(Project.code == project.code).first()
+        if existing_project:
+            raise ValueError(f"Ya existe un proyecto con el código '{project.code}'")
+    
     # Crear el proyecto con tipos y estados normalizados
     db_project = Project(
         client_id=project.client_id,
@@ -126,9 +136,20 @@ def create_project(db: Session, project: ProjectCreate):
         return db_project
     except IntegrityError as e:
         db.rollback()
-        # Manejar errores de integridad (por ejemplo, nombre de proyecto duplicado)
-        print(f"Error de integridad al crear proyecto: {str(e)}")
-        raise ValueError("No se pudo crear el proyecto. Verifique los datos.")
+        error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
+        print(f"Error de integridad al crear proyecto: {error_msg}")
+        
+        # Manejar errores específicos
+        if 'unique_project_client' in error_msg:
+            raise ValueError(f"Ya existe un proyecto con el nombre '{project.name}' para este cliente")
+        elif 'projects_project_type_check' in error_msg:
+            raise ValueError(f"Tipo de proyecto inválido: {project.project_type}")
+        elif 'projects_status_check' in error_msg:
+            raise ValueError(f"Estado de proyecto inválido: {project.status}")
+        elif 'code' in error_msg and 'unique' in error_msg.lower():
+            raise ValueError(f"Ya existe un proyecto con el código '{project.code}'")
+        else:
+            raise ValueError("No se pudo crear el proyecto. Verifique que los datos sean únicos y válidos.")
 
 
 def update_project(db: Session, project_id: int, updates: ProjectUpdate):
@@ -170,21 +191,20 @@ def update_project(db: Session, project_id: int, updates: ProjectUpdate):
         
         if updates.status:
             valid_statuses = [
-                'active', 'paused', 'completed', 'archived'
+                'registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 
+                'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support'
             ]
             
             # Mapeo de estados (igual que en el schema)
             status_mapping = {
-                'nuevo': 'active',
-                'en_progreso': 'active', 
+                'nuevo': 'registered_initiative',
+                'en_progreso': 'in_progress', 
                 'completado': 'completed',
-                'pausado': 'paused',
-                'cancelado': 'archived',
-                'new': 'active',
-                'in_progress': 'active',
-                'completed': 'completed',
-                'paused': 'paused',
-                'canceled': 'archived'
+                'pausado': 'suspended',
+                'cancelado': 'canceled',
+                'active': 'in_progress',
+                'paused': 'suspended',
+                'archived': 'canceled'
             }
             
             # Normalizar estado

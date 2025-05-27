@@ -144,8 +144,8 @@ export const useProjectsAndTags = () => {
       setLoading(true);
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
-        throw new Error('No hay sesión activa');
-      }
+          throw new Error('No hay sesión activa');
+        }
 
       console.log('Cargando datos para usuario:', session.user.user_id);
 
@@ -197,8 +197,8 @@ export const useProjectsAndTags = () => {
       console.error('Error al cargar datos:', error);
       setError(error.message);
     } finally {
-      setLoading(false);
-    }
+        setLoading(false);
+      }
   }, [user?.user_id]);
 
   // Efecto para cargar datos cuando cambie el usuario

@@ -126,7 +126,7 @@ def init_projects(db: Session):
     if not client:
         raise ValueError("No hay clientes en la base de datos")
 
-    # Crear proyectos de ejemplo
+    # Crear proyectos de ejemplo con los nuevos estados válidos
     sample_projects = [
         Project(
             client_id=client.client_id,
@@ -134,7 +134,7 @@ def init_projects(db: Session):
             code="PRJ-001",
             description="Desarrollo de aplicación de facturación",
             project_type="development",
-            status="active",
+            status="in_progress",
             start_date=datetime.now(),
             end_date=datetime.now() + timedelta(days=90),
             estimated_hours=500,
@@ -147,7 +147,7 @@ def init_projects(db: Session):
             code="PRJ-002",
             description="Integración de sistema de gestión de laboratorio",
             project_type="support",
-            status="active",
+            status="in_planning",
             start_date=datetime.now() - timedelta(days=30),
             end_date=datetime.now() + timedelta(days=60),
             estimated_hours=300,
@@ -160,7 +160,7 @@ def init_projects(db: Session):
             code="PRJ-003",
             description="Soporte técnico para sistema médico",
             project_type="support",
-            status="paused",
+            status="suspended",
             start_date=datetime.now() - timedelta(days=15),
             end_date=datetime.now() + timedelta(days=45),
             estimated_hours=400,
