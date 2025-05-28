@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.organization_models import Organization
 from app.models.user_models import User

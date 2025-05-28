@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppTheme } from './ThemeContext';
+import { isAuthenticated, getCurrentUser, makeAuthenticatedRequest, handleAuthError } from '../utils/authUtils';
 
 const AuthContext = createContext(null);
 
@@ -53,36 +54,33 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const savedSession = localStorage.getItem('session');
-      
-      if (savedSession) {
-        try {
-          const session = JSON.parse(savedSession);
+      try {
+        if (isAuthenticated()) {
+          const currentUser = getCurrentUser();
           
-          if (session.token && session.user?.username && new Date(session.expiresAt) > new Date()) {
+          if (currentUser) {
             // Restaurar imagen de perfil desde la sesión
-            if (session.user.profile_image) {
-              updateProfileImage(session.user.profile_image);
+            if (currentUser.profile_image) {
+              updateProfileImage(currentUser.profile_image);
             }
             
             // Aplicar preferencias de tema desde el backend
-            if (session.user.theme_preferences) {
-              theme.setPrimaryColor(session.user.theme_preferences.primary_color);
-              theme.setFont(session.user.theme_preferences.font_class);
-              theme.setFontSize(session.user.theme_preferences.font_size_class);
-              theme.setAnimations(session.user.theme_preferences.animations_enabled);
+            if (currentUser.theme_preferences) {
+              theme.setPrimaryColor(currentUser.theme_preferences.primary_color);
+              theme.setFont(currentUser.theme_preferences.font_class);
+              theme.setFontSize(currentUser.theme_preferences.font_size_class);
+              theme.setAnimations(currentUser.theme_preferences.animations_enabled);
             }
             
-            setUser(session.user);
+            setUser(currentUser);
             
             // Disparar evento de inicio de sesión para sincronizar tema
             window.dispatchEvent(new CustomEvent('userLoggedIn'));
-          } else {
-            localStorage.removeItem('session');
           }
-        } catch (error) {
-          localStorage.removeItem('session');
         }
+      } catch (error) {
+        console.error('Error al inicializar autenticación:', error);
+        // Las utilidades de auth ya limpiarán la sesión si es necesario
       }
       setLoading(false);
     };
@@ -108,7 +106,7 @@ export const AuthProvider = ({ children }) => {
 
       // Manejar errores de red y CORS
       if (!response.ok) {
-        let errorDetail = 'Error desconocido al iniciar sesión';
+        let errorDetail = 'Credenciales incorrectas';
         try {
           const errorData = await response.json();
           errorDetail = errorData.detail || errorDetail;
@@ -195,10 +193,13 @@ export const AuthProvider = ({ children }) => {
 
   const updateUserProfile = async (userData) => {
     try {
-      const session = JSON.parse(localStorage.getItem('session'));
-      
-      if (!session?.token || !session?.user?.user_id) {
+      if (!isAuthenticated()) {
         throw new Error('Sesión inválida');
+      }
+
+      const currentUser = getCurrentUser();
+      if (!currentUser?.user_id) {
+        throw new Error('Usuario no encontrado');
       }
 
       // Preparar datos según el schema UserUpdate
@@ -206,7 +207,7 @@ export const AuthProvider = ({ children }) => {
       const updateData = {
         full_name: userData.full_name,
         email: userData.email,
-        role: session.user.role,
+        role: currentUser.role,
         is_active: true,
         profile_image: profileImage,
         theme_preferences: {
@@ -217,48 +218,50 @@ export const AuthProvider = ({ children }) => {
         }
       };
 
-      const response = await fetch(`http://localhost:8000/users/${session.user.user_id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.token}`
-        },
-        body: JSON.stringify(updateData),
-        credentials: 'include'
-      });
+      const response = await makeAuthenticatedRequest(
+        `http://localhost:8000/users/${currentUser.user_id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(updateData)
+        }
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al actualizar el perfil');
+      if (!response) {
+        throw new Error('Error al actualizar el perfil');
       }
 
       // Obtener datos actualizados del usuario
-      const updatedUser = await fetchUserDetails(session.user.username, session.token);
+      const updatedUser = await fetchUserDetails(currentUser.username, getCurrentUser().token);
       
       // Actualizar sesión con los datos completos
-      const updatedSession = {
-        ...session,
-        user: updatedUser
-      };
-      
-      localStorage.setItem('session', JSON.stringify(updatedSession));
-      setUser(updatedUser);
+      const savedSession = localStorage.getItem('session');
+      if (savedSession) {
+        const session = JSON.parse(savedSession);
+        const updatedSession = {
+          ...session,
+          user: updatedUser
+        };
+        
+        localStorage.setItem('session', JSON.stringify(updatedSession));
+        setUser(updatedUser);
 
-      // Actualizar imagen de perfil desde el backend
-      if (updatedUser.profile_image) {
-        setProfileImage(updatedUser.profile_image);
-      }
-      
-      // Aplicar preferencias de tema desde el backend
-      if (updatedUser.theme_preferences) {
-        theme.setPrimaryColor(updatedUser.theme_preferences.primary_color);
-        theme.setFont(updatedUser.theme_preferences.font_class);
-        theme.setFontSize(updatedUser.theme_preferences.font_size_class);
-        theme.setAnimations(updatedUser.theme_preferences.animations_enabled);
+        // Actualizar imagen de perfil desde el backend
+        if (updatedUser.profile_image) {
+          setProfileImage(updatedUser.profile_image);
+        }
+        
+        // Aplicar preferencias de tema desde el backend
+        if (updatedUser.theme_preferences) {
+          theme.setPrimaryColor(updatedUser.theme_preferences.primary_color);
+          theme.setFont(updatedUser.theme_preferences.font_class);
+          theme.setFontSize(updatedUser.theme_preferences.font_size_class);
+          theme.setAnimations(updatedUser.theme_preferences.animations_enabled);
+        }
       }
 
       return updatedUser;
     } catch (error) {
+      handleAuthError(error);
       throw error;
     }
   };

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, CheckConstraint, TIMESTAMP, func, DateTime, Table, UniqueConstraint, Numeric
+from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, CheckConstraint, func, DateTime, Table, UniqueConstraint, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
@@ -45,6 +45,8 @@ class Project(Base):
     organization = relationship("Organization", foreign_keys=[organization_id])
     invoices = relationship("Invoice", back_populates="project")
     budgets = relationship("ProjectBudget", back_populates="project")
+    epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
+    user_stories = relationship("UserStory", back_populates="project", cascade="all, delete-orphan")
 
 class ProjectBudget(Base):
     __tablename__ = "project_budgets"

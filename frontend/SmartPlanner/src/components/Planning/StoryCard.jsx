@@ -3,26 +3,96 @@ import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
+// Configuraciones de estimación por tallas (mismo que en StoryDetailsModal)
+const ESTIMATION_SIZES = {
+  'XS': { 
+    label: 'XS', 
+    hours: 2, 
+    description: '2 horas - Tarea muy pequeña',
+    color: '#10B981',
+    bg: '#D1FAE5',
+    icon: '🟢'
+  },
+  'S': { 
+    label: 'S', 
+    hours: 4, 
+    description: '4 horas - Tarea pequeña',
+    color: '#3B82F6',
+    bg: '#DBEAFE',
+    icon: '🔵'
+  },
+  'M': { 
+    label: 'M', 
+    hours: 8, 
+    description: '8 horas - Tarea mediana',
+    color: '#F59E0B',
+    bg: '#FEF3C7',
+    icon: '🟡'
+  },
+  'L': { 
+    label: 'L', 
+    hours: 16, 
+    description: '16 horas - Tarea grande',
+    color: '#F97316',
+    bg: '#FED7AA',
+    icon: '🟠'
+  },
+  'XL': { 
+    label: 'XL', 
+    hours: 32, 
+    description: '32 horas - Tarea muy grande',
+    color: '#EF4444',
+    bg: '#FEE2E2',
+    icon: '🔴'
+  }
+};
+
 const PRIORITY_DATA = {
-  Alta: { color: "#EF4444", bg: "#FEE2E2", icon: "🔥" },
-  Media: { color: "#F59E0B", bg: "#FEF3C7", icon: "⚠️" },
-  Baja: { color: "#10B981", bg: "#D1FAE5", icon: "🌿" },
+  high: { color: "#EF4444", bg: "#FEE2E2", icon: "🔥", label: "Alta" },
+  medium: { color: "#F59E0B", bg: "#FEF3C7", icon: "⚠️", label: "Media" },
+  low: { color: "#10B981", bg: "#D1FAE5", icon: "🌿", label: "Baja" },
+  critical: { color: "#DC2626", bg: "#FEE2E2", icon: "🚨", label: "Crítica" },
 };
 
 const STATUS_COLORS = {
-  Backlog: "#94A3B8",
-  "En progreso": "#3B82F6",
-  "En revisión": "#8B5CF6",
-  Hecho: "#10B981",
-  Bloqueado: "#EF4444",
+  backlog: "#94A3B8",
+  todo: "#6B7280",
+  in_progress: "#3B82F6",
+  in_review: "#8B5CF6",
+  testing: "#F59E0B",
+  done: "#10B981",
+  blocked: "#EF4444",
+};
+
+// Función para determinar la talla de estimación basada en las horas
+const getEstimationSize = (estimatedHours) => {
+  if (!estimatedHours || estimatedHours <= 0) return null;
+  
+  if (estimatedHours <= 2) return 'XS';
+  if (estimatedHours <= 4) return 'S';
+  if (estimatedHours <= 8) return 'M';
+  if (estimatedHours <= 16) return 'L';
+  return 'XL';
 };
 
 export default function StoryCard({ story, users, kanbanStates, onClick, isSelected = false }) {
-  const assignedUser = users.find(u => u.id === Number(story.usuario_asignado));
-  const totalHours = Object.values(story.estimaciones || {}).reduce((a, b) => a + Number(b || 0), 0);
-  const hasWarnings = !story.usuario_asignado || totalHours === 0;
-  const state = kanbanStates?.find(s => s.key === story.estado);
-  const updatedAt = story.updatedAt ? formatDistanceToNow(new Date(story.updatedAt), { 
+  const assignedUser = users.find(u => u.user_id === Number(story.assigned_user_id));
+  
+  // Calcular horas totales estimadas
+  const totalEstimatedHours = story.estimated_hours || 
+    (story.ui_hours || 0) + (story.development_hours || 0) + (story.testing_hours || 0) + (story.documentation_hours || 0);
+  
+  const hasWarnings = !story.assigned_user_id || totalEstimatedHours === 0;
+  const state = kanbanStates?.find(s => s.key === story.status);
+  
+  // Obtener talla de estimación y sus colores
+  const estimationSize = getEstimationSize(totalEstimatedHours);
+  const estimationConfig = estimationSize ? ESTIMATION_SIZES[estimationSize] : null;
+  
+  // Obtener configuración de prioridad
+  const priorityConfig = PRIORITY_DATA[story.priority] || PRIORITY_DATA.medium;
+  
+  const updatedAt = story.updated_at ? formatDistanceToNow(new Date(story.updated_at), { 
     addSuffix: true,
     locale: es,
   }) : null;
@@ -42,7 +112,8 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
       className={`bg-white rounded-xl p-3 mb-3 cursor-pointer transition-all flex flex-col gap-2 border-l-4 relative overflow-hidden
         ${isSelected ? "ring-2 ring-blue-400" : "hover:ring-1 hover:ring-blue-200"}`}
       style={{ 
-        borderLeftColor: state?.color || "#3B82F6",
+        // Usar color de estimación como indicador principal
+        borderLeftColor: estimationConfig?.color || state?.color || "#3B82F6",
       }}
       onClick={onClick}
     >
@@ -53,21 +124,38 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
         </div>
       )}
 
-      {/* Priority and tags row */}
+      {/* Estimation size and priority row */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Indicador de estimación de esfuerzo */}
+        {estimationConfig && (
+          <span 
+            className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1`}
+            style={{
+              backgroundColor: estimationConfig.bg,
+              color: estimationConfig.color,
+            }}
+            title={estimationConfig.description}
+          >
+            {estimationConfig.icon} {estimationConfig.label} ({totalEstimatedHours}h)
+          </span>
+        )}
+        
+        {/* Indicador de prioridad (secundario) */}
         <span 
-          className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1`}
+          className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1 opacity-75`}
           style={{
-            backgroundColor: PRIORITY_DATA[story.prioridad]?.bg || "#F3F4F6",
-            color: PRIORITY_DATA[story.prioridad]?.color || "#6B7280",
+            backgroundColor: priorityConfig.bg,
+            color: priorityConfig.color,
           }}
+          title={`Prioridad: ${priorityConfig.label}`}
         >
-          {PRIORITY_DATA[story.prioridad]?.icon || "⚪"} {story.prioridad}
+          {priorityConfig.icon}
         </span>
         
-        {story.etiquetas?.map(tag => (
+        {/* Etiquetas */}
+        {story.tags?.map((tag, index) => (
           <span 
-            key={tag} 
+            key={`${tag}-${index}`}
             className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700"
           >
             {tag}
@@ -77,27 +165,52 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
 
       {/* Title and description */}
       <div className="space-y-1">
-        <h3 className="font-semibold text-gray-900 line-clamp-2">{story.titulo}</h3>
-        <p className="text-sm text-gray-500 line-clamp-2">{story.descripcion}</p>
+        <h3 className="font-semibold text-gray-900 line-clamp-2">{story.title}</h3>
+        <p className="text-sm text-gray-500 line-clamp-2">{story.description}</p>
       </div>
 
-      {/* Time estimates */}
-      {totalHours > 0 && (
+      {/* Sub-especializaciones */}
+      {story.sub_specializations && story.sub_specializations.length > 0 && (
         <div className="flex gap-1 flex-wrap">
-          {Object.entries(story.estimaciones).map(([type, hours]) => 
-            hours > 0 && (
-              <div 
-                key={type} 
-                className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 flex items-center gap-1"
-              >
-                <span className="text-blue-500">{type === "UI" ? "🎨" : type === "Desarrollo" ? "💻" : "📝"}</span>
-                <span>{hours}h</span>
-              </div>
-            )
+          {story.sub_specializations.map((subSpec, index) => (
+            <span 
+              key={`${subSpec}-${index}`}
+              className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700 flex items-center gap-1"
+            >
+              <span>🔧</span>
+              <span>{subSpec}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Time estimates breakdown */}
+      {(story.ui_hours > 0 || story.development_hours > 0 || story.testing_hours > 0 || story.documentation_hours > 0) && (
+        <div className="flex gap-1 flex-wrap">
+          {story.ui_hours > 0 && (
+            <div className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700 flex items-center gap-1">
+              <span>🎨</span>
+              <span>{story.ui_hours}h</span>
+            </div>
           )}
-          <div className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
-            Total: {totalHours}h
-          </div>
+          {story.development_hours > 0 && (
+            <div className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 flex items-center gap-1">
+              <span>💻</span>
+              <span>{story.development_hours}h</span>
+            </div>
+          )}
+          {story.testing_hours > 0 && (
+            <div className="text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 flex items-center gap-1">
+              <span>🧪</span>
+              <span>{story.testing_hours}h</span>
+            </div>
+          )}
+          {story.documentation_hours > 0 && (
+            <div className="text-xs px-2 py-1 rounded-full bg-gray-50 text-gray-700 flex items-center gap-1">
+              <span>📝</span>
+              <span>{story.documentation_hours}h</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -107,11 +220,13 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
           <div className="flex items-center gap-2">
             <div 
               className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold"
-              title={assignedUser.nombre}
+              title={assignedUser.full_name || assignedUser.username}
             >
-              {assignedUser.nombre.split(" ").map(n => n[0]).join("").toUpperCase()}
+              {(assignedUser.full_name || assignedUser.username).split(" ").map(n => n[0]).join("").toUpperCase()}
             </div>
-            <span className="text-xs text-gray-700">{assignedUser.nombre.split(" ")[0]}</span>
+            <span className="text-xs text-gray-700">
+              {(assignedUser.full_name || assignedUser.username).split(" ")[0]}
+            </span>
           </div>
         ) : (
           <div className="text-xs text-gray-400 italic">Sin asignar</div>
@@ -125,7 +240,7 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
       </div>
 
       {/* Progress bar for done status */}
-      {story.estado === "Hecho" && story.checklist?.length > 0 && (
+      {story.status === "done" && story.checklist?.length > 0 && (
         <div className="mt-2">
           <div className="w-full bg-gray-200 rounded-full h-1.5">
             <div 

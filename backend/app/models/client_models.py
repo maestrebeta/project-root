@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP, func, DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, func, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from app.models.country_models import Country  # Importación explícita
 
 class Client(Base):
     __tablename__ = "clients"
@@ -20,7 +19,7 @@ class Client(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
     organization = relationship("Organization", back_populates="clients")
-    country = relationship(Country, back_populates="clients")
+    country = relationship("Country", back_populates="clients")
     projects = relationship("Project", back_populates="client")
     tickets = relationship("Ticket", back_populates="client")
 

@@ -177,15 +177,18 @@ export const useProjectsAndTags = () => {
         timeEntriesResponse.json()
       ]);
 
+      // Asegurar que timeEntriesData sea un array
+      const timeEntriesArray = Array.isArray(timeEntriesData) ? timeEntriesData : [];
+
       // Filtrar entradas de tiempo por usuario actual
-      const userEntries = timeEntriesData.filter(entry => 
+      const userEntries = timeEntriesArray.filter(entry => 
         entry.user_id === parseInt(session.user.user_id)
       );
 
       console.log('Datos cargados:');
       console.log('- Proyectos:', projectsData.length);
       console.log('- Clientes:', clientsData.length);
-      console.log('- Entradas totales:', timeEntriesData.length);
+      console.log('- Entradas totales:', timeEntriesArray.length);
       console.log('- Entradas del usuario:', userEntries.length);
 
       setProjects(projectsData);

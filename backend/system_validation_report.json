@@ -1,0 +1,1085 @@
+{
+  "timestamp": "2025-05-28 00:48:21",
+  "summary": {
+    "errors": 0,
+    "warnings": 209,
+    "info": 44,
+    "obsolete_files": 14,
+    "analyzed_files": 70
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "message": "Schema 'auth' no tiene modelo correspondiente",
+      "file": null
+    },
+    {
+      "message": "Import no utilizado 'List' en línea 2",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\organization_schema.py"
+    },
+    {
+      "message": "Import no utilizado 'get_db' en línea 18",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_database_complete.py"
+    },
+    {
+      "message": "Import no utilizado '*  # Importar todos los modelos' en línea 20",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_database_complete.py"
+    },
+    {
+      "message": "Import no utilizado 'OrganizationFilterMixin' en línea 6",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'datetime' en línea 4",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\time_entry_router.py"
+    },
+    {
+      "message": "Import no utilizado 'timezone' en línea 4",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\time_entry_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Organization' en línea 13",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\time_entry_router.py"
+    },
+    {
+      "message": "Import no utilizado 'sqlite3' en línea 25",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'importlib.util' en línea 26",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'Dict' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'List' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'Set' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'Tuple' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'Any' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'Optional' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'Counter' en línea 29",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'subprocess' en línea 30",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import no utilizado 'joinedload' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\project_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'Optional' en línea 3",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Client' en línea 104",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Project' en línea 105",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Import no utilizado 'get_password_hash' en línea 10",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\init_data.py"
+    },
+    {
+      "message": "Import no utilizado 'joinedload' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'Organization' en línea 6",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'List' en línea 8",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'Optional' en línea 8",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'Enum' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\models\\ticket_models.py"
+    },
+    {
+      "message": "Import no utilizado 'sqlite3' en línea 25",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'importlib.util' en línea 26",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'Dict' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'List' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'Set' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'Tuple' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'Any' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'Optional' en línea 28",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'Counter' en línea 29",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'subprocess' en línea 30",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import no utilizado 'joinedload' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'declared_attr' en línea 4",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\models\\time_entry_models.py"
+    },
+    {
+      "message": "Import no utilizado 'Depends' en línea 2",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Import no utilizado 'TIMESTAMP' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\models\\project_models.py"
+    },
+    {
+      "message": "Import no utilizado 'get_current_user  # Ajusta según tu configuración de autenticación' en línea 8",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\country_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Session' en línea 10",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_db.py"
+    },
+    {
+      "message": "Import no utilizado 'select' en línea 2",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\base_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'create_engine' en línea 12",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db.py"
+    },
+    {
+      "message": "Import no utilizado 'SQLALCHEMY_DATABASE_URL' en línea 13",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db.py"
+    },
+    {
+      "message": "Import no utilizado 'Project' en línea 16",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'ProjectBudget' en línea 16",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Organization' en línea 17",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Client' en línea 18",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'TimeEntry' en línea 19",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Ticket' en línea 20",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'TicketComment' en línea 20",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'TicketHistory' en línea 20",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Country' en línea 21",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Payment' en línea 22",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'PaymentInstallment' en línea 22",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Invoice' en línea 22",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'Epic' en línea 23",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'UserStory' en línea 23",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db_direct.py"
+    },
+    {
+      "message": "Import no utilizado 'sqlalchemy' en línea 9",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\migrations\\versions\\update_time_entries_duration.py"
+    },
+    {
+      "message": "Import no utilizado 'List' en línea 4",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'normalize_activity_type' en línea 11",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Import no utilizado 'Optional' en línea 3",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Import no utilizado 'User' en línea 7",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\test_endpoint.py"
+    },
+    {
+      "message": "Import no utilizado 'get_current_user_organization' en línea 8",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\test_endpoint.py"
+    },
+    {
+      "message": "Import no utilizado 'datetime' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\auth_router.py"
+    },
+    {
+      "message": "Import no utilizado 'LoginRequest' en línea 10",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\auth_router.py"
+    },
+    {
+      "message": "Import no utilizado 'TIMESTAMP' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\models\\client_models.py"
+    },
+    {
+      "message": "Import no utilizado 'Country  # Importación explícita' en línea 4",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\models\\client_models.py"
+    },
+    {
+      "message": "Import no utilizado 'Epic' en línea 18",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\force_massive_data.py"
+    },
+    {
+      "message": "Import no utilizado 'UserStory' en línea 18",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\force_massive_data.py"
+    },
+    {
+      "message": "Import no utilizado 'Country' en línea 19",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\force_massive_data.py"
+    },
+    {
+      "message": "Import no utilizado 'Depends' en línea 1",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Import no utilizado 'engine' en línea 17",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Import no utilizado 'Base' en línea 17",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Import no utilizado 'selectinload' en línea 2",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Optional' en línea 3",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Dict' en línea 3",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Any' en línea 3",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'user_crud' en línea 6",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Project' en línea 13",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'json' en línea 14",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Import no utilizado 'Session' en línea 9",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\test_story_creation.py"
+    },
+    {
+      "message": "Import no utilizado 'engine' en línea 10",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\test_story_creation.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_user_by_username'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_user_by_email'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_users'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_users_by_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create_user'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create_user_in_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_user'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'delete_user'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'add_custom_activity_type'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\activity_types.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_valid_activity_types'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\activity_types.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\time_entry_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_all'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\time_entry_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_projects'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\project_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_projects_by_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\project_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_tickets'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\ticket_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_ticket'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\ticket_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_organizations'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_organizations_stats'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_task_states'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_task_states'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_work_hours_config'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_work_hours_config'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'init_data'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\init_data.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_all_epics'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\epic_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_all_user_stories'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\epic_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_planning_stats'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\epic_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'recalculate_project_hours'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\epic_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_clients_stats'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\client_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_clients_analytics'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\client_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_project_estimated_hours'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'validate_specialization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\epic_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'validate_sub_specializations'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\epic_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'transform_assigned_user'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\epic_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_countries'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\country_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_organization_by_name'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_organizations'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_organization_details'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_tickets'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\ticket_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_ticket'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\ticket_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'verify_password'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\security.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create_access_token'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\security.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_current_user_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\security.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'oauth_login'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'oauth_callback'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'check_session'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'logout'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_projects_with_issues'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_boards'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_sprints'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_issues'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\jira_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_countries'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\country_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_country'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\country_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'set_default_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\user_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'transform_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\user_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_clients'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_clients_by_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create_client'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_client'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'delete_client'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_by_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\base_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create_with_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\base_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'safe_int_convert'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'parse_time'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'create_time_entry'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_time_entries'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_time_entry'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_time_entry'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'delete_time_entry'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_time_entries_by_organization'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_time_entries_by_user'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_projects_stats'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_projects_time_analytics'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_projects'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_project'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'bulk_delete_projects'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'login'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\auth_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'validation_exception_handler'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'http_exception_handler'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'general_exception_handler'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'add_cors_headers'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'read_root'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\main.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'validate_project_type'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\project_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_users_stats'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'update_user_theme'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'get_users_capacity_analytics'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'convert_to_int'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\time_entry_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'set_default_entry_date'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\time_entry_schema.py"
+    },
+    {
+      "message": "Función posiblemente no utilizada: 'validate_activity_type'",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\time_entry_schema.py"
+    },
+    {
+      "message": "Archivo de configuración faltante",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\requirements.txt"
+    },
+    {
+      "message": "Sistema de prevención de duplicaciones no detectado",
+      "file": null
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py"
+    },
+    {
+      "message": "Import dentro de bucle detectado",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Import dentro de bucle detectado",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\project_crud.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\ticket_crud.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\organization_router.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\init_data.py"
+    },
+    {
+      "message": "Query sin paginación detectada",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\init_data.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\epic_router.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\client_router.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\check_database_status.py"
+    },
+    {
+      "message": "Query sin paginación detectada",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\check_database_status.py"
+    },
+    {
+      "message": "Import dentro de bucle detectado",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Import dentro de bucle detectado",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_db.py"
+    },
+    {
+      "message": "Query sin paginación detectada",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_db.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\create_massive_data_fixed.py"
+    },
+    {
+      "message": "Query sin paginación detectada",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\create_massive_data_fixed.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\project_router.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\force_massive_data.py"
+    },
+    {
+      "message": "Query sin paginación detectada",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\force_massive_data.py"
+    },
+    {
+      "message": "Posible problema N+1 detectado (múltiples queries)",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\user_router.py"
+    },
+    {
+      "message": "Problema de seguridad: Uso de eval() - riesgo de seguridad",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Problema de seguridad: Uso de exec() - riesgo de seguridad",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\verify_system_alignment.py"
+    },
+    {
+      "message": "Problema de seguridad: Uso de eval() - riesgo de seguridad",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Problema de seguridad: Uso de exec() - riesgo de seguridad",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\system_validator_advanced.py"
+    },
+    {
+      "message": "Problema de seguridad: Contraseña hardcodeada",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reset_db.py"
+    }
+  ],
+  "info": [
+    {
+      "message": "Tabla 'countries' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'organizations' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'users' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'clients' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'projects' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'epics' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'user_stories' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'time_entries' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Tabla 'tickets' encontrada en migración",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'specialization' encontrado en tabla 'users'",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'sub_specializations' encontrado en tabla 'users'",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'estimated_hours' encontrado en tabla 'user_stories'",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'assigned_user_id' encontrado en tabla 'user_stories'",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'entry_date' encontrado en tabla 'time_entries'",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'user_story_id' encontrado en tabla 'time_entries'",
+      "file": null
+    },
+    {
+      "message": "Campo crítico 'estimated_hours' encontrado en tabla 'projects'",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: client",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: country",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: epic",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: organization",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: payment",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: project",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: ticket",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: time_entry",
+      "file": null
+    },
+    {
+      "message": "Modelo-Schema alineados: user",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: client",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: country",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: epic",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: organization",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: payment",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: project",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: ticket",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: time_entry",
+      "file": null
+    },
+    {
+      "message": "CRUD-Router alineados: user",
+      "file": null
+    },
+    {
+      "message": "Archivo de configuración encontrado",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\config.py"
+    },
+    {
+      "message": "Archivo de configuración encontrado",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\alembic.ini"
+    },
+    {
+      "message": "Función de inicialización encontrada: init_countries",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_organizations",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_users",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_clients",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_projects",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_epics_and_stories",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_tickets",
+      "file": null
+    },
+    {
+      "message": "Función de inicialización encontrada: init_time_entries",
+      "file": null
+    }
+  ],
+  "obsolete_files": [
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\core\\config.py",
+      "reason": "Archivo muy pequeño y sin referencias"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\user_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\alembic\\versions\\v1_0_0_initial_schema.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\project_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\ticket_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\epic_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\routers\\payment_router.py",
+      "reason": "Archivo muy pequeño y sin referencias"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\country_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\organization_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\payment_crud.py",
+      "reason": "Archivo muy pequeño y sin referencias"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\client_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\migrations\\versions\\update_time_entries_duration.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\crud\\time_entry_crud.py",
+      "reason": "Sin referencias de otros archivos"
+    },
+    {
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app\\schemas\\payment_schema.py",
+      "reason": "Archivo muy pequeño y sin referencias"
+    }
+  ]
+}

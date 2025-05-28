@@ -1,5 +1,5 @@
 # backend/app/routers/jira_router.py
-from fastapi import APIRouter, HTTPException, Request, Response, Depends
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse, JSONResponse
 from app.core.utils import get_jira_headers
 from urllib.parse import urlencode

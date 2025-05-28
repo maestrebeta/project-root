@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { isAuthenticated, getCurrentUser, makeAuthenticatedRequest } from "../utils/authUtils";
 
 const ThemeContext = createContext();
 
@@ -55,11 +56,17 @@ export function ThemeProvider({ children }) {
   // Función para sincronizar el tema con el backend si hay sesión activa
   const syncThemeWithBackend = async (themeData) => {
     try {
-      const savedSession = localStorage.getItem('session');
-      if (!savedSession) return; // No hay sesión activa
+      // Verificar si hay sesión activa
+      if (!isAuthenticated()) {
+        console.log('No hay sesión activa, no se sincroniza el tema');
+        return;
+      }
       
-      const session = JSON.parse(savedSession);
-      if (!session?.token || !session?.user?.user_id) return;
+      const currentUser = getCurrentUser();
+      if (!currentUser?.user_id) {
+        console.log('No se puede obtener el usuario actual');
+        return;
+      }
       
       // Solo actualizar las preferencias de tema en el backend
       const updateData = {
@@ -71,31 +78,35 @@ export function ThemeProvider({ children }) {
         }
       };
       
-      // Enviar actualización al backend
-      await fetch(`http://localhost:8000/users/${session.user.user_id}/theme`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.token}`
-        },
-        body: JSON.stringify(updateData),
-        credentials: 'include'
-      });
-      
-      // Actualizar la sesión local con el nuevo tema
-      const updatedSession = {
-        ...session,
-        user: {
-          ...session.user,
-          theme_preferences: updateData.theme_preferences
+      // Enviar actualización al backend usando la utilidad de autenticación
+      const response = await makeAuthenticatedRequest(
+        `http://localhost:8000/users/${currentUser.user_id}/theme`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(updateData)
         }
-      };
+      );
       
-      localStorage.setItem('session', JSON.stringify(updatedSession));
+      if (response) {
+        // Actualizar la sesión local con el nuevo tema
+        const savedSession = localStorage.getItem('session');
+        if (savedSession) {
+          const session = JSON.parse(savedSession);
+          const updatedSession = {
+            ...session,
+            user: {
+              ...session.user,
+              theme_preferences: updateData.theme_preferences
+            }
+          };
+          localStorage.setItem('session', JSON.stringify(updatedSession));
+        }
+      }
       
     } catch (error) {
       console.error('Error al sincronizar tema con el backend:', error);
       // No interrumpir la experiencia del usuario si falla la sincronización
+      // Si es error 401, las utilidades de auth ya manejarán el logout
     }
   };
 
@@ -115,17 +126,16 @@ export function ThemeProvider({ children }) {
   // Cargar tema desde la sesión al iniciar
   useEffect(() => {
     const loadThemeFromSession = () => {
-      const savedSession = localStorage.getItem('session');
-      if (savedSession) {
+      if (isAuthenticated()) {
         try {
-          const session = JSON.parse(savedSession);
-          if (session?.user?.theme_preferences) {
+          const currentUser = getCurrentUser();
+          if (currentUser?.theme_preferences) {
             // Aplicar tema del usuario desde el backend
             setTheme({
-              primaryColor: session.user.theme_preferences.primary_color || DEFAULT_THEME.primaryColor,
-              font: session.user.theme_preferences.font_class || DEFAULT_THEME.font,
-              fontSize: session.user.theme_preferences.font_size_class || DEFAULT_THEME.fontSize,
-              animations: session.user.theme_preferences.animations_enabled ?? DEFAULT_THEME.animations
+              primaryColor: currentUser.theme_preferences.primary_color || DEFAULT_THEME.primaryColor,
+              font: currentUser.theme_preferences.font_class || DEFAULT_THEME.font,
+              fontSize: currentUser.theme_preferences.font_size_class || DEFAULT_THEME.fontSize,
+              animations: currentUser.theme_preferences.animations_enabled ?? DEFAULT_THEME.animations
             });
           } else {
             // Si el usuario no tiene preferencias, usar tema por defecto

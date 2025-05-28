@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from app.schemas.time_entry_schema import TimeEntryCreate, TimeEntryUpdate, TimeEntryOut
@@ -10,7 +9,6 @@ from app.core.database import get_db
 from app.core.security import get_current_user_organization
 from app.models.user_models import User
 from app.models.project_models import Project
-from app.models.organization_models import Organization
 
 router = APIRouter(prefix="/time-entries", tags=["Time Entries"])
 

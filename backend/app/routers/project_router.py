@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 
 # from backend.app.schemas.project_schema import ProjectCreate, ProjectUpdate
 # from backend.app.crud import project_crud as crud

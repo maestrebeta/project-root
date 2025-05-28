@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-05-28T02:07:53.325569",
+  "system_health_score": 50.0,
+  "performance_metrics": {
+    "avg_response_time": 1591.3884937763214,
+    "error_rate": 0.2727272727272727,
+    "success_rate": 0.6363636363636364
+  },
+  "anomalies_detected": [],
+  "predictions": {
+    "maintenance_schedule": {}
+  },
+  "recommendations": [
+    {
+      "type": "critical",
+      "title": "Salud del sistema comprometida",
+      "description": "Puntuación de salud: 50.0/100",
+      "action": "Ejecutar mantenimiento completo inmediatamente",
+      "auto_executable": true,
+      "estimated_time": "10 minutos"
+    }
+  ],
+  "auto_fixes_applied": [],
+  "optimization_suggestions": []
+}

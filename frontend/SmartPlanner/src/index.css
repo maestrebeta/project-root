@@ -103,3 +103,424 @@
     margin-left: 0;
   }
 }
+
+/* Estilos épicos para SmartPlanner */
+@layer utilities {
+  /* Clases de truncado de líneas */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  /* Scrollbar personalizado */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thumb-gray-300 {
+    scrollbar-color: #d1d5db transparent;
+  }
+
+  .scrollbar-track-transparent {
+    scrollbar-color: transparent transparent;
+  }
+
+  /* Webkit scrollbar para navegadores basados en Chromium */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #d1d5db;
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #9ca3af;
+  }
+
+  /* Efectos de glassmorphism */
+  .backdrop-blur-xl {
+    backdrop-filter: blur(24px);
+  }
+
+  .backdrop-blur-sm {
+    backdrop-filter: blur(4px);
+  }
+
+  /* Gradientes épicos */
+  .gradient-epic-blue {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .gradient-epic-purple {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  }
+
+  .gradient-epic-green {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  }
+
+  /* Animaciones personalizadas */
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { 
+      box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+    }
+    50% { 
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.6);
+    }
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+
+  /* Estados de hover épicos */
+  .hover-lift {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Efectos de texto */
+  .text-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Bordes animados */
+  .border-gradient {
+    position: relative;
+    background: linear-gradient(white, white) padding-box,
+                linear-gradient(135deg, #667eea, #764ba2) border-box;
+    border: 2px solid transparent;
+  }
+
+  /* Efectos de carga */
+  .loading-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Efectos de partículas */
+  .particles-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.3) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  /* Efectos de neón */
+  .neon-glow {
+    box-shadow: 
+      0 0 5px currentColor,
+      0 0 10px currentColor,
+      0 0 15px currentColor,
+      0 0 20px currentColor;
+  }
+
+  /* Transiciones suaves */
+  .transition-all-300 {
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-transform-300 {
+    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Efectos de cristal */
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  /* Sombras épicas */
+  .shadow-epic {
+    box-shadow: 
+      0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05),
+      0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .shadow-epic-lg {
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.25),
+      0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  /* Efectos de hover para botones */
+  .btn-epic {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-epic::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+  }
+
+  .btn-epic:hover::before {
+    left: 100%;
+  }
+
+  /* Efectos de focus épicos */
+  .focus-epic:focus {
+    outline: none;
+    box-shadow: 
+      0 0 0 3px rgba(59, 130, 246, 0.1),
+      0 0 0 1px rgba(59, 130, 246, 0.5);
+  }
+
+  /* Efectos de selección */
+  .selection-epic::selection {
+    background: rgba(59, 130, 246, 0.3);
+    color: white;
+  }
+
+  /* Efectos de carga de página */
+  .page-enter {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  .page-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 300ms, transform 300ms;
+  }
+
+  .page-exit {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .page-exit-active {
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: opacity 300ms, transform 300ms;
+  }
+}
+
+/* Estilos base épicos */
+@layer base {
+  * {
+    @apply selection-epic;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Mejoras tipográficas */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+    letter-spacing: -0.025em;
+  }
+
+  /* Estilos para inputs */
+  input, textarea, select {
+    @apply focus-epic;
+  }
+
+  /* Estilos para botones */
+  button {
+    @apply transition-all-300;
+  }
+
+  /* Estilos para enlaces */
+  a {
+    @apply transition-all-300;
+  }
+}
+
+/* Componentes épicos */
+@layer components {
+  .card-epic {
+    @apply bg-white rounded-2xl shadow-epic border border-gray-100 hover-lift;
+  }
+
+  .btn-primary-epic {
+    @apply btn-epic bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl focus-epic;
+  }
+
+  .btn-secondary-epic {
+    @apply btn-epic bg-white text-gray-700 px-6 py-3 rounded-xl font-semibold border border-gray-200 hover:bg-gray-50 shadow-sm hover:shadow-md focus-epic;
+  }
+
+  .input-epic {
+    @apply w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all-300 bg-white;
+  }
+
+  .modal-epic {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm;
+  }
+
+  .modal-content-epic {
+    @apply bg-white rounded-2xl shadow-epic-lg max-w-2xl w-full max-h-[90vh] overflow-hidden;
+  }
+
+  .sidebar-epic {
+    @apply bg-white border-r border-gray-200 shadow-lg;
+  }
+
+  .header-epic {
+    @apply bg-white border-b border-gray-200 shadow-sm backdrop-blur-xl;
+  }
+
+  .kanban-column-epic {
+    @apply bg-gray-50 rounded-2xl border border-gray-200 min-w-80 max-w-80;
+  }
+
+  .story-card-epic {
+    @apply card-epic p-4 cursor-pointer hover:border-blue-300 transition-all-300;
+  }
+
+  .epic-card-epic {
+    @apply card-epic p-6 border-2 hover:border-blue-300 cursor-pointer;
+  }
+
+  .progress-ring-epic {
+    @apply transition-all-300;
+  }
+
+  .metric-card-epic {
+    @apply card-epic p-4 text-center;
+  }
+
+  .notification-epic {
+    @apply bg-white border border-gray-200 rounded-xl shadow-lg p-4 mb-3 hover-lift;
+  }
+
+  .tooltip-epic {
+    @apply absolute z-50 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg;
+  }
+
+  .dropdown-epic {
+    @apply absolute bg-white border border-gray-200 rounded-xl shadow-epic-lg z-50 py-2 min-w-48;
+  }
+
+  .dropdown-item-epic {
+    @apply px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors;
+  }
+
+  .badge-epic {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary-epic {
+    @apply badge-epic bg-blue-100 text-blue-800;
+  }
+
+  .badge-success-epic {
+    @apply badge-epic bg-green-100 text-green-800;
+  }
+
+  .badge-warning-epic {
+    @apply badge-epic bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-danger-epic {
+    @apply badge-epic bg-red-100 text-red-800;
+  }
+
+  .loading-spinner-epic {
+    @apply animate-spin rounded-full border-4 border-gray-200 border-t-blue-600;
+  }
+
+  .divider-epic {
+    @apply border-t border-gray-200 my-6;
+  }
+
+  .section-epic {
+    @apply mb-8;
+  }
+
+  .section-title-epic {
+    @apply text-2xl font-bold text-gray-900 mb-4;
+  }
+
+  .section-subtitle-epic {
+    @apply text-lg font-semibold text-gray-700 mb-3;
+  }
+
+  .text-muted-epic {
+    @apply text-gray-600;
+  }
+
+  .text-primary-epic {
+    @apply text-blue-600;
+  }
+
+  .bg-primary-epic {
+    @apply bg-blue-600;
+  }
+
+  .border-primary-epic {
+    @apply border-blue-600;
+  }
+}

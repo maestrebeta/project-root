@@ -21,12 +21,21 @@ class User(Base):
     timezone = Column(String(50), default='UTC')
     language = Column(String(10), default='es')
     last_login = Column(DateTime(timezone=True), nullable=True)
+    
+    # Nuevos campos para especialización
+    specialization = Column(String(50), nullable=True, default='development')
+    sub_specializations = Column(JSONB, nullable=True)  # Array de sub-especializaciones
+    hourly_rate = Column(Integer, nullable=True)  # Tarifa por hora
+    weekly_capacity = Column(Integer, nullable=True, default=40)  # Capacidad semanal en horas
+    skills = Column(JSONB, nullable=True)  # Habilidades y nivel de competencia
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
     # Restricción de roles
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'dev', 'infra', 'super_user')", name='valid_user_roles'),
+        CheckConstraint("specialization IN ('development', 'ui_ux', 'testing', 'documentation', 'management', 'data_analysis')", name='valid_specializations'),
     )
 
     organization = relationship("Organization", back_populates="users")

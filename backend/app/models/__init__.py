@@ -6,6 +6,7 @@ from .time_entry_models import TimeEntry
 from .ticket_models import Ticket, TicketComment, TicketHistory
 from .country_models import Country
 from .payment_models import Payment, PaymentInstallment, Invoice
+from .epic_models import Epic, UserStory
 
 # Exportar todos los modelos
 __all__ = [
@@ -21,5 +22,7 @@ __all__ = [
     'Country',
     'Payment',
     'PaymentInstallment',
-    'Invoice'
+    'Invoice',
+    'Epic',
+    'UserStory'
 ]

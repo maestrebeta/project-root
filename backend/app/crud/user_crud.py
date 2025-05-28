@@ -3,7 +3,6 @@ from app.models.user_models import User
 from app.schemas.user_schema import UserCreate, UserUpdate
 from passlib.context import CryptContext
 import logging
-from app.core.base_crud import OrganizationFilterMixin
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)

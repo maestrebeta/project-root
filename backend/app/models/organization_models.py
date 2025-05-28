@@ -52,6 +52,19 @@ class Organization(Base):
 
     # Configuración de estados
     task_states = Column(JSON, nullable=False, default=DEFAULT_TASK_STATES)
+    
+    # Configuración de horas de trabajo
+    DEFAULT_WORK_HOURS = {
+        "start_time": "08:00",
+        "end_time": "17:00", 
+        "lunch_break_start": "12:00",
+        "lunch_break_end": "13:00",
+        "working_days": [1, 2, 3, 4, 5],  # Lunes a Viernes (1=Lunes, 7=Domingo)
+        "daily_hours": 8,  # Calculado automáticamente
+        "effective_daily_hours": 7  # Descontando almuerzo
+    }
+    
+    work_hours_config = Column(JSON, nullable=False, default=DEFAULT_WORK_HOURS)
 
     # Relaciones
     users = relationship("User", back_populates="organization")

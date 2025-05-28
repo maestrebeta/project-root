@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional
 from datetime import datetime, timezone
-from app.core.activity_types import DEFAULT_ACTIVITY_TYPES
+from app.core.activity_types import DEFAULT_ACTIVITY_TYPES, normalize_activity_type
 
 # Estados permitidos para las entradas de tiempo
 VALID_STATES = ['pendiente', 'en_progreso', 'completada']
@@ -57,10 +57,17 @@ class TimeEntryBase(BaseModel):
 
     @validator('activity_type')
     def validate_activity_type(cls, v):
-        """Validar que el tipo de actividad sea uno de los permitidos"""
-        normalized = v.lower().strip()
+        """Validar y normalizar el tipo de actividad"""
+        if not v:
+            return 'desarrollo'
+        
+        # Usar la función de normalización que mapea todos los tipos
+        normalized = normalize_activity_type(v)
+        
+        # Verificar que el resultado normalizado sea válido
         if normalized not in DEFAULT_ACTIVITY_TYPES:
             raise ValueError(f"Tipo de actividad inválido. Debe ser uno de: {DEFAULT_ACTIVITY_TYPES}")
+        
         return normalized
 
     @validator('status')

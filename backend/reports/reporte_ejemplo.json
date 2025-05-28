@@ -1,0 +1,48 @@
+{
+  "timestamp": "2025-05-28T01:53:35.702029",
+  "results": [
+    {
+      "component": "Frontend Structure",
+      "status": "success",
+      "message": "Estructura correcta",
+      "details": {
+        "missing_directories": [],
+        "missing_files": [],
+        "frontend_path": "C:\\Users\\teu13\\Desktop\\project-root\\frontend\\SmartPlanner"
+      },
+      "timestamp": "2025-05-28T01:53:35.603100",
+      "duration_ms": 1.2514591217041016
+    },
+    {
+      "component": "Import Validation",
+      "status": "success",
+      "message": "Todos los imports están en uso (48 archivos analizados)",
+      "details": {
+        "total_files_analyzed": 48,
+        "unused_imports_count": 0,
+        "unused_imports": []
+      },
+      "timestamp": "2025-05-28T01:53:35.701517",
+      "duration_ms": 98.15597534179688
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "success": 2,
+    "warning": 0,
+    "error": 0
+  },
+  "recommendations": [
+    "🟢 Sistema en estado óptimo"
+  ],
+  "environment_info": {
+    "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
+    "platform": "win32",
+    "backend_dir": "C:\\Users\\teu13\\Desktop\\project-root\\backend",
+    "frontend_dir": "C:\\Users\\teu13\\Desktop\\project-root\\frontend\\SmartPlanner",
+    "app_dir": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app",
+    "database_url": "postgresql://smartplanner_user:smartplanner_***@localhost:5432/smartplanner_db",
+    "server_url": "http://localhost:8000",
+    "environment_errors": []
+  }
+}

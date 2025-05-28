@@ -1,0 +1,271 @@
+{
+  "base_config": {
+    "database": {
+      "url": "postgresql://smartplanner_user:smartplanner_password@localhost:5432/smartplanner_db",
+      "echo": false,
+      "pool_size": 10,
+      "max_overflow": 20
+    },
+    "server": {
+      "host": "localhost",
+      "port": 8000,
+      "base_url": "http://localhost:8000"
+    },
+    "auth": {
+      "secret_key": "dev-secret-key-smartplanner-2024",
+      "algorithm": "HS256",
+      "access_token_expire_minutes": 30,
+      "admin_username": "admin",
+      "admin_password": "admin123"
+    },
+    "frontend": {
+      "required_dirs": [
+        "src/components",
+        "src/context",
+        "src/utils",
+        "src/hooks",
+        "src/components/Projects",
+        "src/components/Users",
+        "src/components/Customers",
+        "src/components/timeTracker",
+        "src/components/Planning",
+        "src/components/Organizations",
+        "src/components/Settings",
+        "src/components/Notifications"
+      ],
+      "required_files": [
+        "src/App.jsx",
+        "src/main.jsx",
+        "package.json",
+        "src/context/AuthContext.jsx",
+        "src/context/ThemeContext.jsx",
+        "src/utils/authUtils.js"
+      ]
+    },
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/auth/login",
+        "name": "Autenticación",
+        "requires_auth": false,
+        "test_data": {
+          "username": "admin",
+          "password": "admin123"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/users/",
+        "name": "Usuarios",
+        "requires_auth": true
+      },
+      {
+        "method": "GET",
+        "path": "/projects/",
+        "name": "Proyectos",
+        "requires_auth": true
+      },
+      {
+        "method": "GET",
+        "path": "/clients/",
+        "name": "Clientes",
+        "requires_auth": true
+      },
+      {
+        "method": "GET",
+        "path": "/organizations/stats",
+        "name": "Estadísticas de organizaciones",
+        "requires_auth": true
+      },
+      {
+        "method": "GET",
+        "path": "/projects/stats",
+        "name": "Estadísticas de proyectos",
+        "requires_auth": true
+      }
+    ],
+    "cleanup": {
+      "obsolete_patterns": [
+        "test_auth_*.py",
+        "test_login_*.py",
+        "test_story_*.py",
+        "test_endpoint.py",
+        "verify_*.py",
+        "check_*.py",
+        "reset_*.py",
+        "force_*.py",
+        "create_admin_user.py",
+        "create_massive_*.py",
+        "system_validator_*.py",
+        "system_maintenance.py",
+        "final_*.py",
+        "fix_*.py",
+        "cleanup_*.py",
+        "init_db_*.py",
+        "load_test_data.py"
+      ],
+      "preserve_files": [
+        "system_manager.py",
+        "system_config.py",
+        "alembic.ini",
+        "package.json",
+        "package-lock.json",
+        "Dockerfile"
+      ]
+    },
+    "validation": {
+      "tables": [
+        "countries",
+        "organizations",
+        "users",
+        "clients",
+        "projects",
+        "time_entries",
+        "tickets",
+        "epics",
+        "user_stories",
+        "project_budgets",
+        "ticket_comments",
+        "ticket_history"
+      ],
+      "imports": {
+        "ignore_patterns": [
+          "__init__.py",
+          "alembic/",
+          "migrations/",
+          "__pycache__/"
+        ],
+        "common_unused_imports": [
+          "typing.Optional",
+          "typing.List",
+          "typing.Dict",
+          "datetime.datetime",
+          "sqlalchemy.orm.Session"
+        ]
+      },
+      "data_integrity": [
+        {
+          "name": "Países",
+          "query": "SELECT COUNT(*) FROM countries",
+          "min_count": 1,
+          "description": "Debe haber al menos un país registrado"
+        },
+        {
+          "name": "Organizaciones",
+          "query": "SELECT COUNT(*) FROM organizations",
+          "min_count": 1,
+          "description": "Debe haber al menos una organización"
+        },
+        {
+          "name": "Usuarios",
+          "query": "SELECT COUNT(*) FROM users",
+          "min_count": 1,
+          "description": "Debe haber al menos un usuario administrador"
+        },
+        {
+          "name": "Usuario Admin",
+          "query": "SELECT COUNT(*) FROM users WHERE role = 'super_user'",
+          "min_count": 1,
+          "description": "Debe existir al menos un super usuario"
+        }
+      ]
+    },
+    "reports": {
+      "output_dir": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\reports",
+      "formats": [
+        "json",
+        "html"
+      ],
+      "include_details": true,
+      "max_report_age_days": 30
+    },
+    "logging": {
+      "level": "INFO",
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+      "file": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\logs\\system_manager.log"
+    },
+    "performance": {
+      "max_query_time_seconds": 5,
+      "max_endpoint_response_time_seconds": 10,
+      "max_file_size_mb": 100,
+      "max_import_depth": 10
+    }
+  },
+  "adaptive_config": {
+    "database": {
+      "pool_size": 15,
+      "max_overflow": 20,
+      "pool_timeout": 45,
+      "pool_recycle": 3600
+    },
+    "performance": {
+      "max_workers": 8,
+      "chunk_size": 2000,
+      "timeout": 30,
+      "retry_attempts": 3,
+      "cache_ttl": 450
+    },
+    "logging": {
+      "level": "INFO",
+      "max_file_size": "25MB",
+      "backup_count": 7,
+      "rotation_interval": "daily"
+    },
+    "cache": {
+      "max_size_mb": 500,
+      "ttl_seconds": 300,
+      "cleanup_interval": 60,
+      "compression_enabled": true
+    },
+    "concurrency": {
+      "thread_pool_size": 8,
+      "async_enabled": true,
+      "queue_size": 500,
+      "timeout": 60
+    }
+  },
+  "performance_config": {
+    "max_workers": 8,
+    "chunk_size": 2000,
+    "timeout": 30,
+    "retry_attempts": 3,
+    "cache_ttl": 450
+  },
+  "ai_config": {
+    "enabled": true,
+    "analysis_interval": 120,
+    "prediction_enabled": true,
+    "auto_fix_enabled": true,
+    "learning_enabled": true,
+    "confidence_threshold": 0.6
+  },
+  "monitoring_config": {
+    "enabled": true,
+    "check_interval": 30,
+    "metrics_retention_days": 90,
+    "alert_threshold": 0.7,
+    "auto_cleanup_enabled": true,
+    "performance_monitoring": true
+  },
+  "auto_optimization_config": {
+    "enabled": true,
+    "optimization_interval": 1800,
+    "auto_cleanup_enabled": true,
+    "performance_tuning_enabled": true,
+    "predictive_scaling_enabled": true,
+    "max_optimization_time": 600
+  },
+  "system_capabilities": {
+    "cpu_cores": 12,
+    "memory_gb": 15.95,
+    "disk_space_gb": 222.83,
+    "network_speed": "medium",
+    "os_type": "windows",
+    "python_version": "3.13.3",
+    "database_available": true,
+    "ai_capable": true,
+    "performance_tier": "high"
+  },
+  "config_version": "2.0.0",
+  "last_updated": "2025-05-28T02:07:34.326690"
+}

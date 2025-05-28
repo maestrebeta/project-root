@@ -1,0 +1,141 @@
+{
+  "timestamp": "2025-05-28T01:51:17.599473",
+  "results": [
+    {
+      "component": "Database",
+      "status": "error",
+      "message": "Error de conexión: 'utf-8' codec can't decode byte 0xf3 in position 85: invalid continuation byte",
+      "details": null,
+      "timestamp": "2025-05-28T01:51:04.930733",
+      "duration_ms": null
+    },
+    {
+      "component": "Database Schema",
+      "status": "error",
+      "message": "Error validando esquema: 'utf-8' codec can't decode byte 0xf3 in position 85: invalid continuation byte",
+      "details": null,
+      "timestamp": "2025-05-28T01:51:04.970416",
+      "duration_ms": null
+    },
+    {
+      "component": "Data Integrity",
+      "status": "error",
+      "message": "Error verificando datos: 'utf-8' codec can't decode byte 0xf3 in position 85: invalid continuation byte",
+      "details": null,
+      "timestamp": "2025-05-28T01:51:05.010673",
+      "duration_ms": null
+    },
+    {
+      "component": "Import Validation",
+      "status": "error",
+      "message": "Error validando imports: not enough values to unpack (expected 3, got 2)",
+      "details": null,
+      "timestamp": "2025-05-28T01:51:05.110998",
+      "duration_ms": null
+    },
+    {
+      "component": "Frontend Structure",
+      "status": "error",
+      "message": "Error: not enough values to unpack (expected 3, got 2)",
+      "details": null,
+      "timestamp": "2025-05-28T01:51:05.112453",
+      "duration_ms": null
+    },
+    {
+      "component": "Authentication",
+      "status": "success",
+      "message": "Login exitoso",
+      "details": {
+        "token_length": 124
+      },
+      "timestamp": "2025-05-28T01:51:07.344735",
+      "duration_ms": 2232.0632934570312
+    },
+    {
+      "component": "Endpoint Testing",
+      "status": "success",
+      "message": "Usuarios: 200",
+      "details": {
+        "status_code": 200,
+        "response_size": 31138,
+        "method": "GET",
+        "path": "/users/"
+      },
+      "timestamp": "2025-05-28T01:51:09.412520",
+      "duration_ms": 2067.5735473632812
+    },
+    {
+      "component": "Endpoint Testing",
+      "status": "success",
+      "message": "Proyectos: 200",
+      "details": {
+        "status_code": 200,
+        "response_size": 15159,
+        "method": "GET",
+        "path": "/projects/"
+      },
+      "timestamp": "2025-05-28T01:51:11.439801",
+      "duration_ms": 2026.951789855957
+    },
+    {
+      "component": "Endpoint Testing",
+      "status": "success",
+      "message": "Clientes: 200",
+      "details": {
+        "status_code": 200,
+        "response_size": 357,
+        "method": "GET",
+        "path": "/clients/"
+      },
+      "timestamp": "2025-05-28T01:51:13.487052",
+      "duration_ms": 2046.9348430633545
+    },
+    {
+      "component": "Endpoint Testing",
+      "status": "warning",
+      "message": "Estadísticas de organizaciones: 403",
+      "details": {
+        "status_code": 403,
+        "response_size": 79,
+        "method": "GET",
+        "path": "/organizations/stats"
+      },
+      "timestamp": "2025-05-28T01:51:15.538543",
+      "duration_ms": 2051.1913299560547
+    },
+    {
+      "component": "Endpoint Testing",
+      "status": "success",
+      "message": "Estadísticas de proyectos: 200",
+      "details": {
+        "status_code": 200,
+        "response_size": 191,
+        "method": "GET",
+        "path": "/projects/stats"
+      },
+      "timestamp": "2025-05-28T01:51:17.599099",
+      "duration_ms": 2060.248374938965
+    }
+  ],
+  "summary": {
+    "total": 11,
+    "success": 5,
+    "warning": 1,
+    "error": 5
+  },
+  "recommendations": [
+    "🔴 Resolver 5 errores críticos antes de continuar",
+    "🟡 Revisar 1 advertencias para optimizar el sistema",
+    "🔧 Verificar configuración de base de datos y conectividad"
+  ],
+  "environment_info": {
+    "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
+    "platform": "win32",
+    "backend_dir": "C:\\Users\\teu13\\Desktop\\project-root\\backend",
+    "frontend_dir": "C:\\Users\\teu13\\Desktop\\project-root\\frontend\\SmartPlanner",
+    "app_dir": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app",
+    "database_url": "postgresql://smartplanner_user:smartplanner_***@localhost:5432/smartplanner_db",
+    "server_url": "http://localhost:8000",
+    "environment_errors": []
+  }
+}

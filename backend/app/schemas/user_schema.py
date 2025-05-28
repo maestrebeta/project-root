@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator, Field, EmailStr
-from typing import Optional, Dict, Any
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class ThemePreferences(BaseModel):
@@ -37,6 +37,46 @@ class UserBase(BaseModel):
     country_code: Optional[str] = None
     timezone: str = 'UTC'
     language: str = 'es'
+    
+    # Nuevos campos para especialización y capacidad
+    specialization: Optional[str] = Field(default='development')
+    sub_specializations: Optional[List[str]] = None
+    hourly_rate: Optional[int] = None
+    weekly_capacity: Optional[int] = Field(default=40)
+    skills: Optional[Dict[str, Any]] = None
+
+    @validator('specialization')
+    def validate_specialization(cls, v):
+        if v is None:
+            return 'development'
+        valid_specializations = ['development', 'ui_ux', 'testing', 'documentation', 'management', 'data_analysis']
+        if v not in valid_specializations:
+            raise ValueError(f'Specialization must be one of: {valid_specializations}')
+        return v
+
+    @validator('sub_specializations')
+    def validate_sub_specializations(cls, v, values):
+        if v is None:
+            return v
+        
+        # Sub-especializaciones válidas por especialización principal
+        valid_sub_specs = {
+            'development': ['backend', 'frontend', 'automation', 'data_bi'],
+            'ui_ux': ['ui_design', 'ux_research', 'prototyping', 'user_testing'],
+            'testing': ['unit_testing', 'integration_testing', 'e2e_testing', 'performance_testing'],
+            'documentation': ['technical_docs', 'user_docs', 'api_docs', 'training_materials'],
+            'management': ['project_management', 'team_lead', 'product_owner', 'scrum_master'],
+            'data_analysis': ['data_modeling', 'reporting', 'analytics', 'business_intelligence']
+        }
+        
+        specialization = values.get('specialization', 'development')
+        allowed_subs = valid_sub_specs.get(specialization, [])
+        
+        for sub in v:
+            if sub not in allowed_subs:
+                raise ValueError(f'Sub-specialization "{sub}" not valid for specialization "{specialization}". Valid options: {allowed_subs}')
+        
+        return v
 
     @validator('organization_id', pre=True, always=True)
     def set_default_organization(cls, v):
@@ -59,6 +99,13 @@ class UserUpdate(BaseModel):
     country_code: Optional[str] = None
     timezone: Optional[str] = None
     language: Optional[str] = None
+    
+    # Nuevos campos para especialización y capacidad
+    specialization: Optional[str] = None
+    sub_specializations: Optional[List[str]] = None
+    hourly_rate: Optional[int] = None
+    weekly_capacity: Optional[int] = None
+    skills: Optional[Dict[str, Any]] = None
 
 class UserOut(BaseModel):
     user_id: int
@@ -74,6 +121,18 @@ class UserOut(BaseModel):
     last_login: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    
+    # Nuevos campos para especialización y capacidad
+    specialization: Optional[str] = None
+    sub_specializations: Optional[List[str]] = None
+    hourly_rate: Optional[int] = None
+    weekly_capacity: Optional[int] = None
+    skills: Optional[Dict[str, Any]] = None
+    
+    # Campos calculados para el dashboard
+    current_workload: Optional[int] = None  # Horas asignadas esta semana
+    efficiency_score: Optional[float] = None  # Puntuación de eficiencia
+    preferred_tasks: Optional[List[str]] = None  # Tipos de tareas donde rinde mejor
 
     class Config:
         from_attributes = True
@@ -84,13 +143,11 @@ class UserOut(BaseModel):
         # Si v es None, devolver None
         if v is None:
             return None
-        
-        # Si v es un modelo SQLAlchemy, usar el método from_orm
-        if hasattr(v, 'organization_id'):
-            return OrganizationInfo.from_orm(v)
-        
-        # Si ya es un diccionario, devolverlo
-        return v
+        # Si v ya es un dict, devolverlo tal como está
+        if isinstance(v, dict):
+            return v
+        # Si v es un objeto ORM, convertirlo
+        return OrganizationInfo.from_orm(v)
 
 class UserWithOrganization(UserOut):
     organization_name: Optional[str] = None

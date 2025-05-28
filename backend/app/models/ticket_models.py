@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Date, TIMESTAMP, Enum, CheckConstraint, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Date, TIMESTAMP, CheckConstraint, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
 
 class Ticket(Base):
@@ -27,7 +26,7 @@ class Ticket(Base):
     closed_at = Column(TIMESTAMP)
     
     # Nuevos campos
-    tags = Column(JSONB, nullable=True)
+    tags = Column(JSON, nullable=True)
     estimated_hours = Column(Integer, nullable=True)
     
     # Restricciones de estado y prioridad

@@ -93,7 +93,10 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(ProjectBase):
-    pass
+    # Hacer todos los campos opcionales para updates
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    project_type: Optional[str] = Field(None, description="Tipo de proyecto")
+    status: Optional[str] = Field(None, description="Estado del proyecto")
 
 
 class ProjectOut(ProjectBase):

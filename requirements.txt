@@ -9,6 +9,7 @@ colorama==0.4.6
 dnspython==2.7.0
 email_validator==2.2.0
 environs==14.1.1
+faker==33.1.0
 fastapi==0.115.12
 fastapi_cors==0.0.6
 greenlet==3.2.2

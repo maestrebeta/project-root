@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -7,7 +7,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.crud import user_crud
-from app.schemas.auth_schema import Token, TokenData, LoginRequest
+from app.schemas.auth_schema import Token, TokenData
 from app.core.security import create_access_token, verify_password
 from app.models.user_models import User
 import logging

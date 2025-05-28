@@ -1,9 +1,80 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.models.project_models import Project
 from app.schemas.project_schema import ProjectCreate, ProjectUpdate
 from app.models.organization_models import Organization
-from datetime import datetime
+from datetime import datetime, date, timedelta
+
+
+def calculate_estimated_hours(start_date, end_date, project_type='development', organization=None):
+    """
+    Calcular horas estimadas basándose en las fechas de inicio y fin del proyecto,
+    usando la configuración de horas de trabajo de la organización.
+    
+    Args:
+        start_date: Fecha de inicio del proyecto
+        end_date: Fecha de fin del proyecto
+        project_type: Tipo de proyecto para ajustar el cálculo
+        organization: Objeto organización con configuración de horas de trabajo
+    
+    Returns:
+        int: Número de horas estimadas o None si no se pueden calcular
+    """
+    if not start_date or not end_date:
+        return None
+    
+    # Convertir a objetos date si son strings
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+    elif isinstance(start_date, datetime):
+        start_date = start_date.date()
+    
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+    elif isinstance(end_date, datetime):
+        end_date = end_date.date()
+    
+    # Validar que la fecha de fin sea posterior a la de inicio
+    if end_date <= start_date:
+        return None
+    
+    # Obtener configuración de horas de trabajo de la organización
+    work_config = organization.work_hours_config if organization else None
+    if not work_config:
+        # Configuración por defecto si no hay organización
+        work_config = {
+            "effective_daily_hours": 7,
+            "working_days": [1, 2, 3, 4, 5]  # Lunes a Viernes
+        }
+    
+    working_days_of_week = work_config.get('working_days', [1, 2, 3, 4, 5])
+    effective_daily_hours = work_config.get('effective_daily_hours', 7)
+    
+    # Calcular días laborables según la configuración de la organización
+    current_date = start_date
+    working_days = 0
+    
+    while current_date < end_date:
+        # weekday() devuelve 0=Lunes, 6=Domingo, pero nuestra config usa 1=Lunes, 7=Domingo
+        weekday = current_date.weekday() + 1
+        if weekday in working_days_of_week:
+            working_days += 1
+        current_date += timedelta(days=1)
+    
+    # Factor de dedicación según el tipo de proyecto
+    project_dedication_factor = {
+        'development': 0.85,   # 85% del tiempo efectivo para desarrollo
+        'support': 0.60,       # 60% del tiempo efectivo para soporte
+        'meeting': 0.30,       # 30% del tiempo efectivo para reuniones
+        'training': 0.70,      # 70% del tiempo efectivo para capacitación
+        'other': 0.50          # 50% del tiempo efectivo para otros
+    }
+    
+    dedication_factor = project_dedication_factor.get(project_type, 0.50)
+    project_hours_per_day = effective_daily_hours * dedication_factor
+    estimated_hours = working_days * project_hours_per_day
+    
+    return int(round(estimated_hours))
 
 
 def get_project(db: Session, project_id: int):
@@ -112,6 +183,19 @@ def create_project(db: Session, project: ProjectCreate):
         if existing_project:
             raise ValueError(f"Ya existe un proyecto con el código '{project.code}'")
     
+    # Calcular horas estimadas automáticamente si se proporcionan fechas
+    calculated_hours = None
+    if project.start_date and project.end_date:
+        calculated_hours = calculate_estimated_hours(
+            project.start_date, 
+            project.end_date, 
+            normalized_project_type,
+            organization
+        )
+    
+    # Usar horas calculadas si no se proporcionaron horas estimadas manualmente
+    final_estimated_hours = project.estimated_hours if project.estimated_hours is not None else calculated_hours
+    
     # Crear el proyecto con tipos y estados normalizados
     db_project = Project(
         client_id=project.client_id,
@@ -123,7 +207,7 @@ def create_project(db: Session, project: ProjectCreate):
         start_date=project.start_date,
         end_date=project.end_date,
         manager_id=project.manager_id,
-        estimated_hours=project.estimated_hours,
+        estimated_hours=final_estimated_hours,
         priority=project.priority or 'medium',
         tags=project.tags,
         organization_id=organization.organization_id
@@ -220,7 +304,36 @@ def update_project(db: Session, project_id: int, updates: ProjectUpdate):
             updates.status = normalized_status
         
         # Actualizar campos
-        for key, value in updates.dict(exclude_unset=True).items():
+        update_data = updates.dict(exclude_unset=True)
+        
+        # Calcular horas estimadas automáticamente si se actualizan las fechas
+        # y no se proporcionaron horas estimadas manualmente
+        if ('start_date' in update_data or 'end_date' in update_data) and 'estimated_hours' not in update_data:
+            # Obtener fechas actualizadas
+            new_start_date = update_data.get('start_date', db_project.start_date)
+            new_end_date = update_data.get('end_date', db_project.end_date)
+            new_project_type = update_data.get('project_type', db_project.project_type)
+            
+            if new_start_date and new_end_date:
+                # Obtener la organización del proyecto
+                organization = db.query(Organization).filter(
+                    Organization.organization_id == db_project.organization_id
+                ).first()
+                
+                calculated_hours = calculate_estimated_hours(
+                    new_start_date,
+                    new_end_date,
+                    new_project_type,
+                    organization
+                )
+                if calculated_hours is not None:
+                    update_data['estimated_hours'] = calculated_hours
+        
+        # Manejar estimated_hours específicamente - debe permitir None para limpiar el valor
+        if hasattr(updates, 'estimated_hours') and 'estimated_hours' in updates.__fields_set__:
+            update_data['estimated_hours'] = updates.estimated_hours
+        
+        for key, value in update_data.items():
             setattr(db_project, key, value)
         
         db.commit()

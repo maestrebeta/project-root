@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -11,22 +11,12 @@ from app.routers import (
     client_router, 
     time_entry_router, 
     ticket_router,
-    country_router
+    country_router,
+    epic_router
 )
-from app.core.database import engine, Base, SessionLocal
-from app.core.init_data import init_data
-from sqlalchemy.orm import Session
-import alembic.config
 import os
 
-def run_migrations():
-    """Ejecuta las migraciones de Alembic"""
-    alembic_cfg = alembic.config.Config("alembic.ini")
-    alembic_cfg.set_main_option("script_location", "alembic")
-    alembic.command.upgrade(alembic_cfg, "head")
-
-# Ejecutar migraciones al inicio
-run_migrations()
+# Las migraciones se ejecutan manualmente con reset_db_direct.py
 
 # Crear instancia de la aplicación
 app = FastAPI(title="SmartPlanner API")
@@ -117,15 +107,9 @@ app.include_router(client_router.router)
 app.include_router(time_entry_router.router)
 app.include_router(ticket_router.router)
 app.include_router(country_router.router)
+app.include_router(epic_router.router)
 
-# Inicializar datos al arrancar
-@app.on_event("startup")
-async def init_app_data():
-    db = SessionLocal()
-    try:
-        init_data(db)
-    finally:
-        db.close()
+# Los datos se inicializan manualmente con reset_db_direct.py
 
 # Ruta de prueba
 @app.get("/")

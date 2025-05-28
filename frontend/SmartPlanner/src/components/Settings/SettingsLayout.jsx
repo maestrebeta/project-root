@@ -4,6 +4,7 @@ import { FiX, FiSettings, FiSliders, FiUsers, FiLayers, FiGlobe, FiShield, FiBel
 import { useAppTheme } from '../../context/ThemeContext';
 import ThemeManager from '../Config/ThemeManager';
 import NotificationsSettings from './NotificationsSettings';
+import WorkHoursSettings from './WorkHoursSettings';
 
 const SETTINGS_SECTIONS = [
   {
@@ -31,6 +32,12 @@ const SETTINGS_SECTIONS = [
     description: 'Configura las preferencias de notificaciones'
   },
   {
+    id: 'work-hours',
+    icon: FiSliders,
+    label: 'Horas de Trabajo',
+    description: 'Configura los horarios laborales de la organización'
+  },
+  {
     id: 'preferences',
     icon: FiSliders,
     label: 'Preferencias',
@@ -54,6 +61,8 @@ export default function SettingsLayout({ onClose }) {
         return <ThemeManager />;
       case 'notifications':
         return <NotificationsSettings />;
+      case 'work-hours':
+        return <WorkHoursSettings />;
       default:
         return (
           <div className="flex items-center justify-center h-full text-gray-500">

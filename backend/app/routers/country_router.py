@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.schemas.country_schema import CountryOut, CountryCreate, CountryUpdate
 from app.crud import country_crud
-from app.core.security import get_current_user  # Ajusta según tu configuración de autenticación
 
 router = APIRouter(prefix="/countries", tags=["Countries"])
 

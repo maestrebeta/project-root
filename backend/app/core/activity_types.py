@@ -17,6 +17,13 @@ ACTIVITY_TYPE_MAPPING: Dict[str, str] = {
     'coding': 'desarrollo',
     'programming': 'desarrollo',
     'design': 'desarrollo',
+    'diseno': 'desarrollo',
+    'revision_codigo': 'desarrollo',
+    'deployment': 'desarrollo',
+    'testing': 'desarrollo',
+    'analisis': 'desarrollo',
+    'investigacion': 'desarrollo',
+    'documentacion': 'desarrollo',
     
     # Reunión
     'meeting': 'reunion',
@@ -47,7 +54,13 @@ def normalize_activity_type(activity_type: Optional[str]) -> str:
     if not activity_type:
         return 'desarrollo'
     
-    lower_activity_type = activity_type.lower()
+    lower_activity_type = activity_type.lower().strip()
+    
+    # Si ya es un tipo válido, devolverlo tal como está
+    if lower_activity_type in DEFAULT_ACTIVITY_TYPES:
+        return lower_activity_type
+    
+    # Si no, buscar en el mapeo
     return ACTIVITY_TYPE_MAPPING.get(lower_activity_type, 'otro')
 
 def add_custom_activity_type(new_type: str, mapped_to: str = 'otro') -> None:
@@ -65,4 +78,12 @@ def get_valid_activity_types() -> List[str]:
     
     :return: Lista de tipos de actividad
     """
-    return DEFAULT_ACTIVITY_TYPES 
+    return DEFAULT_ACTIVITY_TYPES
+
+def get_activity_type_mapping() -> Dict[str, str]:
+    """
+    Obtiene el mapeo completo de tipos de actividad
+    
+    :return: Diccionario con el mapeo de tipos
+    """
+    return ACTIVITY_TYPE_MAPPING.copy() 

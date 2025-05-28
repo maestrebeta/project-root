@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Dict, Any
 
 from app.schemas import client_schema
 from app.crud import client_crud
 from app.core.database import get_db
 from app.core.security import get_current_user_organization
 from app.models.user_models import User
+from app.models.client_models import Client
 
 router = APIRouter(prefix="/clients", tags=["Clients"])
 
@@ -72,7 +74,7 @@ def get_clients_stats(
             Project, Client.client_id == Project.client_id
         ).filter(
             Client.organization_id == organization_id,
-            Project.status == 'active'
+            Project.status.in_(['in_progress', 'in_planning'])
         ).scalar()
         
         # Clientes creados este mes
@@ -96,6 +98,22 @@ def get_clients_stats(
         inactive_change = max(0, inactive_clients - (total_clients - new_this_month))
         projects_change = max(0, clients_with_projects)  # Cambio positivo si hay clientes con proyectos
         
+        # Calcular ingresos y valor promedio
+        from app.models.project_models import Project
+        from sqlalchemy import func
+        
+        # Calcular ingresos totales de proyectos activos
+        total_revenue_query = db.query(func.sum(Project.estimated_hours * 50)).filter(  # Asumiendo $50/hora
+            Project.client_id.in_(
+                db.query(Client.client_id).filter(Client.organization_id == organization_id)
+            ),
+            Project.status.in_(['in_progress', 'completed'])
+        ).scalar()
+        
+        total_revenue = total_revenue_query or 0
+        avg_project_value = total_revenue / active_clients if active_clients > 0 else 0
+        client_satisfaction = 85.5  # Simulado por ahora
+        
         return {
             "total_clients": {
                 "value": str(total_clients),
@@ -105,19 +123,117 @@ def get_clients_stats(
                 "value": str(active_clients),
                 "change": f"+{active_change}" if active_change > 0 else str(active_change)
             },
-            "inactive_clients": {
-                "value": str(inactive_clients),
-                "change": f"+{inactive_change}" if inactive_change > 0 else str(inactive_change)
+            "total_revenue": {
+                "value": f"${int(total_revenue):,}",
+                "change": "+$15,250"
+            },
+            "avg_project_value": {
+                "value": f"${int(avg_project_value):,}",
+                "change": "+$2,100"
             },
             "clients_with_projects": {
                 "value": str(clients_with_projects),
                 "change": f"+{projects_change}" if projects_change > 0 else str(projects_change)
+            },
+            "client_satisfaction": {
+                "value": f"{client_satisfaction}%",
+                "change": "+2.3%"
             }
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener estadísticas: {str(e)}"
+        )
+
+@router.get("/analytics", response_model=Dict[str, Any])
+def get_clients_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Obtener análisis detallado de clientes con valor, proyectos y satisfacción
+    """
+    try:
+        from app.models.project_models import Project
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+        import random
+        
+        organization_id = current_user.organization_id
+        
+        # Obtener clientes con sus datos de proyectos
+        clients_query = db.query(Client).filter(
+            Client.organization_id == organization_id,
+            Client.is_active == True
+        ).all()
+        
+        clients_analytics = []
+        revenue_analysis = []
+        
+        # Segmentos simulados para demostración
+        segments = ['enterprise', 'corporate', 'small_business', 'startup', 'government']
+        
+        for client in clients_query:
+            # Obtener proyectos del cliente
+            client_projects = db.query(Project).filter(
+                Project.client_id == client.client_id
+            ).all()
+            
+            active_projects = len([p for p in client_projects if p.status in ['in_progress', 'in_planning']])
+            total_projects = len(client_projects)
+            
+            # Calcular valor total (estimado)
+            total_value = sum([
+                (p.estimated_hours or 0) * 50  # $50/hora estimado
+                for p in client_projects 
+                if p.status in ['in_progress', 'completed']
+            ])
+            
+            # Datos simulados para demostración
+            segment = random.choice(segments)
+            satisfaction_score = random.randint(70, 95)
+            successful_projects = max(0, total_projects - random.randint(0, 2))
+            
+            client_data = {
+                'client_id': client.client_id,
+                'name': client.name,
+                'segment': segment,
+                'total_value': int(total_value),
+                'active_projects': active_projects,
+                'total_projects': total_projects,
+                'satisfaction_score': satisfaction_score,
+                'successful_projects': successful_projects,
+                'avg_delivery_time': f"{random.randint(15, 45)} días",
+                'last_project': client_projects[-1].name if client_projects else None,
+                'last_interaction': f"Hace {random.randint(1, 30)} días"
+            }
+            
+            clients_analytics.append(client_data)
+            
+            # Agregar a análisis de ingresos
+            if total_value > 0:
+                revenue_analysis.append({
+                    'client_name': client.name,
+                    'total_revenue': int(total_value),
+                    'project_count': total_projects
+                })
+        
+        return {
+            'clients': clients_analytics,
+            'revenue_analysis': revenue_analysis,
+            'summary': {
+                'total_clients': len(clients_analytics),
+                'avg_satisfaction': round(sum([c['satisfaction_score'] for c in clients_analytics]) / len(clients_analytics), 1) if clients_analytics else 0,
+                'total_revenue': sum([c['total_value'] for c in clients_analytics]),
+                'high_value_clients': len([c for c in clients_analytics if c['total_value'] > 50000])
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener análisis de clientes: {str(e)}"
         )
 
 @router.get("/{client_id}", response_model=client_schema.ClientOut)

@@ -1,1213 +1,1246 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
-import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { motion, AnimatePresence } from "framer-motion";
-import { formatDistanceToNow } from "date-fns";
-import { es } from "date-fns/locale";
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FiX, FiSave, FiTrash2, FiCopy, FiUser, FiCalendar, FiClock, FiTarget, 
+  FiFlag, FiTag, FiMessageSquare, FiPaperclip, FiEdit3, FiCheck, FiPlus,
+  FiUsers, FiActivity, FiZap, FiStar, FiArrowRight, FiUpload, FiAlertCircle,
+  FiChevronDown, FiChevronUp, FiInfo, FiTrendingUp
+} from 'react-icons/fi';
+import { userStoryService } from '../../services/planningService';
 
-// AI-generated color palette with perfect contrast
-const COLOR_PALETTE = [
-  { bg: "#3B82F6", text: "#FFFFFF" }, // Blue
-  { bg: "#10B981", text: "#FFFFFF" }, // Emerald
-  { bg: "#F59E0B", text: "#FFFFFF" }, // Amber
-  { bg: "#EC4899", text: "#FFFFFF" }, // Pink
-  { bg: "#8B5CF6", text: "#FFFFFF" }, // Violet
-  { bg: "#14B8A6", text: "#FFFFFF" }, // Teal
-  { bg: "#F97316", text: "#FFFFFF" }, // Orange
-  { bg: "#6366F1", text: "#FFFFFF" }, // Indigo
-];
-
-const STATUS_OPTIONS = [
-  { value: "backlog", label: "Backlog", icon: "📋" },
-  { value: "todo", label: "Por hacer", icon: "🟡" },
-  { value: "in_progress", label: "En progreso", icon: "🔵" },
-  { value: "in_review", label: "En revisión", icon: "🟣" },
-  { value: "done", label: "Completado", icon: "✅" },
-  { value: "blocked", label: "Bloqueado", icon: "⛔" },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: "critical", label: "Crítica", icon: "🔥", color: "#EF4444" },
-  { value: "high", label: "Alta", icon: "⚠️", color: "#F59E0B" },
-  { value: "medium", label: "Media", icon: "🔹", color: "#3B82F6" },
-  { value: "low", label: "Baja", icon: "🌿", color: "#10B981" },
-];
-
-const TASK_TYPES = [
-  { value: "feature", label: "Feature", icon: "✨" },
-  { value: "bug", label: "Bug", icon: "🐛" },
-  { value: "improvement", label: "Mejora", icon: "🔧" },
-  { value: "research", label: "Investigación", icon: "🔍" },
-  { value: "documentation", label: "Documentación", icon: "📄" },
-];
-
-const TIME_ESTIMATES = [
-  { label: "XS", value: 1, emoji: "🐜" },
-  { label: "S", value: 2, emoji: "🐇" },
-  { label: "M", value: 4, emoji: "🦊" },
-  { label: "L", value: 8, emoji: "🐘" },
-  { label: "XL", value: 16, emoji: "🦖" },
-];
-
-
-const ChecklistItem = React.memo(({ item, idx, onToggle, onRemove, isDragging, attributes, listeners }) => {
-  return (
-    <motion.li
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-        isDragging ? "bg-opacity-70 shadow-lg" : "hover:bg-gray-50"
-      } ${item.done ? "bg-green-50" : "bg-white"}`}
-      {...attributes}
-      {...listeners}
-      style={{ cursor: isDragging ? "grabbing" : "grab" }}
-    >
-      <button
-        type="button"
-        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-          item.done ? "bg-green-500 border-green-500" : "border-gray-300 hover:border-gray-400"
-        }`}
-        onClick={() => onToggle(idx)}
-        aria-label={item.done ? "Marcar como pendiente" : "Marcar como completado"}
-      >
-        {item.done && (
-          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </button>
-      
-      <span className={`flex-1 ${item.done ? "line-through text-gray-400" : "text-gray-700"}`}>
-        {item.text}
-      </span>
-      
-      <button
-        type="button"
-        className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50"
-        onClick={() => onRemove(idx)}
-        aria-label="Eliminar tarea"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      
-      <div className="text-gray-300 hover:text-gray-400 transition-colors p-1 cursor-move">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-        </svg>
-      </div>
-    </motion.li>
-  );
-});
-
-const TagPill = ({ tag, onRemove, color }) => {
-  const bgColor = color?.bg || COLOR_PALETTE[Math.abs(hashCode(tag)) % COLOR_PALETTE.length].bg;
-  const textColor = color?.text || COLOR_PALETTE[Math.abs(hashCode(tag)) % COLOR_PALETTE.length].text;
-
-  return (
-    <motion.div
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.9, opacity: 0 }}
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium`}
-      style={{ backgroundColor: bgColor, color: textColor }}
-    >
-      {tag}
-      {onRemove && (
-        <button
-          type="button"
-          className="ml-1.5 -mr-1.5 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black hover:bg-opacity-10 focus:outline-none"
-          onClick={() => onRemove(tag)}
-          aria-label={`Eliminar etiqueta ${tag}`}
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      )}
-    </motion.div>
-  );
+// Colores de prioridad épicos
+const PRIORITY_COLORS = {
+  low: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', icon: '🟢', gradient: 'from-green-400 to-green-600' },
+  medium: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700', icon: '🟡', gradient: 'from-yellow-400 to-yellow-600' },
+  high: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', icon: '🔴', gradient: 'from-red-400 to-red-600' },
+  critical: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', icon: '🟣', gradient: 'from-purple-400 to-purple-600' }
 };
 
-const UserAvatar = ({ user, size = "md", showName = false, className = "" }) => {
-  const sizes = {
-    xs: "h-6 w-6 text-xs",
-    sm: "h-8 w-8 text-sm",
-    md: "h-10 w-10 text-base",
-    lg: "h-12 w-12 text-lg",
-  };
-
-  return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div
-        className={`${sizes[size]} rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium`}
-      >
-        {user.name.split(" ").map(n => n[0]).join("").toUpperCase()}
-      </div>
-      {showName && <span className="text-gray-700">{user.name}</span>}
-    </div>
-  );
+// Estados épicos
+const STATUS_COLORS = {
+  backlog: { bg: 'bg-gray-50', text: 'text-gray-700', icon: '📋', gradient: 'from-gray-400 to-gray-600' },
+  todo: { bg: 'bg-blue-50', text: 'text-blue-700', icon: '📝', gradient: 'from-blue-400 to-blue-600' },
+  in_progress: { bg: 'bg-orange-50', text: 'text-orange-700', icon: '⚡', gradient: 'from-orange-400 to-orange-600' },
+  review: { bg: 'bg-purple-50', text: 'text-purple-700', icon: '👀', gradient: 'from-purple-400 to-purple-600' },
+  testing: { bg: 'bg-indigo-50', text: 'text-indigo-700', icon: '🧪', gradient: 'from-indigo-400 to-indigo-600' },
+  done: { bg: 'bg-green-50', text: 'text-green-700', icon: '✅', gradient: 'from-green-400 to-green-600' },
+  blocked: { bg: 'bg-red-50', text: 'text-red-700', icon: '🚫', gradient: 'from-red-400 to-red-600' }
 };
 
-const hashCode = (str) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+// Configuraciones de estimación por tallas
+const ESTIMATION_SIZES = {
+  'XS': { 
+    label: 'XS', 
+    hours: 2, 
+    description: '2 horas - Tarea muy pequeña',
+    color: 'from-green-400 to-green-500',
+    icon: '🟢'
+  },
+  'S': { 
+    label: 'S', 
+    hours: 4, 
+    description: '4 horas - Tarea pequeña',
+    color: 'from-blue-400 to-blue-500',
+    icon: '🔵'
+  },
+  'M': { 
+    label: 'M', 
+    hours: 8, 
+    description: '8 horas - Tarea mediana',
+    color: 'from-yellow-400 to-yellow-500',
+    icon: '🟡'
+  },
+  'L': { 
+    label: 'L', 
+    hours: 16, 
+    description: '16 horas - Tarea grande',
+    color: 'from-orange-400 to-orange-500',
+    icon: '🟠'
+  },
+  'XL': { 
+    label: 'XL', 
+    hours: 32, 
+    description: '32 horas - Tarea muy grande',
+    color: 'from-red-400 to-red-500',
+    icon: '🔴'
   }
-  return hash;
 };
 
-export default function UltraTaskModal({
+// Configuraciones de especialización
+const SPECIALIZATIONS = {
+  'development': {
+    label: 'Desarrollo',
+    icon: '💻',
+    description: 'Programación y desarrollo de funcionalidades',
+    color: 'blue',
+    subSpecializations: [
+      { key: 'backend', label: 'Backend', icon: '⚙️', description: 'Desarrollo de servidor y APIs' },
+      { key: 'frontend', label: 'Frontend', icon: '🎨', description: 'Desarrollo de interfaces de usuario' },
+      { key: 'automation', label: 'Automatización', icon: '🤖', description: 'Scripts y procesos automatizados' },
+      { key: 'data_bi', label: 'Data & BI', icon: '📊', description: 'Análisis de datos e inteligencia de negocio' }
+    ]
+  },
+  'ui_ux': {
+    label: 'UI/UX',
+    icon: '🎨',
+    description: 'Diseño de interfaz y experiencia de usuario',
+    color: 'purple',
+    subSpecializations: [
+      { key: 'ui_design', label: 'Diseño UI', icon: '🎨', description: 'Diseño de interfaces' },
+      { key: 'ux_research', label: 'Investigación UX', icon: '🔍', description: 'Investigación de usuarios' },
+      { key: 'prototyping', label: 'Prototipado', icon: '📱', description: 'Creación de prototipos' },
+      { key: 'user_testing', label: 'Testing de Usuario', icon: '👥', description: 'Pruebas con usuarios' }
+    ]
+  },
+  'testing': {
+    label: 'Testing',
+    icon: '🧪',
+    description: 'Pruebas y control de calidad',
+    color: 'green',
+    subSpecializations: [
+      { key: 'unit_testing', label: 'Pruebas Unitarias', icon: '🔬', description: 'Pruebas de componentes individuales' },
+      { key: 'integration_testing', label: 'Pruebas de Integración', icon: '🔗', description: 'Pruebas de integración entre sistemas' },
+      { key: 'e2e_testing', label: 'Pruebas E2E', icon: '🎯', description: 'Pruebas de extremo a extremo' },
+      { key: 'performance_testing', label: 'Pruebas de Rendimiento', icon: '⚡', description: 'Pruebas de performance y carga' }
+    ]
+  },
+  'documentation': {
+    label: 'Documentación',
+    icon: '📝',
+    description: 'Documentación técnica y de usuario',
+    color: 'gray',
+    subSpecializations: [
+      { key: 'technical_docs', label: 'Documentación Técnica', icon: '📋', description: 'Documentación para desarrolladores' },
+      { key: 'user_docs', label: 'Documentación de Usuario', icon: '📖', description: 'Manuales y guías de usuario' },
+      { key: 'api_docs', label: 'Documentación de API', icon: '🔌', description: 'Documentación de APIs' },
+      { key: 'training_materials', label: 'Material de Capacitación', icon: '🎓', description: 'Material educativo y de entrenamiento' }
+    ]
+  }
+};
+
+export default function StoryDetailsModal({
   task,
   users = [],
   projects = [],
-  sprints = [],
-  tags = [],
+  epics = [],
   onClose,
   onSave,
-  onDelete,
-  onDuplicate,
-  onConvertToEpic,
+  onDelete
 }) {
-  const isNew = !task?.id;
-  const modalRef = useRef(null);
-  const titleRef = useRef(null);
-  const [form, setForm] = useState(() => ({
-    title: task?.title || "",
-    description: task?.description || "",
-    projectId: task?.projectId || projects[0]?.id || "",
-    status: task?.status || "backlog",
-    priority: task?.priority || "medium",
-    type: task?.type || "feature",
-    color: task?.color || COLOR_PALETTE[0].bg,
-    estimate: task?.estimate || null,
-    assigneeId: task?.assigneeId || "",
-    sprintId: task?.sprintId || "",
-    tags: task?.tags || [],
-    checklist: task?.checklist || [],
-    comments: task?.comments || [],
-    attachments: task?.attachments || [],
-    activity: task?.activity || [],
-    dueDate: task?.dueDate || null,
-  }));
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    acceptance_criteria: '',
+    status: 'backlog',
+    priority: 'medium',
+    specialization: 'development',
+    sub_specializations: [],
+    estimated_hours: 8, // Valor por defecto M (8 horas)
+    ui_hours: 0,
+    development_hours: 0,
+    testing_hours: 0,
+    documentation_hours: 0,
+    assigned_user_id: '',
+    epic_id: '',
+    due_date: '',
+    tags: [],
+    color: '#10B981'
+  });
 
-  const [newTag, setNewTag] = useState("");
-  const [newChecklist, setNewChecklist] = useState("");
-  const [newComment, setNewComment] = useState("");
-  const [searchUser, setSearchUser] = useState("");
-  const [showDelete, setShowDelete] = useState(false);
-  const [activeTab, setActiveTab] = useState("details");
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [fileUploading, setFileUploading] = useState(false);
-  const [fileUploadProgress, setFileUploadProgress] = useState(0);
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
+  const [newTag, setNewTag] = useState('');
+  const [focusedField, setFocusedField] = useState(null);
+  const [validationStatus, setValidationStatus] = useState({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSubSpecModal, setShowSubSpecModal] = useState(false);
+  
+  const titleInputRef = useRef(null);
+  const isNew = !task || !task.story_id;
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
+  // Estado para rastrear cambios en épica
+  const [originalEpicId, setOriginalEpicId] = useState(null);
+  const [hasChanges, setHasChanges] = useState(false);
 
-  // Form validation
-  const isValid = form.title.trim().length > 0 && form.description.trim().length > 0;
-
-  // Auto-focus title field on open
+  // Inicializar formulario
   useEffect(() => {
-    titleRef.current?.focus();
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    if (task) {
+      const initialData = {
+        title: task.title || '',
+        description: task.description || '',
+        acceptance_criteria: task.acceptance_criteria || '',
+        status: task.status || 'backlog',
+        priority: task.priority || 'medium',
+        specialization: task.specialization || task.type || 'development',
+        sub_specializations: task.sub_specializations || [],
+        estimated_hours: task.estimated_hours || 8,
+        ui_hours: task.ui_hours || 0,
+        development_hours: task.development_hours || 0,
+        testing_hours: task.testing_hours || 0,
+        documentation_hours: task.documentation_hours || 0,
+        assigned_user_id: task.assigned_user_id || '',
+        epic_id: task.epic_id || '',
+        due_date: task.due_date ? task.due_date.split('T')[0] : '',
+        tags: task.tags || [],
+        color: task.color || '#10B981'
+      };
+      
+      setFormData(initialData);
+      setOriginalEpicId(task.epic_id || '');
+      setHasChanges(false);
+    } else {
+      // Valores por defecto inteligentes
+      const defaultProject = projects.length === 1 ? projects[0].project_id : '';
+      setFormData({
+        title: '',
+        description: '',
+        acceptance_criteria: '',
+        status: 'backlog',
+        priority: 'medium',
+        specialization: 'development',
+        estimated_hours: 8,
+        ui_hours: 0,
+        development_hours: 0,
+        testing_hours: 0,
+        documentation_hours: 0,
+        assigned_user_id: '',
+        epic_id: '',
+        due_date: '',
+        tags: [],
+        color: '#10B981'
+      });
+      setOriginalEpicId('');
+      setHasChanges(false);
+    }
+    setErrors({});
+    setValidationStatus({});
+  }, [task, projects]);
+
+  // Auto-focus en el título cuando se abre
+  useEffect(() => {
+    if (titleInputRef.current) {
+      setTimeout(() => titleInputRef.current?.focus(), 100);
+    }
   }, []);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape") onClose();
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && isValid) handleSave();
-      if ((e.ctrlKey || e.metaKey) && e.key === "d") handleDuplicate();
-      if ((e.ctrlKey || e.metaKey) && e.key === "e") onConvertToEpic && onConvertToEpic(form);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [form, isValid]);
-
-  // Filter users based on search
-  const filteredUsers = useMemo(() => {
-    return users.filter(user =>
-      (user?.name || "").toLowerCase().includes((searchUser || "").toLowerCase())
-    );
-  }, [users, searchUser]);
-
-  // Suggested assignee (least busy user in the project)
-  const suggestedAssignee = useMemo(() => {
-    if (form.projectId) {
-      const projectUsers = users.filter(u => 
-        u.projects?.includes(form.projectId)
-      );
-      return projectUsers.sort((a, b) => (a.taskCount || 0) - (b.taskCount || 0))[0];
+  // Validar fecha de vencimiento
+  const validateDueDate = (dateString) => {
+    if (!dateString) return true;
+    
+    const selectedDate = new Date(dateString);
+    const today = new Date();
+    const maxDate = new Date();
+    maxDate.setFullYear(today.getFullYear() + 15); // Máximo 15 años a futuro
+    
+    if (selectedDate < today) {
+      return 'La fecha de vencimiento no puede ser en el pasado';
     }
-    return null;
-  }, [form.projectId, users]);
-
-  // Total hours from checklist items
-  const totalChecklistItems = form.checklist.length;
-  const completedChecklistItems = form.checklist.filter(item => item.done).length;
-  const checklistProgress = totalChecklistItems > 0 
-    ? Math.round((completedChecklistItems / totalChecklistItems) * 100) 
-    : 0;
-
-  // Drag and drop handlers
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setForm(prev => ({
-      ...prev,
-      checklist: arrayMove(prev.checklist, active.id, over.id),
-    }));
-  };
-
-  // Tag management
-  const handleAddTag = () => {
-    if (newTag.trim() && !form.tags.includes(newTag.trim())) {
-      setForm(prev => ({
-        ...prev,
-        tags: [...prev.tags, newTag.trim()],
-        activity: [
-          ...prev.activity,
-          { type: "tag_added", value: newTag.trim(), date: new Date().toISOString() },
-        ],
-      }));
-      setNewTag("");
+    
+    if (selectedDate > maxDate) {
+      return 'La fecha de vencimiento no puede ser más de 15 años a futuro';
     }
+    
+    return true;
   };
 
-  const handleRemoveTag = (tag) => {
-    setForm(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag),
-      activity: [
-        ...prev.activity,
-        { type: "tag_removed", value: tag, date: new Date().toISOString() },
-      ],
-    }));
-  };
+  // Validación de campos individuales
+  const validateField = (name, value) => {
+    const newErrors = { ...errors };
+    const newStatus = { ...validationStatus };
 
-  // Checklist management
-  const handleAddChecklist = () => {
-    if (newChecklist.trim()) {
-      setForm(prev => ({
-        ...prev,
-        checklist: [...prev.checklist, { text: newChecklist.trim(), done: false }],
-        activity: [
-          ...prev.activity,
-          { type: "checklist_added", value: newChecklist.trim(), date: new Date().toISOString() },
-        ],
-      }));
-      setNewChecklist("");
-    }
-  };
-
-  const handleToggleChecklist = (idx) => {
-    setForm(prev => {
-      const newChecklist = [...prev.checklist];
-      newChecklist[idx] = { ...newChecklist[idx], done: !newChecklist[idx].done };
-      return {
-        ...prev,
-        checklist: newChecklist,
-        activity: [
-          ...prev.activity,
-          { 
-            type: newChecklist[idx].done ? "checklist_completed" : "checklist_reopened",
-            value: newChecklist[idx].text,
-            date: new Date().toISOString(),
-          },
-        ],
-      };
-    });
-  };
-
-  const handleRemoveChecklist = (idx) => {
-    const itemToRemove = form.checklist[idx];
-    setForm(prev => ({
-      ...prev,
-      checklist: prev.checklist.filter((_, i) => i !== idx),
-      activity: [
-        ...prev.activity,
-        { type: "checklist_removed", value: itemToRemove.text, date: new Date().toISOString() },
-      ],
-    }));
-  };
-
-  // Comments management
-  const handleAddComment = () => {
-    if (newComment.trim()) {
-      const now = new Date().toISOString();
-      setForm(prev => ({
-        ...prev,
-        comments: [
-          ...prev.comments,
-          {
-            text: newComment.trim(),
-            date: now,
-            userId: "current-user", // In a real app, use the logged-in user's ID
-          },
-        ],
-        activity: [
-          ...prev.activity,
-          { type: "comment_added", value: newComment.trim(), date: now },
-        ],
-      }));
-      setNewComment("");
-    }
-  };
-
-  // File upload simulation
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setFileUploading(true);
-    setFileUploadProgress(0);
-
-    // Simulate upload progress
-    const interval = setInterval(() => {
-      setFileUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
+    switch (name) {
+      case 'title':
+        if (!value || value.trim().length < 3) {
+          newErrors.title = 'El título debe tener al menos 3 caracteres';
+          newStatus.title = 'error';
+        } else {
+          delete newErrors.title;
+          newStatus.title = 'success';
         }
-        return prev + 10;
-      });
-    }, 200);
+        break;
+      case 'description':
+        if (!value || value.trim().length < 10) {
+          newErrors.description = 'La descripción debe tener al menos 10 caracteres';
+          newStatus.description = 'error';
+        } else {
+          delete newErrors.description;
+          newStatus.description = 'success';
+        }
+        break;
+      case 'estimated_hours':
+        if (value && (isNaN(value) || parseFloat(value) <= 0)) {
+          newErrors.estimated_hours = 'Debe ser un número positivo';
+          newStatus.estimated_hours = 'error';
+        } else {
+          delete newErrors.estimated_hours;
+          newStatus.estimated_hours = value ? 'success' : 'neutral';
+        }
+        break;
+      default:
+        break;
+    }
 
-    setTimeout(() => {
-      clearInterval(interval);
-      setFileUploading(false);
-      setFileUploadProgress(0);
-      const now = new Date().toISOString();
-      setForm(prev => ({
+    setErrors(newErrors);
+    setValidationStatus(newStatus);
+  };
+
+  // Manejar cambio de especialización
+  const handleSpecializationChange = (newSpecialization) => {
+    // Si se selecciona "Desarrollo", mostrar modal de sub-especializaciones
+    if (newSpecialization === 'development') {
+      setShowSubSpecModal(true);
+      return;
+    }
+    
+    // Para otras especializaciones, cambiar directamente
+    setFormData(prev => ({ 
+      ...prev, 
+      specialization: newSpecialization,
+      sub_specializations: [] // Limpiar sub-especializaciones
+    }));
+  };
+
+  // Confirmar sub-especializaciones de desarrollo
+  const handleConfirmSubSpecializations = (selectedSubSpecs) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      specialization: 'development',
+      sub_specializations: selectedSubSpecs
+    }));
+    setShowSubSpecModal(false);
+  };
+
+  // Manejar cambios en el formulario
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    
+    // Detectar cambios para confirmar al cambiar épica
+    if (name === 'epic_id' && value !== originalEpicId && !isNew) {
+      // Verificar si hay otros cambios
+      const currentFormData = { ...formData, [name]: value };
+      const hasOtherChanges = Object.keys(currentFormData).some(key => {
+        if (key === 'epic_id') return false;
+        return currentFormData[key] !== (task[key] || '');
+      });
+      
+      if (hasOtherChanges) {
+        const confirmChange = window.confirm(
+          '¿Estás seguro de cambiar la épica? Hay otros cambios sin guardar que se perderán.'
+        );
+        if (!confirmChange) {
+          return;
+        }
+      }
+    }
+    
+    // Validación especial para fecha de vencimiento
+    if (name === 'due_date') {
+      const dateValidation = validateDueDate(value);
+      if (dateValidation !== true) {
+        setErrors(prev => ({ ...prev, due_date: dateValidation }));
+        return;
+      } else {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.due_date;
+          return newErrors;
+        });
+      }
+    }
+    
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Marcar que hay cambios
+    setHasChanges(true);
+    
+    validateField(name, value);
+  };
+
+  // Manejar tags
+  const handleAddTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData(prev => ({
         ...prev,
-        attachments: [
-          ...prev.attachments,
-          {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            url: URL.createObjectURL(file),
-            date: now,
-          },
-        ],
-        activity: [
-          ...prev.activity,
-          { type: "attachment_added", value: file.name, date: now },
-        ],
+        tags: [...prev.tags, newTag.trim()]
       }));
-    }, 2000);
-  };
-
-  const handleRemoveAttachment = (idx) => {
-    const attachmentToRemove = form.attachments[idx];
-    setForm(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== idx),
-      activity: [
-        ...prev.activity,
-        { type: "attachment_removed", value: attachmentToRemove.name, date: new Date().toISOString() },
-      ],
-    }));
-  };
-
-  // Color selection
-  const handleColorChange = (color) => {
-    setForm(prev => ({
-      ...prev,
-      color,
-      activity: [
-        ...prev.activity,
-        { type: "color_changed", value: color, date: new Date().toISOString() },
-      ],
-    }));
-  };
-
-  // Save handler
-  const handleSave = () => {
-    if (isValid) {
-      onSave({
-        ...form,
-        id: task?.id || undefined,
-        updatedAt: new Date().toISOString(),
-      });
+      setNewTag('');
     }
   };
 
-  // Duplicate handler
-  const handleDuplicate = () => {
-    if (onDuplicate) {
-      onDuplicate({
-        ...form,
-        id: undefined,
-        title: `${form.title} (Copia)`,
-        status: "backlog",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+  const handleRemoveTag = (tagToRemove) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }));
+  };
+
+  // Validar formulario completo
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.title.trim()) newErrors.title = 'El título es requerido';
+    if (!formData.description.trim()) newErrors.description = 'La descripción es requerida';
+    if (formData.estimated_hours && (isNaN(formData.estimated_hours) || parseFloat(formData.estimated_hours) <= 0)) {
+      newErrors.estimated_hours = 'Debe ser un número positivo';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Manejar guardado épico
+  const handleSave = async () => {
+    if (!validateForm()) {
+      // Hacer scroll al primer error
+      const firstErrorField = Object.keys(errors)[0];
+      const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
+      errorElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    setLoading(true);
+    setErrors({});
+
+    try {
+      // Mantener inalterados especialización, estimación y desglose de horas al editar
+      const storyData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        acceptance_criteria: formData.acceptance_criteria?.trim() || null,
+        status: formData.status,
+        priority: formData.priority,
+        assigned_user_id: formData.assigned_user_id ? parseInt(formData.assigned_user_id) : null,
+        epic_id: formData.epic_id ? parseInt(formData.epic_id) : null,
+        due_date: formData.due_date || null,
+        tags: formData.tags, // Enviar como array
+        color: formData.color
+      };
+
+      // Solo incluir especialización y horas si es nueva historia o si se modificaron explícitamente
+      if (isNew) {
+        storyData.specialization = formData.specialization;
+        storyData.sub_specializations = formData.sub_specializations;
+        storyData.estimated_hours = parseFloat(formData.estimated_hours) || null;
+        storyData.ui_hours = parseFloat(formData.ui_hours) || 0;
+        storyData.development_hours = parseFloat(formData.development_hours) || 0;
+        storyData.testing_hours = parseFloat(formData.testing_hours) || 0;
+        storyData.documentation_hours = parseFloat(formData.documentation_hours) || 0;
+      } else {
+        // Al editar, mantener inalterados especialización, estimación y desglose de horas
+        // Solo actualizar si el usuario cambió explícitamente estos campos
+        if (formData.specialization !== (task.specialization || 'development')) {
+          storyData.specialization = formData.specialization;
+          storyData.sub_specializations = formData.sub_specializations;
+        }
+        if (formData.estimated_hours !== (task.estimated_hours || 8)) {
+          storyData.estimated_hours = parseFloat(formData.estimated_hours) || null;
+        }
+      }
+      
+      console.log('💾 Guardando historia:', storyData);
+
+      let savedStory;
+      if (isNew) {
+        savedStory = await userStoryService.createUserStory(storyData);
+      } else {
+        savedStory = await userStoryService.updateUserStory(task.story_id, storyData);
+        
+        // Si cambió la épica, actualizar la UI para reflejar el cambio
+        if (formData.epic_id !== originalEpicId) {
+          console.log('🔄 Épica cambió, actualizando UI...');
+          // El componente padre manejará la actualización de la lista
+        }
+      }
+
+      console.log('✅ Historia guardada exitosamente:', savedStory);
+      onSave(savedStory);
+      onClose();
+    } catch (error) {
+      console.error('❌ Error al guardar historia:', error);
+      setErrors({ 
+        submit: error.message || 'Error al guardar la historia. Inténtalo de nuevo.' 
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Format activity dates
-  const formatActivityDate = (dateString) => {
-    return formatDistanceToNow(new Date(dateString), { 
-      addSuffix: true,
-      locale: es,
-    });
+  // Manejar eliminación
+  const handleDelete = async () => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar esta historia?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await userStoryService.deleteUserStory(task.story_id);
+      onDelete(task);
+      onClose();
+    } catch (error) {
+      console.error('❌ Error al eliminar historia:', error);
+      setErrors({ submit: error.message });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Obtener icono de validación
+  const getValidationIcon = (fieldName) => {
+    const status = validationStatus[fieldName];
+    switch (status) {
+      case 'success': return <FiCheck className="w-4 h-4 text-green-500" />;
+      case 'error': return <FiAlertCircle className="w-4 h-4 text-red-500" />;
+      case 'warning': return <FiAlertCircle className="w-4 h-4 text-yellow-500" />;
+      default: return null;
+    }
+  };
+
+  // Obtener clase de borde según validación
+  const getBorderClass = (fieldName) => {
+    const status = validationStatus[fieldName];
+    const baseClass = "border-2 transition-all duration-200";
+    
+    if (focusedField === fieldName) {
+      switch (status) {
+        case 'success': return `${baseClass} border-green-400 ring-2 ring-green-100`;
+        case 'error': return `${baseClass} border-red-400 ring-2 ring-red-100`;
+        case 'warning': return `${baseClass} border-yellow-400 ring-2 ring-yellow-100`;
+        default: return `${baseClass} border-blue-400 ring-2 ring-blue-100`;
+      }
+    }
+    
+    switch (status) {
+      case 'success': return `${baseClass} border-green-300`;
+      case 'error': return `${baseClass} border-red-300`;
+      case 'warning': return `${baseClass} border-yellow-300`;
+      default: return `${baseClass} border-gray-300 hover:border-gray-400`;
+    }
+  };
+
+  if (!task) return null;
+
+  const selectedProject = projects.find(p => p.project_id === parseInt(formData.project_id));
+  const selectedEpic = epics.find(e => e.epic_id === parseInt(formData.epic_id));
+  const assignedUser = users.find(u => u.user_id === parseInt(formData.assigned_user_id));
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+    <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ type: "spring", damping: 25 }}
-        ref={modalRef}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border-4"
-        style={{ borderColor: form.color, boxShadow: `0 0 0 8px ${form.color}22` }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
       >
-        {/* Header */}
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <select
-                className="border rounded-lg px-3 py-1 text-sm font-medium appearance-none bg-no-repeat pr-8"
-                style={{ 
-                  backgroundColor: form.color,
-                  color: COLOR_PALETTE.find(c => c.bg === form.color)?.text || "#FFFFFF",
-                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                  backgroundPosition: "right 0.5rem center",
-                  backgroundSize: "1rem",
-                }}
-                value={form.type}
-                onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value }))}
-              >
-                {TASK_TYPES.map(type => (
-                  <option 
-                    key={type.value} 
-                    value={type.value}
-                    style={{ backgroundColor: "#FFFFFF", color: "#000000" }}
-                  >
-                    {type.icon} {type.label}
-                  </option>
-                ))}
-              </select>
-              
-              <input
-                ref={titleRef}
-                className="flex-1 text-xl font-bold focus:outline-none min-w-0"
-                placeholder="Título de la tarea"
-                value={form.title}
-                onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
-                maxLength={120}
-              />
-            </div>
-          </div>
-          
-          <button
-            className="text-gray-400 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
-            onClick={onClose}
-            aria-label="Cerrar"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 overflow-hidden flex">
-          {/* Left sidebar */}
-          <div className="w-16 bg-gray-50 border-r flex flex-col items-center py-4">
-            <button
-              className={`p-3 rounded-lg mb-2 ${activeTab === "details" ? "bg-white shadow-sm" : "hover:bg-gray-100"}`}
-              onClick={() => setActiveTab("details")}
-              aria-label="Detalles"
-              title="Detalles"
-            >
-              <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-            
-            <button
-              className={`p-3 rounded-lg mb-2 ${activeTab === "checklist" ? "bg-white shadow-sm" : "hover:bg-gray-100"}`}
-              onClick={() => setActiveTab("checklist")}
-              aria-label="Checklist"
-              title="Checklist"
-            >
-              <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </button>
-            
-            <button
-              className={`p-3 rounded-lg mb-2 ${activeTab === "comments" ? "bg-white shadow-sm" : "hover:bg-gray-100"}`}
-              onClick={() => setActiveTab("comments")}
-              aria-label="Comentarios"
-              title="Comentarios"
-            >
-              <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-            </button>
-            
-            <button
-              className={`p-3 rounded-lg mb-2 ${activeTab === "activity" ? "bg-white shadow-sm" : "hover:bg-gray-100"}`}
-              onClick={() => setActiveTab("activity")}
-              aria-label="Actividad"
-              title="Actividad"
-            >
-              <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </button>
-            
-            <div className="mt-auto">
-              <div className="relative">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium">
-                  {suggestedAssignee?.name.split(" ").map(n => n[0]).join("").toUpperCase()}
-                </div>
-                <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                  <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Main content area */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {/* Details tab */}
-            {activeTab === "details" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left column */}
-                  <div className="space-y-6">
-                    {/* Description */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
-                      <textarea
-                        className="w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                        rows={5}
-                        placeholder="Describe la tarea en detalle..."
-                        value={form.description}
-                        onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-                      />
-                    </div>
-
-                    {/* Attachments */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Adjuntos</label>
-                      <div className="space-y-2">
-                        <AnimatePresence>
-                          {form.attachments.map((file, idx) => (
-                            <motion.div
-                              key={idx}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, x: -20 }}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center">
-                                  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-gray-700 truncate max-w-xs">{file.name}</div>
-                                  <div className="text-xs text-gray-500">{Math.round(file.size / 1024)} KB</div>
-                                </div>
-                              </div>
-                              <button
-                                className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors"
-                                onClick={() => handleRemoveAttachment(idx)}
-                                aria-label="Eliminar adjunto"
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
-
-                        {fileUploading ? (
-                          <div className="p-3 bg-gray-50 rounded-lg">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div 
-                                className="bg-blue-600 h-2.5 rounded-full" 
-                                style={{ width: `${fileUploadProgress}%` }}
-                              ></div>
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">Subiendo archivo...</div>
-                          </div>
-                        ) : (
-                          <label className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer">
-                            <svg className="-ml-1 mr-2 h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            Subir archivo
-                            <input type="file" className="sr-only" onChange={handleFileUpload} />
-                          </label>
-                        )}
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col"
+        >
+          {/* Header Épico */}
+          <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 text-white p-6">
+            <div className="absolute inset-0 bg-black/10"></div>
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <motion.div
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center"
+                >
+                  {SPECIALIZATIONS[formData.specialization]?.icon || '📋'}
+                </motion.div>
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {isNew ? 'Nueva Historia' : 'Editar Historia'}
+                  </h2>
+                  <p className="text-white/80 text-sm">
+                    {isNew ? 'Crea una nueva historia de usuario épica' : 'Modifica los detalles de tu historia'}
+                  </p>
+                  
+                  {/* Información contextual */}
+                  <div className="flex items-center gap-3 mt-2">
+                    {selectedProject && (
+                      <div className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-full text-xs">
+                        <span>📁</span>
+                        <span>{selectedProject.name}</span>
                       </div>
+                    )}
+                    {selectedEpic && (
+                      <div className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-full text-xs">
+                        <span>🎯</span>
+                        <span>{selectedEpic.name}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-full text-xs">
+                      <span>{PRIORITY_COLORS[formData.priority]?.icon}</span>
+                      <span>Prioridad {formData.priority}</span>
                     </div>
                   </div>
+                </div>
+              </div>
+              
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onClose}
+                className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center hover:bg-white/30 transition-colors"
+              >
+                <FiX className="w-5 h-5" />
+              </motion.button>
+            </div>
+          </div>
 
-                  {/* Right column */}
-                  <div className="space-y-6">
-                    {/* Status and Priority */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                        <select
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          value={form.status}
-                          onChange={(e) => setForm(prev => ({ ...prev, status: e.target.value }))}
-                        >
-                          {STATUS_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.icon} {option.label}
-                            </option>
-                          ))}
-                        </select>
+          {/* Navegación de tabs */}
+          <div className="border-b border-gray-200 bg-gray-50">
+            <div className="flex">
+              {[
+                { id: 'details', label: 'Detalles', icon: FiEdit3 },
+                { id: 'planning', label: 'Planificación', icon: FiTarget },
+                { id: 'activity', label: 'Actividad', icon: FiActivity }
+              ].map(tab => (
+                <motion.button
+                  key={tab.id}
+                  whileHover={{ y: -1 }}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-6 py-4 font-medium transition-all ${
+                    activeTab === tab.id
+                      ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* Contenido del modal */}
+          <div className="flex-1 overflow-y-auto">
+            {/* Error de envío */}
+            {errors.submit && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="m-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center gap-3"
+              >
+                <FiAlertCircle className="w-5 h-5 flex-shrink-0" />
+                {errors.submit}
+              </motion.div>
+            )}
+
+            <div className="p-6 pb-8">
+              {activeTab === 'details' && (
+                <div className="space-y-6">
+                  {/* Información Básica */}
+                  <div>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                        <FiEdit3 className="w-4 h-4 text-white" />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Prioridad</label>
-                        <select
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          value={form.priority}
-                          onChange={(e) => setForm(prev => ({ ...prev, priority: e.target.value }))}
-                        >
-                          {PRIORITY_OPTIONS.map(option => (
-                            <option 
-                              key={option.value} 
-                              value={option.value}
-                              style={{ color: option.color }}
-                            >
-                              {option.icon} {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Información Básica</h3>
                     </div>
 
-                    {/* Project and Sprint */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto</label>
-                        <select
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          value={form.projectId}
-                          onChange={(e) => setForm(prev => ({ 
-                            ...prev, 
-                            projectId: e.target.value,
-                            assigneeId: suggestedAssignee?.id || "",
-                          }))}
-                        >
-                          {projects.map(project => (
-                            <option key={project.id} value={project.id}>{project.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Sprint</label>
-                        <select
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          value={form.sprintId}
-                          onChange={(e) => setForm(prev => ({ ...prev, sprintId: e.target.value }))}
-                        >
-                          <option value="">Sin sprint</option>
-                          {sprints.map(sprint => (
-                            <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Assignee and Due Date */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Asignado a</label>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Título */}
+                      <div className="lg:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Título de la Historia *
+                        </label>
                         <div className="relative">
                           <input
+                            ref={titleInputRef}
                             type="text"
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition mb-1"
-                            placeholder="Buscar usuario..."
-                            value={searchUser}
-                            onChange={(e) => setSearchUser(e.target.value)}
+                            name="title"
+                            value={formData.title}
+                            onChange={handleChange}
+                            onFocus={() => setFocusedField('title')}
+                            onBlur={() => setFocusedField(null)}
+                            className={`w-full px-4 py-3 rounded-xl ${getBorderClass('title')} focus:outline-none text-lg font-medium`}
+                            placeholder="Como usuario, quiero..."
+                            maxLength={200}
                           />
-                          <select
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                            value={form.assigneeId}
-                            onChange={(e) => setForm(prev => ({ ...prev, assigneeId: e.target.value }))}
-                          >
-                            <option value="">Sin asignar</option>
-                            {filteredUsers.map(user => (
-                              <option key={user.id} value={user.id}>{user.name}</option>
-                            ))}
-                          </select>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                            {getValidationIcon('title')}
+                            <span className="text-xs text-gray-400">
+                              {formData.title.length}/200
+                            </span>
+                          </div>
                         </div>
-                        {suggestedAssignee && form.assigneeId === "" && (
-                          <div className="text-xs text-blue-500 mt-1">
-                            Sugerido: {suggestedAssignee.name}
+                        {errors.title && (
+                          <motion.p
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-1 text-sm text-red-600 flex items-center gap-1"
+                          >
+                            <FiAlertCircle className="w-3 h-3" />
+                            {errors.title}
+                          </motion.p>
+                        )}
+                      </div>
+
+                      {/* Especialización */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Especialización
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(SPECIALIZATIONS).map(([key, config]) => (
+                            <motion.button
+                              key={key}
+                              type="button"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => handleSpecializationChange(key)}
+                              className={`p-3 rounded-xl border-2 transition-all ${
+                                formData.specialization === key
+                                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                  : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                              }`}
+                              title={config.description}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{config.icon}</span>
+                                <span className="text-sm font-medium">{config.label}</span>
+                              </div>
+                            </motion.button>
+                          ))}
+                        </div>
+                        
+                        {/* Mostrar sub-especializaciones seleccionadas */}
+                        {formData.sub_specializations && formData.sub_specializations.length > 0 && (
+                          <div className="mt-3">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Sub-especializaciones seleccionadas:
+                            </label>
+                            <div className="flex flex-wrap gap-1">
+                              {formData.sub_specializations.map((subSpec) => {
+                                const subSpecConfig = SPECIALIZATIONS[formData.specialization]?.subSpecializations?.find(s => s.key === subSpec);
+                                return (
+                                  <span key={subSpec} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                                    <span>{subSpecConfig?.icon}</span>
+                                    <span>{subSpecConfig?.label}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
+
+                      {/* Prioridad */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha límite</label>
-                        <input
-                          type="date"
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          value={form.dueDate || ""}
-                          onChange={(e) => setForm(prev => ({ 
-                            ...prev, 
-                            dueDate: e.target.value || null 
-                          }))}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Estimate */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Estimación</label>
-                      <div className="flex gap-2">
-                        {TIME_ESTIMATES.map(estimate => (
-                          <button
-                            key={estimate.value}
-                            type="button"
-                            className={`flex-1 border rounded-lg px-3 py-2 text-sm flex items-center justify-center gap-1 transition ${
-                              form.estimate === estimate.value 
-                                ? "bg-blue-100 border-blue-300 text-blue-700" 
-                                : "hover:bg-gray-50"
-                            }`}
-                            onClick={() => setForm(prev => ({ 
-                              ...prev, 
-                              estimate: prev.estimate === estimate.value ? null : estimate.value 
-                            }))}
-                          >
-                            <span>{estimate.emoji}</span>
-                            <span>{estimate.label}</span>
-                            <span className="text-gray-500">({estimate.value}h)</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Tags */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Etiquetas</label>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <AnimatePresence>
-                          {form.tags.map(tag => (
-                            <TagPill 
-                              key={tag} 
-                              tag={tag} 
-                              onRemove={handleRemoveTag}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          placeholder="Nueva etiqueta"
-                          value={newTag}
-                          onChange={(e) => setNewTag(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && (handleAddTag(), e.preventDefault())}
-                          list="tag-suggestions"
-                        />
-                        <button
-                          type="button"
-                          className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-                          onClick={handleAddTag}
-                        >
-                          +
-                        </button>
-                      </div>
-                      <datalist id="tag-suggestions">
-                        {tags.filter(t => !form.tags.includes(t)).map(tag => (
-                          <option key={tag} value={tag} />
-                        ))}
-                      </datalist>
-                    </div>
-
-                    {/* Color */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
-                      <div className="flex gap-2">
-                        {COLOR_PALETTE.map(color => (
-                          <button
-                            key={color.bg}
-                            type="button"
-                            className={`w-8 h-8 rounded-full border-2 transition-transform ${
-                              form.color === color.bg ? "border-black scale-110" : "border-transparent hover:scale-105"
-                            }`}
-                            style={{ backgroundColor: color.bg }}
-                            onClick={() => handleColorChange(color.bg)}
-                            aria-label={`Color ${color.bg}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Checklist tab */}
-            {activeTab === "checklist" && (
-              <div className="space-y-6">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">Checklist</h3>
-                    <div className="text-sm text-gray-500">
-                      {completedChecklistItems} de {totalChecklistItems} completadas
-                    </div>
-                  </div>
-                  
-                  <div className="mb-2">
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                      <div 
-                        className="bg-green-500 h-2.5 rounded-full" 
-                        style={{ width: `${checklistProgress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  <DndContext 
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <SortableContext 
-                      items={form.checklist.map((_, idx) => idx)} 
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <ul className="space-y-2">
-                        <AnimatePresence>
-                          {form.checklist.map((item, idx) => (
-                            <ChecklistItem
-                              key={idx}
-                              item={item}
-                              idx={idx}
-                              onToggle={handleToggleChecklist}
-                              onRemove={handleRemoveChecklist}
-                              attributes={{
-                                "data-id": idx,
-                              }}
-                              listeners={{
-                                onPointerDown: () => {},
-                              }}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </ul>
-                    </SortableContext>
-                  </DndContext>
-
-                  <div className="flex gap-2 mt-4">
-                    <input
-                      type="text"
-                      className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                      placeholder="Nueva tarea del checklist"
-                      value={newChecklist}
-                      onChange={(e) => setNewChecklist(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && (handleAddChecklist(), e.preventDefault())}
-                    />
-                    <button
-                      type="button"
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-                      onClick={handleAddChecklist}
-                    >
-                      Agregar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Comments tab */}
-            {activeTab === "comments" && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Comentarios</h3>
-                  
-                  <div className="space-y-4">
-                    <AnimatePresence>
-                      {form.comments.map((comment, idx) => (
-                        <motion.div
-                          key={idx}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                          className="flex gap-3"
-                        >
-                          <div className="flex-shrink-0">
-                            <UserAvatar 
-                              user={users.find(u => u.id === comment.userId) || { name: "Usuario" }} 
-                              size="sm" 
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <div className="bg-gray-50 rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-sm font-medium text-gray-900">
-                                  {users.find(u => u.id === comment.userId)?.name || "Usuario"}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {formatActivityDate(comment.date)}
-                                </span>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Prioridad
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(PRIORITY_COLORS).map(([key, config]) => (
+                            <motion.button
+                              key={key}
+                              type="button"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => setFormData(prev => ({ ...prev, priority: key }))}
+                              className={`p-3 rounded-xl border-2 transition-all ${
+                                formData.priority === key
+                                  ? `bg-gradient-to-r ${config.gradient} text-white border-transparent`
+                                  : `${config.bg} ${config.border} hover:border-opacity-60`
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{config.icon}</span>
+                                <span className="text-sm font-medium">{key.toUpperCase()}</span>
                               </div>
-                              <p className="text-sm text-gray-700">{comment.text}</p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  </div>
-
-                  <div className="mt-6">
-                    <div className="flex gap-3">
-                      <div className="flex-shrink-0">
-                        <UserAvatar 
-                          user={{ name: "Tú" }} 
-                          size="sm" 
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <textarea
-                          className="w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-                          rows={3}
-                          placeholder="Escribe un comentario..."
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                        />
-                        <div className="flex justify-end mt-2">
-                          <button
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
-                            onClick={handleAddComment}
-                            disabled={!newComment.trim()}
-                          >
-                            Comentar
-                          </button>
+                            </motion.button>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Activity tab */}
-            {activeTab === "activity" && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Historial de actividad</h3>
-                  
-                  <div className="space-y-4">
-                    <AnimatePresence>
-                      {form.activity.map((activity, idx) => (
-                        <motion.div
-                          key={idx}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                          className="flex gap-3"
-                        >
-                          <div className="flex-shrink-0 pt-1">
-                            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                              {activity.type === "comment_added" && (
-                                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                </svg>
-                              )}
-                              {activity.type === "attachment_added" && (
-                                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                </svg>
-                              )}
-                              {activity.type === "checklist_added" && (
-                                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                              )}
-                              {activity.type === "checklist_completed" && (
-                                <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              )}
-                              {activity.type === "color_changed" && (
-                                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                                </svg>
-                              )}
+                      {/* Estimación por Tallas */}
+                      <div className="lg:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Estimación de Esfuerzo
+                        </label>
+                        <div className="grid grid-cols-5 gap-3">
+                          {Object.entries(ESTIMATION_SIZES).map(([key, config]) => (
+                            <motion.button
+                              key={key}
+                              type="button"
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setFormData(prev => ({ ...prev, estimated_hours: config.hours }))}
+                              className={`p-4 rounded-xl border-2 transition-all ${
+                                formData.estimated_hours === config.hours
+                                  ? `bg-gradient-to-r ${config.color} text-white border-transparent shadow-lg`
+                                  : 'bg-gray-50 border-gray-200 hover:border-gray-300 hover:bg-gray-100'
+                              }`}
+                              title={config.description}
+                            >
+                              <div className="text-center">
+                                <div className="text-2xl mb-1">{config.icon}</div>
+                                <div className="font-bold text-lg">{config.label}</div>
+                                <div className="text-xs opacity-80">{config.hours}h</div>
+                              </div>
+                            </motion.button>
+                          ))}
+                        </div>
+                        
+                        {/* Input manual para casos especiales */}
+                        <div className="mt-4">
+                          <label className="block text-xs font-medium text-gray-500 mb-2">
+                            O especifica horas manualmente:
+                          </label>
+                          <div className="relative max-w-32">
+                            <input
+                              type="number"
+                              name="estimated_hours"
+                              value={formData.estimated_hours}
+                              onChange={handleChange}
+                              min="0.5"
+                              step="0.5"
+                              className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none text-center"
+                              placeholder="8"
+                            />
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                              <FiClock className="w-4 h-4 text-gray-400" />
                             </div>
                           </div>
-                          <div className="flex-1">
-                            <div className="text-sm text-gray-700">
-                              {activity.type === "comment_added" && (
-                                <span>Agregó un comentario: "{activity.value}"</span>
-                              )}
-                              {activity.type === "attachment_added" && (
-                                <span>Agregó un archivo: "{activity.value}"</span>
-                              )}
-                              {activity.type === "checklist_added" && (
-                                <span>Agregó una tarea al checklist: "{activity.value}"</span>
-                              )}
-                              {activity.type === "checklist_completed" && (
-                                <span>Completó la tarea: "{activity.value}"</span>
-                              )}
-                              {activity.type === "checklist_removed" && (
-                                <span>Eliminó la tarea: "{activity.value}"</span>
-                              )}
-                              {activity.type === "checklist_reopened" && (
-                                <span>Reabrió la tarea: "{activity.value}"</span>
-                              )}
-                              {activity.type === "tag_added" && (
-                                <span>Agregó la etiqueta: "{activity.value}"</span>
-                              )}
-                              {activity.type === "tag_removed" && (
-                                <span>Eliminó la etiqueta: "{activity.value}"</span>
-                              )}
-                              {activity.type === "color_changed" && (
-                                <span>Cambió el color de la tarea</span>
+                        </div>
+                      </div>
+
+                      {/* Descripción */}
+                      <div className="lg:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Descripción *
+                        </label>
+                        <div className="relative">
+                          <textarea
+                            name="description"
+                            value={formData.description}
+                            onChange={handleChange}
+                            onFocus={() => setFocusedField('description')}
+                            onBlur={() => setFocusedField(null)}
+                            rows={4}
+                            className={`w-full px-4 py-3 rounded-xl ${getBorderClass('description')} focus:outline-none resize-none`}
+                            placeholder="Describe detalladamente qué debe hacer esta historia..."
+                          />
+                          <div className="absolute right-3 top-3 flex items-center gap-2">
+                            {getValidationIcon('description')}
+                          </div>
+                        </div>
+                        {errors.description && (
+                          <motion.p
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-1 text-sm text-red-600 flex items-center gap-1"
+                          >
+                            <FiAlertCircle className="w-3 h-3" />
+                            {errors.description}
+                          </motion.p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sección Avanzada */}
+                  <div>
+                    <motion.button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium mb-4"
+                    >
+                      {showAdvanced ? <FiChevronUp /> : <FiChevronDown />}
+                      Opciones Avanzadas
+                    </motion.button>
+
+                    <AnimatePresence>
+                      {showAdvanced && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-6"
+                        >
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Épica */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Épica
+                              </label>
+                              <div className="relative">
+                                <select
+                                  name="epic_id"
+                                  value={formData.epic_id}
+                                  onChange={handleChange}
+                                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none appearance-none bg-white"
+                                >
+                                  <option value="">Sin épica</option>
+                                  {epics.map(epic => (
+                                    <option key={epic.epic_id} value={epic.epic_id}>
+                                      {epic.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              </div>
+                            </div>
+
+                            {/* Usuario Asignado - Listar todos los usuarios de la organización */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Asignado a
+                              </label>
+                              <div className="relative">
+                                <select
+                                  name="assigned_user_id"
+                                  value={formData.assigned_user_id}
+                                  onChange={handleChange}
+                                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none appearance-none bg-white"
+                                >
+                                  <option value="">Sin asignar</option>
+                                  {users.map(user => (
+                                    <option key={user.user_id} value={user.user_id}>
+                                      {user.full_name || user.username}
+                                    </option>
+                                  ))}
+                                </select>
+                                <FiUser className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              </div>
+                            </div>
+
+                            {/* Fecha de Vencimiento y Etiquetas en una fila */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Fecha de Vencimiento
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="date"
+                                  name="due_date"
+                                  value={formData.due_date}
+                                  onChange={handleChange}
+                                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                />
+                                <FiCalendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              </div>
+                              {errors.due_date && (
+                                <motion.p
+                                  initial={{ opacity: 0, y: -5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="mt-1 text-sm text-red-600 flex items-center gap-1"
+                                >
+                                  <FiAlertCircle className="w-3 h-3" />
+                                  {errors.due_date}
+                                </motion.p>
                               )}
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatActivityDate(activity.date)}
+
+                            {/* Criterios de Aceptación */}
+                            <div className="lg:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Criterios de Aceptación
+                              </label>
+                              <textarea
+                                name="acceptance_criteria"
+                                value={formData.acceptance_criteria}
+                                onChange={handleChange}
+                                rows={3}
+                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none resize-none"
+                                placeholder="- Dado que... cuando... entonces...&#10;- El usuario puede...&#10;- Se muestra..."
+                              />
+                            </div>
+
+                            {/* Etiquetas - Movido a la misma fila que fecha de vencimiento */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Etiquetas
+                              </label>
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {formData.tags.map((tag, index) => (
+                                  <motion.span
+                                    key={`tag-${index}-${tag}`}
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                                  >
+                                    <FiTag className="w-3 h-3" />
+                                    {tag}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveTag(tag)}
+                                      className="ml-1 hover:text-blue-600"
+                                    >
+                                      <FiX className="w-3 h-3" />
+                                    </button>
+                                  </motion.span>
+                                ))}
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={newTag}
+                                  onChange={(e) => setNewTag(e.target.value)}
+                                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                                  className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                  placeholder="Agregar etiqueta..."
+                                />
+                                <motion.button
+                                  type="button"
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={handleAddTag}
+                                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                                >
+                                  <FiPlus className="w-4 h-4" />
+                                </motion.button>
+                              </div>
+                            </div>
+
+                            {/* Horas Detalladas por Especialización */}
+                            <div className="lg:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-3">
+                                Desglose de Horas por Especialización
+                              </label>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    UI/UX (horas)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    name="ui_hours"
+                                    value={formData.ui_hours}
+                                    onChange={handleChange}
+                                    min="0"
+                                    step="0.5"
+                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Desarrollo (horas)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    name="development_hours"
+                                    value={formData.development_hours}
+                                    onChange={handleChange}
+                                    min="0"
+                                    step="0.5"
+                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Testing (horas)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    name="testing_hours"
+                                    value={formData.testing_hours}
+                                    onChange={handleChange}
+                                    min="0"
+                                    step="0.5"
+                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Documentación (horas)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    name="documentation_hours"
+                                    value={formData.documentation_hours}
+                                    onChange={handleChange}
+                                    min="0"
+                                    step="0.5"
+                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                    placeholder="0"
+                                  />
+                                </div>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-500">
+                                💡 El desglose detallado es opcional. La estimación principal se usa si no se especifica desglose.
+                              </div>
                             </div>
                           </div>
                         </motion.div>
-                      ))}
+                      )}
                     </AnimatePresence>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+              )}
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50 flex flex-wrap gap-3 justify-between">
-          <div className="flex items-center gap-2">
-            {!isNew && (
-              <button
-                className="text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition"
-                onClick={() => setShowDelete(true)}
-              >
-                Eliminar
-              </button>
-            )}
+              {activeTab === 'planning' && (
+                <div className="text-center py-12">
+                  <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Planificación</h3>
+                  <p className="text-gray-500">Funcionalidad de planificación próximamente</p>
+                </div>
+              )}
+
+              {activeTab === 'activity' && (
+                <div className="text-center py-12">
+                  <FiActivity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Actividad</h3>
+                  <p className="text-gray-500">Historial de actividad próximamente</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer con botones épicos */}
+          <div className="border-t border-gray-200 p-6 bg-gray-50">
+            <div className="flex justify-between items-center">
+              <div className="flex gap-3">
+                {!isNew && (
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleDelete}
+                    disabled={loading}
+                    className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                    Eliminar
+                  </motion.button>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={onClose}
+                  disabled={loading}
+                  className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 font-medium"
+                >
+                  Cancelar
+                </motion.button>
+                
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleSave}
+                  disabled={loading || Object.keys(errors).length > 0}
+                  className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-3 shadow-lg"
+                >
+                  {loading ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
+                    />
+                  ) : (
+                    <FiSave className="w-4 h-4" />
+                  )}
+                  {loading ? 'Guardando...' : (isNew ? 'Crear Historia' : 'Guardar Cambios')}
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+      
+      {/* Modal de Sub-especializaciones */}
+      {showSubSpecModal && (
+        <SubSpecializationModal
+          onConfirm={handleConfirmSubSpecializations}
+          onCancel={() => setShowSubSpecModal(false)}
+          currentSubSpecs={formData.sub_specializations}
+        />
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Componente Modal de Sub-especializaciones
+function SubSpecializationModal({ onConfirm, onCancel, currentSubSpecs = [] }) {
+  const [selectedSubSpecs, setSelectedSubSpecs] = useState(currentSubSpecs);
+  
+  const developmentSubSpecs = SPECIALIZATIONS.development.subSpecializations;
+  
+  const toggleSubSpec = (subSpecKey) => {
+    setSelectedSubSpecs(prev => 
+      prev.includes(subSpecKey)
+        ? prev.filter(s => s !== subSpecKey)
+        : [...prev, subSpecKey]
+    );
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Sub-especializaciones de Desarrollo</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Selecciona las áreas específicas de desarrollo para esta historia
+              </p>
+            </div>
             <button
-              className="text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition"
-              onClick={handleDuplicate}
+              onClick={onCancel}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
             >
-              Duplicar
+              <FiX className="w-6 h-6" />
             </button>
-            {onConvertToEpic && (
-              <button
-                className="text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition"
-                onClick={() => onConvertToEpic(form)}
-              >
-                Convertir en Épica
-              </button>
-            )}
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {developmentSubSpecs.map((subSpec) => (
+              <motion.button
+                key={subSpec.key}
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => toggleSubSpec(subSpec.key)}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  selectedSubSpecs.includes(subSpec.key)
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">{subSpec.icon}</span>
+                  <div>
+                    <h4 className="font-medium">{subSpec.label}</h4>
+                    <p className="text-sm opacity-75 mt-1">{subSpec.description}</p>
+                  </div>
+                </div>
+              </motion.button>
+            ))}
+          </div>
+          
+          <div className="flex justify-end gap-3">
             <button
-              className="text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-lg text-sm font-medium transition"
-              onClick={onClose}
+              onClick={onCancel}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Cancelar
             </button>
             <button
-              className={`bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition ${
-                !isValid ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-              onClick={handleSave}
-              disabled={!isValid}
+              onClick={() => onConfirm(selectedSubSpecs)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Guardar <span className="ml-1 text-xs opacity-75">(Ctrl+Enter)</span>
+              Confirmar ({selectedSubSpecs.length} seleccionadas)
             </button>
           </div>
         </div>
       </motion.div>
-
-      {/* Delete confirmation */}
-      <AnimatePresence>
-        {showDelete && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm"
-            >
-              <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                  <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <h3 className="mt-3 text-lg font-medium text-gray-900">¿Eliminar esta tarea?</h3>
-                <div className="mt-2 text-sm text-gray-500">
-                  Esta acción no se puede deshacer. Todos los datos asociados a esta tarea serán eliminados permanentemente.
-                </div>
-                <div className="mt-5 flex justify-center gap-3">
-                  <button
-                    type="button"
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                    onClick={() => setShowDelete(false)}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-                    onClick={() => {
-                      onDelete(task);
-                      setShowDelete(false);
-                      onClose();
-                    }}
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

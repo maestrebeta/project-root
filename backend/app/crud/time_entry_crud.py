@@ -1,14 +1,13 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta, timezone, date, time
-from typing import Union, List, Dict
+from typing import Union, Dict
 from app.models.time_entry_models import TimeEntry
 from app.schemas.time_entry_schema import TimeEntryCreate, TimeEntryUpdate
 from sqlalchemy.exc import IntegrityError
 from app.models.project_models import Project
 from app.models.user_models import User
 from app.models.organization_models import Organization
-from app.core.activity_types import normalize_activity_type
 
 def safe_int_convert(value: Union[int, str, None]) -> Union[int, None]:
     """
@@ -194,13 +193,18 @@ def get_time_entries_by_organization(db: Session, organization_id: int, skip: in
     """
     Obtener entradas de tiempo de una organización específica
     """
-    return (
-        db.query(TimeEntry)
-        .filter(TimeEntry.organization_id == organization_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    try:
+        entries = (
+            db.query(TimeEntry)
+            .filter(TimeEntry.organization_id == organization_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return entries if entries else []
+    except Exception as e:
+        print(f"Error en get_time_entries_by_organization: {str(e)}")
+        return []
 
 def get_time_entries_by_user(
     db: Session, 

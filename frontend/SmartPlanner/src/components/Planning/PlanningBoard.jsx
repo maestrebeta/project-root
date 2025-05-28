@@ -1,361 +1,640 @@
-import React, { useState, useMemo, useCallback, Suspense, lazy } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useAppTheme } from "../../context/ThemeContext";
-import { useNavigate } from "react-router-dom";
-
-// Carga dinámica con React.lazy
-const EpicsSidebar = lazy(() => import('./EpicsSidebar'));
-const KanbanBoard = lazy(() => import('./KanbanBoard'));
-const StoryDetailsModal = lazy(() => import('./StoryDetailsModal'));
-
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import KanbanBoard from './KanbanBoardNative';
+import EpicsSidebar from './EpicsSidebar';
+import StoryDetailsModal from './StoryDetailsModal';
+import { 
+  FiFilter, FiSearch, FiSettings, FiMaximize2, FiMinimize2, 
+  FiPlus, FiZap, FiTrendingUp, FiUsers, FiClock, FiTarget,
+  FiChevronLeft, FiChevronRight, FiGrid, FiList, FiEye,
+  FiStar, FiActivity, FiBarChart2, FiLayers, FiFolder
+} from 'react-icons/fi';
 
 export default function PlanningBoard({
   epics,
-  sprints,
   stories,
   users,
   projects,
+  selectedProject,
+  selectedEpic,
   setStories,
   onUpdateStory,
   onCreateStory,
+  onEpicSelect,
+  onEditEpic,
+  onNewEpic,
   kanbanStates,
   onEditKanbanStates,
   filters = {},
-  onFilterChange
+  onFilterChange,
+  viewMode = 'kanban',
+  sidebarCollapsed = false,
+  onToggleSidebar
 }) {
-  const theme = useAppTheme();
-  const navigate = useNavigate();
-  const [selectedEpic, setSelectedEpic] = useState(null);
+  // Estados locales
   const [selectedStory, setSelectedStory] = useState(null);
-  const [showNew, setShowNew] = useState(false);
-  const [activeSprint, setActiveSprint] = useState(sprints.find(s => s.estado === 'Activo') || null);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  
+  // Estados de UI
+  const [expandedColumn, setExpandedColumn] = useState(null);
+  
+  // Debug: Log cuando cambia selectedStory
+  useEffect(() => {
+    console.log('🔍 selectedStory cambió:', selectedStory);
+  }, [selectedStory]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeView, setActiveView] = useState('board'); // board, analytics, timeline
+  const [quickCreateMode, setQuickCreateMode] = useState(false);
 
-  // Memoized filtered stories
+  // Filtrar historias basado en búsqueda y filtros
   const filteredStories = useMemo(() => {
-    let result = [...stories];
-    
-    // Filtro por épica
-    if (selectedEpic && selectedEpic.id) {
-      result = result.filter(st => st.epica_id === selectedEpic.id);
-    }
+    let filtered = stories;
 
-    // Filtro por proyecto
-  if (selectedProject) {
-    result = result.filter(st => st.proyecto_id === selectedProject);
-  }
-    
-    // Filtro por sprint activo
-    if (activeSprint && activeSprint.id) {
-      result = result.filter(st => st.sprint_id === activeSprint.id);
-    }
-    
-    // Filtro de búsqueda
+    // Filtro por término de búsqueda
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(st => 
-        (st.titulo || "").toLowerCase().includes(term) || 
-        (st.descripcion || "").toLowerCase().includes(term) ||
-        ((st.etiquetas || []).some(tag => (tag || "").toLowerCase().includes(term)))
+      filtered = filtered.filter(story =>
+        story.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        story.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
-    // Filtros adicionales
-    if (filters.priority) {
-      result = result.filter(st => st.prioridad === filters.priority);
-    }
-    if (filters.status) {
-      result = result.filter(st => st.estado === filters.status);
-    }
-    if (filters.assignedTo) {
-      result = result.filter(st => st.usuario_asignado === filters.assignedTo);
-    }
-    
-    return result;
-  }, [stories, selectedEpic, selectedProject, activeSprint, searchTerm, filters]);
 
-  // Estadísticas clave para el dashboard
+    // Filtros adicionales
+    if (filters.assignedTo) {
+      filtered = filtered.filter(story => story.assigned_user_id === parseInt(filters.assignedTo));
+    }
+
+    if (filters.priority) {
+      filtered = filtered.filter(story => story.priority === filters.priority);
+    }
+
+    if (filters.status) {
+      filtered = filtered.filter(story => story.status === filters.status);
+    }
+
+    return filtered;
+  }, [stories, searchTerm, filters]);
+
+  // Calcular estadísticas dinámicas
   const stats = useMemo(() => {
     const totalStories = filteredStories.length;
-    const completedStories = filteredStories.filter(st => st.estado === 'cerrado').length;
-    const inProgressStories = filteredStories.filter(st => st.estado === 'en_progreso').length;
-    const blockedStories = filteredStories.filter(st => st.estado === 'bloqueado').length;
-
-    const totalHours = filteredStories.reduce(
-      (sum, st) => sum + Object.values(st.estimaciones || {}).reduce((a, b) => a + Number(b || 0), 0),
-      0
-    );
+    const totalHours = filteredStories.reduce((sum, s) => sum + (s.estimated_hours || 0), 0);
+    const completedStories = filteredStories.filter(s => s.status === 'done').length;
+    const completedHours = filteredStories
+      .filter(s => s.status === 'done')
+      .reduce((sum, s) => sum + (s.estimated_hours || 0), 0);
+    const inProgressStories = filteredStories.filter(s => s.status === 'in_progress').length;
+    const blockedStories = filteredStories.filter(s => s.status === 'blocked').length;
     
+    const velocity = totalStories > 0 ? (completedStories / totalStories) * 100 : 0;
+
     return {
       totalStories,
       completedStories,
-      completionRate: totalStories ? Math.round((completedStories / totalStories) * 100) : 0,
       inProgressStories,
       blockedStories,
-      totalHours
+      totalHours,
+      completedHours,
+      velocity: Math.round(velocity)
     };
   }, [filteredStories]);
 
-  // Handlers memoizados
-  const handleSaveStory = useCallback((story) => {
-    if (selectedStory) {
-      onUpdateStory(story);
-    } else {
-      onCreateStory(story);
-    }
-    setSelectedStory(null);
-    setShowNew(false);
-  }, [selectedStory, onUpdateStory, onCreateStory]);
-
-  const handleQuickCreate = useCallback((status) => {
+  // Manejar creación rápida
+  const handleQuickCreate = async (status) => {
+    console.log('🚀 handleQuickCreate llamado con status:', status);
+    console.log('🚀 onCreateStory función:', typeof onCreateStory);
+    
+    // Encontrar la configuración del estado para obtener el label correcto
+    const statusConfig = kanbanStates.find(s => 
+      s.id === status || s.key === status || s.label === status
+    );
+    
     const newStory = {
-      titulo: 'Nueva historia',
-      descripcion: '',
-      estado: status,
-      prioridad: 'Media',
-      epica_id: selectedEpic?.id || null,
-      sprint_id: activeSprint?.id || null,
-      estimaciones: { UI: 0, Desarrollo: 0, Documentación: 0 },
-      etiquetas: [],
-      checklist: []
+      title: `Nueva historia en ${statusConfig?.label || status}`,
+      description: `Historia creada rápidamente en la columna ${statusConfig?.label || status}`,
+      status: status, // Usar el estado exacto de la columna
+      priority: 'medium',
+      estimated_hours: 1,
+      specialization: 'development'
     };
-    setSelectedStory(newStory);
-    setShowNew(true);
-  }, [selectedEpic, activeSprint]);
+    
+    console.log('🚀 Creando historia con estado:', status, newStory);
+    
+    if (typeof onCreateStory === 'function') {
+      try {
+        await onCreateStory(newStory);
+        console.log('✅ Historia creada exitosamente desde creación rápida');
+      } catch (error) {
+        console.error('❌ Error en creación rápida:', error);
+        // El error ya se maneja en PlanningContainer, no necesitamos hacer nada más aquí
+      }
+    } else {
+      console.error('❌ onCreateStory no es una función');
+    }
+  };
+
+  // Manejar click en historia
+  const handleStoryClick = (story) => {
+    console.log('🔄 Historia seleccionada:', story);
+    setSelectedStory(story);
+  };
+
+  // Manejar guardado de historia
+  const handleSaveStory = (updatedStory) => {
+    onUpdateStory(updatedStory);
+    setSelectedStory(null);
+  };
+
+  // Función para renderizar el estado sin épica seleccionada
+  const renderNoEpicState = () => {
+    if (!selectedProject) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center max-w-md mx-auto p-8">
+            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <FiFolder className="w-10 h-10 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              Selecciona un Proyecto
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Elige un proyecto para comenzar a gestionar épicas e historias de usuario
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (epics.length === 0) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center max-w-md mx-auto p-8">
+            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <FiTarget className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              Crea tu Primera Épica
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Las épicas te ayudan a organizar y agrupar historias de usuario relacionadas. 
+              Crea una épica para comenzar.
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onNewEpic}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              <FiPlus className="w-5 h-5" />
+              Crear Primera Épica
+            </motion.button>
+          </div>
+        </div>
+      );
+    }
+
+    if (!selectedEpic) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center max-w-md mx-auto p-8">
+            <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <FiLayers className="w-10 h-10 text-purple-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              Selecciona una Épica
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Tienes {epics.length} épica{epics.length !== 1 ? 's' : ''} disponible{epics.length !== 1 ? 's' : ''}. 
+              Selecciona una para ver y gestionar sus historias de usuario.
+            </p>
+            <div className="space-y-2">
+              {epics.slice(0, 3).map((epic) => (
+                <motion.button
+                  key={epic.epic_id}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onEpicSelect(epic)}
+                  className="w-full p-3 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-all text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: epic.color || '#3B82F6' }}
+                    />
+                    <span className="font-medium text-gray-900">{epic.name}</span>
+                  </div>
+                </motion.button>
+              ))}
+              {epics.length > 3 && (
+                <p className="text-sm text-gray-500 mt-2">
+                  Y {epics.length - 3} épica{epics.length - 3 !== 1 ? 's' : ''} más...
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  // Si no hay épica seleccionada, mostrar el estado correspondiente
+  if (!selectedEpic) {
+    return renderNoEpicState();
+  }
 
   return (
-    <div className={`flex h-[calc(100vh-64px)] bg-gray-50 ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}>
-      {/* Sidebar de Épicas */}
-      <Suspense fallback={<div className="w-64 bg-gray-100" />}>
-        <EpicsSidebar 
-          epics={epics} 
-          selectedEpic={selectedEpic} 
-          onSelectEpic={setSelectedEpic} 
-          stories={stories}
-          projects={projects}
-        />
-      </Suspense>
-      
-      {/* Área principal */}
+    <div className={`flex h-full transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+      {/* SIDEBAR ÉPICO DE ÉPICAS */}
+      <AnimatePresence>
+        {!sidebarCollapsed && (
+          <motion.div
+            initial={{ x: -400, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -400, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="w-80 bg-white/90 backdrop-blur-xl border-r border-gray-200/50 shadow-xl"
+          >
+            <EpicsSidebar
+              epics={epics}
+              selectedEpic={selectedEpic}
+              onSelectEpic={onEpicSelect}
+              stories={filteredStories}
+              onNewEpic={onNewEpic}
+              onEditEpic={onEditEpic}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              projects={projects}
+              selectedProject={selectedProject}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ÁREA PRINCIPAL */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header con controles */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        {/* BARRA DE HERRAMIENTAS ÉPICA */}
+        <motion.div 
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-white/80 backdrop-blur-xl border-b border-gray-200/50 px-6 py-4"
+        >
           <div className="flex items-center justify-between">
+            {/* Lado izquierdo: Controles de vista */}
             <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-gray-900">
-                {selectedEpic ? selectedEpic.nombre : 'Todos los Proyectos'}
-              </h1>
-              
-              <div className="relative w-64">
+              {/* Toggle sidebar */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onToggleSidebar}
+                className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                {sidebarCollapsed ? <FiChevronRight className="w-5 h-5" /> : <FiChevronLeft className="w-5 h-5" />}
+              </motion.button>
+
+              {/* Título dinámico */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <FiLayers className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {selectedEpic ? selectedEpic.name : 'Todas las Historias'}
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {selectedProject?.name} • {stats.totalStories} historias
+                  </p>
+                </div>
+              </div>
+
+              {/* Indicador de épica seleccionada */}
+              {selectedEpic && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-xl border border-blue-200"
+                >
+                  <div 
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: selectedEpic.color || '#3B82F6' }}
+                  />
+                  <span className="text-sm font-medium text-blue-700">
+                    {Math.round(selectedEpic.progress_percentage || 0)}% completado
+                  </span>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Lado derecho: Acciones y métricas */}
+            <div className="flex items-center gap-4">
+              {/* Métricas rápidas */}
+              <div className="flex items-center gap-4 px-4 py-2 bg-gray-50 rounded-2xl">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="font-medium">{stats.completedStories}</span>
+                  <span className="text-gray-600">completadas</span>
+                </div>
+                <div className="w-px h-4 bg-gray-300"></div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span className="font-medium">{stats.inProgressStories}</span>
+                  <span className="text-gray-600">en progreso</span>
+                </div>
+                <div className="w-px h-4 bg-gray-300"></div>
+                <div className="flex items-center gap-2 text-sm">
+                  <FiZap className="w-4 h-4 text-purple-500" />
+                  <span className="font-medium">{stats.velocity}%</span>
+                  <span className="text-gray-600">velocidad</span>
+                </div>
+              </div>
+
+              {/* Barra de búsqueda épica */}
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Buscar historias..."
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-64 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/80 backdrop-blur-sm"
                 />
-                <svg 
-                  className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate('/manager/planning/kanban-states')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg 
-                  bg-gray-100 hover:bg-gray-200 text-gray-700
-                  transition-colors duration-200 text-sm font-medium`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Gestionar Estados
-              </button>
-              
-              <button
-                className={`flex items-center gap-2 bg-${theme.PRIMARY_COLOR}-600 text-white px-4 py-2 rounded-lg hover:bg-${theme.PRIMARY_COLOR}-700 transition-colors text-sm font-medium`}
-                onClick={() => setShowNew(true)}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Nueva Historia
-              </button>
-            </div>
-          </div>
-          
-          {/* Filtros rápidos */}
-          
-          <div className="flex items-center gap-4 mt-4 overflow-x-auto pb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Prioridad:</span>
-              <select
-                className="border rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                value={filters.priority || ''}
-                onChange={(e) => onFilterChange({ ...filters, priority: e.target.value || undefined })}
-              >
-                <option value="">Todas</option>
-                <option value="Alta">Alta</option>
-                <option value="Media">Media</option>
-                <option value="Baja">Baja</option>
-              </select>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Asignado:</span>
-              <select
-                className="border rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                value={filters.assignedTo || ''}
-                onChange={(e) => onFilterChange({ ...filters, assignedTo: e.target.value || undefined })}
-              >
-                <option value="">Todos</option>
-                {users.map(user => (
-                  <option key={user.id} value={user.id}>
-                    {user.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Sprint:</span>
-              <select
-                className="border rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                value={activeSprint?.id || ''}
-                onChange={(e) => setActiveSprint(sprints.find(s => s.id === e.target.value) || null)}
-              >
-                <option value="">Todos</option>
-                {sprints.map(sprint => (
-                  <option key={sprint.id} value={sprint.id}>
-                    {sprint.nombre} {sprint.estado === 'Activo' && '(Activo)'}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Estado:</span>
-              <select
-                className="border rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                value={filters.status || ''}
-                onChange={(e) => onFilterChange({ ...filters, status: e.target.value || undefined })}
+              {/* Filtros avanzados */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowFilters(!showFilters)}
+                className={`p-2 rounded-xl transition-all duration-200 ${
+                  showFilters || Object.keys(filters).length > 0
+                    ? 'bg-blue-100 text-blue-600 border border-blue-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
               >
-                <option value="">Todos</option>
-                {kanbanStates.map(state => (
-                  <option key={state.key} value={state.key}>{state.label}</option>
-                ))}
-              </select>
+                <FiFilter className="w-5 h-5" />
+              </motion.button>
+
+              {/* Botón fullscreen */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                {isFullscreen ? <FiMinimize2 className="w-5 h-5" /> : <FiMaximize2 className="w-5 h-5" />}
+              </motion.button>
             </div>
           </div>
-        </div>
-        
-        {/* Dashboard de métricas */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex gap-4">
-            <div className="bg-blue-50 rounded-lg p-3 flex-1">
-              <div className="text-sm text-blue-700 font-medium">Total Historias</div>
-              <div className="text-2xl font-bold text-blue-900">{stats.totalStories}</div>
-            </div>
-            {kanbanStates.map(state => {
-              const count = filteredStories.filter(st => st.estado === state.key).length;
-              return (
-                <div
-                  key={state.key}
-                  className={`${state.color} ${state.textColor} rounded-lg p-3 flex-1`}
-                  style={{
-                    minWidth: 0
-                  }}
-                >
-                  <div className="text-sm font-medium">{state.label}</div>
-                  <div className="text-2xl font-bold">
-                    {count}
-                    {state.key === 'cerrado' && stats.totalStories > 0 && (
-                      <span className="text-sm ml-1">
-                        ({Math.round((count / stats.totalStories) * 100)}%)
-                      </span>
-                    )}
+
+          {/* Panel de filtros expandible */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-200"
+              >
+                <div className="grid grid-cols-4 gap-4">
+                  {/* Filtro por asignado */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Asignado a
+                    </label>
+                    <select
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      value={filters.assignedTo || ''}
+                      onChange={(e) => onFilterChange({ ...filters, assignedTo: e.target.value || undefined })}
+                    >
+                      <option value="">Todos</option>
+                      {users.map(user => (
+                        <option key={user.user_id || user.id} value={user.user_id || user.id}>
+                          {user.full_name || user.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filtro por prioridad */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Prioridad
+                    </label>
+                    <select
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      value={filters.priority || ''}
+                      onChange={(e) => onFilterChange({ ...filters, priority: e.target.value || undefined })}
+                    >
+                      <option value="">Todas</option>
+                      <option value="low">Baja</option>
+                      <option value="medium">Media</option>
+                      <option value="high">Alta</option>
+                    </select>
+                  </div>
+
+                  {/* Filtro por estado */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Estado
+                    </label>
+                    <select
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      value={filters.status || ''}
+                      onChange={(e) => onFilterChange({ ...filters, status: e.target.value || undefined })}
+                    >
+                      <option value="">Todos</option>
+                      {kanbanStates.map(state => (
+                        <option key={state.key || state.id || state.label} value={state.key || state.id}>
+                          {state.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Botón limpiar filtros */}
+                  <div className="flex items-end">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => onFilterChange({})}
+                      className="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium"
+                    >
+                      Limpiar Filtros
+                    </motion.button>
                   </div>
                 </div>
-              );
-            })}
-            <div className="bg-purple-50 rounded-lg p-3 flex-1">
-              <div className="text-sm text-purple-700 font-medium">Horas Estimadas</div>
-              <div className="text-2xl font-bold text-purple-900">{stats.totalHours}h</div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Área de trabajo principal */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Quick actions */}
-          <div className="bg-gray-50 border-b border-gray-200 px-6 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-gray-500">Creación rápida:</span>
-              {kanbanStates.map(state => (
-                <button
-                  key={state.key}
-                  className={`${state.color} ${state.textColor} text-xs px-2 py-1 rounded`}
-                  style={{
-                    backgroundColor: state.color,
-                    color: state.textColor,
-                    fontWeight: 500,
-                  }}
-                  onClick={() => handleQuickCreate(state.key)}
-                >
-                  + {state.label}
-                </button>
-              ))}
-            </div>
-            
-            <div className="text-sm text-gray-500">
-              Mostrando {filteredStories.length} de {stories.length} historias
-            </div>
-          </div>
-          
-          {/* Tablero Kanban */}
-          <div className="flex-1 overflow-hidden">
-            <Suspense fallback={<div className="flex-1 bg-gray-50" />}>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        {/* ÁREA DE CONTENIDO PRINCIPAL */}
+        <div className="flex-1 overflow-hidden">
+          {viewMode === 'kanban' ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="h-full"
+            >
               <KanbanBoard
-                sprints={sprints}
                 stories={filteredStories}
                 users={users}
-                onStoryClick={setSelectedStory}
+                onStoryClick={handleStoryClick}
                 setStories={setStories}
-                activeSprint={activeSprint}
+                onQuickCreate={handleQuickCreate}
                 kanbanStates={kanbanStates}
               />
-            </Suspense>
-          </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="h-full p-6"
+            >
+              {/* Vista de lista épica */}
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 h-full overflow-hidden">
+                <div className="p-6 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">Vista de Lista</h3>
+                  <p className="text-sm text-gray-500 mt-1">Gestiona tus historias en formato tabla</p>
+                </div>
+                <div className="overflow-auto h-full">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Historia</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asignado</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredStories.map(story => (
+                        <motion.tr
+                          key={story.story_id}
+                          whileHover={{ backgroundColor: '#f8fafc' }}
+                          onClick={() => handleStoryClick(story)}
+                          className="cursor-pointer"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{story.title}</div>
+                            <div className="text-sm text-gray-500 truncate max-w-xs">{story.description}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              story.status === 'done' ? 'bg-green-100 text-green-800' :
+                              story.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                              story.status === 'in_review' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {kanbanStates.find(s => s.id === story.status)?.label || story.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                {users.find(u => u.user_id === story.assigned_user_id)?.full_name?.charAt(0) || '?'}
+                              </div>
+                              <div className="ml-3">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {users.find(u => u.user_id === story.assigned_user_id)?.full_name || 'Sin asignar'}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              story.priority === 'high' ? 'bg-red-100 text-red-800' :
+                              story.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {story.priority === 'high' ? 'Alta' : story.priority === 'medium' ? 'Media' : 'Baja'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {story.estimated_hours || 0}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
+
+        {/* Botones de acción flotantes */}
+        <motion.div
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="fixed bottom-6 right-6 flex flex-col gap-3 z-40"
+        >
+          {/* Creación rápida */}
+          <AnimatePresence>
+            {quickCreateMode && (
+              <motion.div
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                className="flex flex-col gap-2 mb-2"
+              >
+                {kanbanStates.slice(0, 3).map(state => (
+                  <motion.button
+                    key={state.key || state.id || state.label}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      handleQuickCreate(state.key || state.id);
+                      setQuickCreateMode(false);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-lg border border-gray-200 text-sm font-medium hover:shadow-xl transition-all duration-200"
+                    style={{ color: state.color }}
+                  >
+                    <span>{state.icon}</span>
+                    <span>+ {state.label}</span>
+                  </motion.button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setQuickCreateMode(!quickCreateMode)}
+            className="w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
+          >
+            <FiPlus className={`w-6 h-6 transition-transform duration-200 ${quickCreateMode ? 'rotate-45' : ''}`} />
+          </motion.button>
+        </motion.div>
       </div>
-      
-      {/* Modal de detalles */}
-      <AnimatePresence>
-        {(selectedStory || showNew) && (
-          <Suspense fallback={null}>
-            <StoryDetailsModal
-              story={selectedStory}
-              users={users}
-              epics={epics}
-              sprints={sprints}
-              onClose={() => {
-                setSelectedStory(null);
-                setShowNew(false);
-              }}
-              onSave={handleSaveStory}
-              activeSprint={activeSprint}
-            />
-          </Suspense>
-        )}
-      </AnimatePresence>
+
+      {/* Modal de detalles de historia ÉPICO */}
+      {selectedStory && (
+        <StoryDetailsModal
+          task={selectedStory}
+          users={users}
+          projects={projects}
+          epics={epics}
+          onClose={() => setSelectedStory(null)}
+          onSave={handleSaveStory}
+          onDelete={(story) => {
+            console.log('🗑️ Eliminando historia:', story);
+            // Actualizar el estado local
+            setStories(prev => prev.filter(s => (s.story_id || s.id) !== (story.story_id || story.id)));
+            setSelectedStory(null);
+          }}
+        />
+      )}
     </div>
   );
 }

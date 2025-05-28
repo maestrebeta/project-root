@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Header from './components/Template/Header';
 import Sidebar from './components/Template/Sidebar';
@@ -21,6 +21,11 @@ import { useAppTheme } from "./context/ThemeContext.jsx";
 import { sidebarItems, getHeaderTitleFromSidebar } from './components/Template/sidebarConfig';
 import Organizations from './components/Organizations/Organizations.jsx';
 import './index.css';
+
+// Importar script de diagnóstico en desarrollo
+if (process.env.NODE_ENV === 'development') {
+  import('./utils/debugAuth.js');
+}
 
 const pageTransition = {
   initial: { opacity: 0, scale: 0.98, y: 24, filter: "blur(5px)" },
