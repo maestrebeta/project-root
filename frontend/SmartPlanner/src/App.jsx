@@ -1,38 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
+import { FiUsers, FiServer, FiPieChart, FiMessageCircle, FiDollarSign, FiCheckSquare } from 'react-icons/fi';
 import Header from './components/Template/Header';
 import Sidebar from './components/Template/Sidebar';
-import Home from './components/Home/Home.jsx';
-import Users from './components/Users/Users.jsx';
-import Clients from './components/Customers/Clients.jsx';
-import Projects from './components/Projects/Proyectos.jsx';
-import TimeTracker from './components/timeTracker/TimeTracker.jsx';
-import JiraDashboard from './components/Jira/JiraDashboard';
-import PlanningContainer from "./components/Planning/PlanningContainer";
-import KanbanStatesManager from './components/Planning/KanbanStatesManager.jsx';
-import ThemeManager from './components/Config/ThemeManager.jsx';
+import Home from './components/Home/Home';
+import Users from './components/Users/Users';
+import Organizations from './components/Organizations/Organizations';
+import Clients from './components/Customers/Clients';
+import Projects from './components/Projects/Proyectos';
+import TimeTracker from './components/timeTracker/TimeTracker';
+import PlanningContainer from './components/Planning/PlanningContainer';
+import KanbanStatesManager from './components/Planning/KanbanStatesManager';
+import ThemeManager from './components/Config/ThemeManager';
+import Tasks from './components/Tasks/Tasks';
+import Tickets from './components/IT/Tickets';
+import ExternalUsers from './components/IT/ExternalUsers';
+import ExternalTicketForm from './components/External/ExternalTicketForm';
+import ExternalFormManager from './components/IT/ExternalFormManager';
 import Login from './components/Auth/Login.jsx';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { ExternalAuthProvider } from "./context/ExternalAuthContext.jsx";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
+import { FocusModeProvider, useFocusMode } from "./context/FocusModeContext.jsx";
 import { useAppTheme } from "./context/ThemeContext.jsx";
-import { sidebarItems, getHeaderTitleFromSidebar } from './components/Template/sidebarConfig';
-import Organizations from './components/Organizations/Organizations.jsx';
+import { getHeaderTitleFromSidebar } from './components/Template/sidebarConfig';
+import UnitTesting from './components/Testing/UnitTesting';
 import './index.css';
 
 // Importar script de diagnóstico en desarrollo
-if (process.env.NODE_ENV === 'development') {
+if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
   import('./utils/debugAuth.js');
 }
-
-const pageTransition = {
-  initial: { opacity: 0, scale: 0.98, y: 24, filter: "blur(5px)" },
-  animate: { opacity: 1, scale: 1, y: 0, filter: "blur(0px)" },
-  exit: { opacity: 0, scale: 0.98, y: -24, filter: "blur(4px)" },
-  transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] }
-};
 
 const DEFAULT_KANBAN_STATES = [
   { key: "nuevo", label: "Nuevo", color: "bg-gray-100", textColor: "text-gray-700" },
@@ -41,16 +42,106 @@ const DEFAULT_KANBAN_STATES = [
   { key: "cerrado", label: "Cerrado", color: "bg-green-50", textColor: "text-green-700" }
 ];
 
+// Componente ComingSoon para funcionalidades en desarrollo
+const ComingSoon = ({ title, description, icon }) => {
+  const theme = useAppTheme();
+  const IconComponent = icon;
+  
+  return (
+    <div className={`flex flex-col min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] ${theme.FONT_CLASS}`}>
+      <main className="flex-1 flex items-center justify-center px-4 py-10">
+        <div
+          className="text-center max-w-2xl mx-auto"
+        >
+          {/* Icono animado */}
+          <div
+            className="w-32 h-32 mx-auto mb-8 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center shadow-2xl"
+          >
+            <IconComponent className="w-16 h-16 text-blue-600" />
+          </div>
+
+          {/* Título */}
+          <h1
+            className="text-4xl md:text-5xl font-bold text-gray-800 mb-6 tracking-tight"
+          >
+            {title}
+          </h1>
+
+          {/* Descripción */}
+          <p
+            className="text-xl text-gray-600 mb-8 leading-relaxed"
+          >
+            {description}
+          </p>
+
+          {/* Badge de estado */}
+          <div
+            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-amber-100 to-orange-100 text-amber-800 rounded-full font-semibold shadow-lg"
+          >
+            <div
+              className="w-5 h-5 mr-3"
+            >
+              ⚡
+            </div>
+            Solución en Desarrollo
+          </div>
+
+          {/* Información adicional */}
+          <div
+            className="mt-12 p-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20"
+          >
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚀 Próximamente</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+              <div className="flex items-center">
+                <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span>
+                Interfaz moderna y responsive
+              </div>
+              <div className="flex items-center">
+                <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                Integración completa
+              </div>
+              <div className="flex items-center">
+                <span className="w-2 h-2 bg-orange-500 rounded-full mr-3"></span>
+                Automatización inteligente
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
 function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [kanbanStates, setKanbanStates] = useState(DEFAULT_KANBAN_STATES);
   const location = useLocation();
   const headerTitle = getHeaderTitleFromSidebar(location.pathname);
   const theme = useAppTheme();
+  const { isFocusMode } = useFocusMode();
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
+
+  // Efecto para contraer automáticamente el sidebar cuando se active el modo enfoque
+  useEffect(() => {
+    if (isFocusMode && !sidebarCollapsed) {
+      // Solo contraer si el modo enfoque se acaba de activar y el sidebar no está colapsado
+      // Usar sessionStorage para evitar contraer múltiples veces
+      const hasContracted = sessionStorage.getItem('focusModeSidebarContracted');
+      if (!hasContracted) {
+        setSidebarCollapsed(true);
+        sessionStorage.setItem('focusModeSidebarContracted', 'true');
+      }
+    } else if (!isFocusMode) {
+      // Limpiar el flag cuando se desactiva el modo enfoque
+      sessionStorage.removeItem('focusModeSidebarContracted');
+    }
+  }, [isFocusMode, sidebarCollapsed]);
+
+  // Debug: Log del estado del sidebar
+  console.log('Sidebar collapsed:', sidebarCollapsed, 'MarginLeft:', sidebarCollapsed ? 80 : 256);
 
   // No mostrar Sidebar ni Header en la página de login
   const isLoginPage = location.pathname === '/login';
@@ -62,13 +153,30 @@ function AppContent() {
     );
   }
 
+  // Verificar si es una ruta del portal externo
+  const isExternalPortal = location.pathname === '/external/ticket-form' || location.pathname.startsWith('/external/form/');
+  
+  // Si es portal externo, renderizar sin header ni sidebar
+  if (isExternalPortal) {
+    return (
+      <ExternalAuthProvider>
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/external/ticket-form" element={<ExternalTicketForm />} />
+            <Route path="/external/form/:token" element={<ExternalTicketForm />} />
+          </Routes>
+        </div>
+      </ExternalAuthProvider>
+    );
+  }
+
   return (
     <div id="app-layout" className={`app-layout bg-gradient-to-br from-[#f6f7fb] to-[#e9eaf3] min-h-screen ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}>
       <Sidebar collapsed={sidebarCollapsed} onMenuClick={toggleSidebar} />
       <div
-        className="app-content transition-all duration-300"
+        className="app-content focus-mode-expand transition-all duration-300"
         style={{
-          marginLeft: sidebarCollapsed ? 80 : 260,
+          marginLeft: sidebarCollapsed ? 80 : 256,
         }}
       >
         <Header onMenuClick={toggleSidebar} title={headerTitle}/>
@@ -79,9 +187,33 @@ function AppContent() {
                 path="/home"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <Home />
-                    </motion.div>
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/communications"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <ComingSoon 
+                        title="Sistema de Comunicaciones"
+                        description="Plataforma de chat y comunicación en tiempo real para equipos de trabajo con gestión de conversaciones por usuarios admin."
+                        icon={FiMessageCircle}
+                      />
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/tasks"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <Tasks />
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -89,9 +221,9 @@ function AppContent() {
                 path="/admin/projects"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <Projects />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -99,9 +231,9 @@ function AppContent() {
                 path="admin/users"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <Users />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -109,9 +241,9 @@ function AppContent() {
                 path="/admin/organizations"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <Organizations />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -119,9 +251,9 @@ function AppContent() {
                 path="/admin/customers"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <Clients />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -129,19 +261,33 @@ function AppContent() {
                 path="/user/time-tracker"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <TimeTracker />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/manager/jira-summary"
+                path="/it/tickets"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
-                      <JiraDashboard />
-                    </motion.div>
+                    <div className="h-full">
+                      <Tickets />
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it/infra"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <ComingSoon 
+                        title="Gestión de Infraestructura"
+                        description="Panel de control para monitoreo y gestión de infraestructura IT con alertas y métricas en tiempo real."
+                        icon={FiServer}
+                      />
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -149,9 +295,9 @@ function AppContent() {
                 path="manager/planning/*"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <PlanningContainer />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -159,12 +305,12 @@ function AppContent() {
                 path="/manager/kanban-states"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <KanbanStatesManager
                         states={kanbanStates}
                         setStates={setKanbanStates}
                       />
-                    </motion.div>
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -172,9 +318,53 @@ function AppContent() {
                 path="/config/theme"
                 element={
                   <ProtectedRoute>
-                    <motion.div {...pageTransition} className="h-full">
+                    <div className="h-full">
                       <ThemeManager />
-                    </motion.div>
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/unit-testing"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <UnitTesting />
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/quotations"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <ComingSoon 
+                        title="Sistema de Cotizaciones"
+                        description="Plataforma completa para cotización de proyectos y creación de cuotas con gestión de presupuestos y seguimiento de propuestas."
+                        icon={FiDollarSign}
+                      />
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/external/form-manager"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <ExternalFormManager />
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it/external-users"
+                element={
+                  <ProtectedRoute>
+                    <div className="h-full">
+                      <ExternalUsers />
+                    </div>
                   </ProtectedRoute>
                 }
               />
@@ -189,11 +379,15 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-    <AuthProvider>
-      <NotificationsProvider>
-        <AppContent />
-      </NotificationsProvider>
-    </AuthProvider>
+      <AuthProvider>
+        <ExternalAuthProvider>
+          <NotificationsProvider>
+            <FocusModeProvider>
+              <AppContent />
+            </FocusModeProvider>
+          </NotificationsProvider>
+        </ExternalAuthProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

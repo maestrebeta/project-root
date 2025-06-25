@@ -135,7 +135,7 @@
     "frontend_dir": "C:\\Users\\teu13\\Desktop\\project-root\\frontend\\SmartPlanner",
     "app_dir": "C:\\Users\\teu13\\Desktop\\project-root\\backend\\app",
     "database_url": "postgresql://smartplanner_user:smartplanner_***@localhost:5432/smartplanner_db",
-    "server_url": "http://localhost:8000",
+    "server_url": "http://localhost:8001",
     "environment_errors": []
   }
 }

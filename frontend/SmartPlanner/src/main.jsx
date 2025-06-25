@@ -5,7 +5,9 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { NotificationsProvider } from "./context/NotificationsContext";
+import { FocusModeProvider } from "./context/FocusModeContext.jsx";
 import App from './App.jsx';
+import './styles/focusMode.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,7 +51,9 @@ function renderApp() {
           <BrowserRouter>
             <ThemeProvider>
               <NotificationsProvider>
-                <App />
+                <FocusModeProvider>
+                  <App />
+                </FocusModeProvider>
               </NotificationsProvider>
             </ThemeProvider>
           </BrowserRouter>

@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import ProjectModal from './ProjectModal';
+import QuotationModal from './QuotationModal';
+import Quotations from './Quotations';
+import ProjectsView from './ProjectsView';
 
 export default function ProjectManagement() {
   const theme = useAppTheme();
   const { user, isAuthenticated } = useAuth();
+  const location = useLocation();
   
   // Estados principales
   const [stats, setStats] = useState({
@@ -24,6 +30,22 @@ export default function ProjectManagement() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   
+  // Estados para cotizaciones
+  // eslint-disable-next-line no-unused-vars
+  const [quotations, setQuotations] = useState([]);
+  const [quotationsSummary, setQuotationsSummary] = useState(null);
+  const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [selectedQuotation, setSelectedQuotation] = useState(null);
+  const [quotationViewMode, setQuotationViewMode] = useState('cards'); // 'cards' o 'table'
+  const [projectQuotations, setProjectQuotations] = useState({}); // {projectId: [quotations]}
+  
+  // Nuevos estados para funcionalidades de cotizaciones
+  const [showPaidInstallments, setShowPaidInstallments] = useState(false);
+  const [quotationProjectFilter, setQuotationProjectFilter] = useState('');
+  const [quotationStatusFilter, setQuotationStatusFilter] = useState('');
+  const [quotationSearchFilter, setQuotationSearchFilter] = useState('');
+  const [quotationLoading, setQuotationLoading] = useState(false);
+  
   // Estados para sorting y filtrado - NIVEL BILL GATES
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [clientFilter, setClientFilter] = useState('');
@@ -34,8 +56,25 @@ export default function ProjectManagement() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
+  // Estados para vista de proyectos
+  const [projectViewMode, setProjectViewMode] = useState('cards'); // 'cards' o 'table'
+
   // Verificar si el usuario es super_user
   const isSuperUser = user?.role === 'super_user';
+
+  // Detectar parámetro openModal en la URL y abrir modal automáticamente
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('openModal') === 'true') {
+      // Limpiar el parámetro de la URL sin recargar la página
+      const newUrl = location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      
+      // Abrir el modal de nuevo proyecto
+      setSelectedProject(null);
+      setShowModal(true);
+    }
+  }, [location.search]);
 
   // 🚀 FUNCIONES ÉPICAS PARA SELECCIÓN MÚLTIPLE Y ELIMINACIÓN MASIVA - SOLO SUPER_USER
   
@@ -50,7 +89,7 @@ export default function ProjectManagement() {
   };
 
   const selectAllProjects = () => {
-    const currentProjects = activeTab === 'analytics' 
+    const currentProjects = activeTab === 'projects' 
       ? getSortedAndFilteredProjects() 
       : getFilteredProjectsList();
     
@@ -103,7 +142,7 @@ export default function ProjectManagement() {
         throw new Error('No hay sesión activa');
       }
 
-      const response = await fetch('http://localhost:8000/projects/bulk-delete', {
+      const response = await fetch('http://localhost:8001/projects/bulk-delete', {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -127,7 +166,7 @@ export default function ProjectManagement() {
 
       if (result.failed_count > 0) {
         setError(`${result.failed_count} proyectos no pudieron ser eliminados`);
-        setTimeout(() => setError(''), 8000);
+        setTimeout(() => setError(''), 8001);
       }
 
       // Limpiar selección y recargar datos
@@ -137,7 +176,7 @@ export default function ProjectManagement() {
     } catch (err) {
       console.error('Error en eliminación masiva:', err);
       setError(`Error en eliminación masiva: ${err.message}`);
-      setTimeout(() => setError(''), 8000);
+      setTimeout(() => setError(''), 8001);
     } finally {
       setBulkDeleteLoading(false);
     }
@@ -160,12 +199,38 @@ export default function ProjectManagement() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
+      // Primero cargar proyectos, clientes y estadísticas
       await Promise.all([
         fetchStats(),
-        fetchProjects(),
         fetchClients(),
-        fetchTimeAnalytics()
+        fetchTimeAnalytics(),
+        fetchQuotationsSummary()
       ]);
+      
+      // Cargar proyectos por separado para poder usarlos inmediatamente
+      console.log('📊 Loading projects...');
+      const session = JSON.parse(localStorage.getItem('session'));
+      const projectsResponse = await fetch('http://localhost:8001/projects/', {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (projectsResponse.ok) {
+        const projectsData = await projectsResponse.json();
+        console.log('📊 Projects loaded:', projectsData);
+        setProjects(projectsData);
+        
+        // Ahora cargar cotizaciones usando los proyectos recién obtenidos
+        if (projectsData.length > 0) {
+          await fetchAllProjectQuotations(projectsData);
+        } else {
+          console.log('⚠️ No projects available');
+        }
+      } else {
+        console.error('❌ Error loading projects');
+      }
     } catch (err) {
       setError('Error al cargar los datos');
       console.error('Error:', err);
@@ -177,7 +242,7 @@ export default function ProjectManagement() {
   const fetchStats = async () => {
     try {
       const session = JSON.parse(localStorage.getItem('session'));
-      const response = await fetch('http://localhost:8000/projects/stats', {
+      const response = await fetch('http://localhost:8001/projects/stats', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Content-Type': 'application/json'
@@ -193,29 +258,10 @@ export default function ProjectManagement() {
     }
   };
 
-  const fetchProjects = async () => {
-    try {
-      const session = JSON.parse(localStorage.getItem('session'));
-      const response = await fetch('http://localhost:8000/projects/', {
-        headers: {
-          'Authorization': `Bearer ${session.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setProjects(data);
-      }
-    } catch (err) {
-      console.error('Error fetching projects:', err);
-    }
-  };
-
   const fetchClients = async () => {
     try {
       const session = JSON.parse(localStorage.getItem('session'));
-      const response = await fetch('http://localhost:8000/clients/', {
+      const response = await fetch('http://localhost:8001/clients/', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Content-Type': 'application/json'
@@ -234,7 +280,7 @@ export default function ProjectManagement() {
   const fetchTimeAnalytics = async () => {
     try {
       const session = JSON.parse(localStorage.getItem('session'));
-      const response = await fetch('http://localhost:8000/projects/time-analytics', {
+      const response = await fetch('http://localhost:8001/projects/time-analytics', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Content-Type': 'application/json'
@@ -283,7 +329,7 @@ export default function ProjectManagement() {
       // Si aún no tenemos datos completos, obtener del backend
       console.log('Fetching complete project data from backend...');
       const session = JSON.parse(localStorage.getItem('session'));
-      const response = await fetch(`http://localhost:8000/projects/${project.project_id}`, {
+      const response = await fetch(`http://localhost:8001/projects/${project.project_id}`, {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Content-Type': 'application/json'
@@ -325,6 +371,47 @@ export default function ProjectManagement() {
     }
   };
 
+  // Función para actualizar solo el estado del proyecto
+  const handleUpdateProjectStatus = async (projectId, newStatus) => {
+    try {
+      setError('');
+      
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
+      }
+      
+      const response = await fetch(`http://localhost:8001/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (response.ok) {
+        // Actualizar el estado local inmediatamente
+        setProjects(prev => prev.map(p => 
+          p.project_id === projectId ? { ...p, status: newStatus } : p
+        ));
+        
+        // Recargar analytics para actualizar las métricas
+        await fetchTimeAnalytics();
+        
+        setSuccessMessage(`Estado del proyecto actualizado a "${getStatusLabel(newStatus)}"`);
+        setTimeout(() => setSuccessMessage(''), 4000);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al actualizar el estado');
+      }
+    } catch (err) {
+      console.error('Error updating project status:', err);
+      setError(`Error al actualizar el estado: ${err.message}`);
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
   const handleDeleteProject = async (project) => {
     console.log('handleDeleteProject called with:', project);
     
@@ -362,7 +449,7 @@ export default function ProjectManagement() {
         throw new Error('No hay sesión activa');
       }
       
-      const response = await fetch(`http://localhost:8000/projects/${projectId}`, {
+      const response = await fetch(`http://localhost:8001/projects/${projectId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -425,10 +512,21 @@ export default function ProjectManagement() {
   };
 
   const getEfficiencyColor = (efficiency) => {
-    if (efficiency === 'En tiempo') return 'text-green-600';
-    if (efficiency === 'Ligeramente retrasado') return 'text-yellow-600';
-    if (efficiency === 'Retrasado') return 'text-red-600';
-    return 'text-gray-600';
+    if (!efficiency || efficiency === 'N/A') return 'bg-gray-100 text-gray-800';
+    const value = parseFloat(efficiency);
+    if (value >= 90) return 'bg-green-100 text-green-800';
+    if (value >= 75) return 'bg-blue-100 text-blue-800';
+    if (value >= 60) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
+  };
+
+  // Función para obtener colores de progreso
+  const getProgressColors = (progress) => {
+    if (progress >= 90) return '#10b981'; // Verde intenso
+    if (progress >= 75) return '#34d399'; // Verde
+    if (progress >= 50) return '#fbbf24'; // Amarillo/Ámbar
+    if (progress >= 25) return '#fb923c'; // Naranja
+    return '#f87171'; // Rojo
   };
 
   // 🚀 FUNCIONES ÉPICAS DE SORTING Y FILTRADO - NIVEL BILL GATES
@@ -611,6 +709,322 @@ export default function ProjectManagement() {
     return filteredProjects;
   };
 
+  // Funciones para cotizaciones
+  const fetchQuotationsSummary = async () => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      const response = await fetch('http://localhost:8001/projects/quotations/summary', {
+        headers: {
+          'Authorization': `Bearer ${session.token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setQuotationsSummary(data);
+      }
+    } catch (err) {
+      console.error('Error fetching quotations summary:', err);
+    }
+  };
+
+  // Función para calcular cotizaciones abiertas (con cuotas pendientes)
+  const calculateOpenQuotations = () => {
+    if (!quotationsSummary) return 0;
+    
+    // Contar cotizaciones que tienen cuotas pendientes
+    let openQuotations = 0;
+    Object.values(projectQuotations).forEach(quotations => {
+      quotations.forEach(quotation => {
+        if (quotation.total_pending > 0) {
+          openQuotations++;
+        }
+      });
+    });
+    
+    return openQuotations;
+  };
+
+  // Función para calcular total pendiente de todas las cotizaciones
+  const calculateTotalPending = () => {
+    if (!quotationsSummary) return 0;
+    
+    let totalPending = 0;
+    Object.values(projectQuotations).forEach(quotations => {
+      quotations.forEach(quotation => {
+        totalPending += parseFloat(quotation.total_pending || 0);
+      });
+    });
+    
+    return totalPending;
+  };
+
+  // Función para formatear moneda
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
+  const fetchProjectQuotations = async (projectId) => {
+    try {
+      console.log('🌐 fetchProjectQuotations called for projectId:', projectId);
+      
+      const session = JSON.parse(localStorage.getItem('session'));
+      const url = `http://localhost:8001/projects/${projectId}/quotations`;
+      console.log('🌐 Making request to:', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('🌐 Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🌐 Response data for project', projectId, ':', data);
+        return data;
+      } else {
+        console.error('🌐 Error response:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('🌐 Error response body:', errorText);
+        return [];
+      }
+    } catch (err) {
+      console.error('❌ Error fetching project quotations:', err);
+      return [];
+    }
+  };
+
+  const createQuotation = async (quotationData) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      const response = await fetch('http://localhost:8001/projects/quotations/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(quotationData)
+      });
+      
+      if (response.ok) {
+        const newQuotation = await response.json();
+        
+        // Actualizar la cotización en el estado general
+        setQuotations(prev => [...prev, newQuotation]);
+        
+        // Actualizar las cotizaciones por proyecto
+        setProjectQuotations(prev => {
+          const newProjectQuotations = { ...prev };
+          const projectId = newQuotation.project_id;
+          
+          if (newProjectQuotations[projectId]) {
+            newProjectQuotations[projectId] = [...newProjectQuotations[projectId], newQuotation];
+          } else {
+            newProjectQuotations[projectId] = [newQuotation];
+          }
+          
+          return newProjectQuotations;
+        });
+        
+        setShowQuotationModal(false);
+        setSelectedQuotation(null);
+        await fetchQuotationsSummary();
+        return newQuotation;
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al crear la cotización');
+      }
+    } catch (err) {
+      console.error('Error creating quotation:', err);
+      throw err;
+    }
+  };
+
+  const updateQuotation = async (quotationId, quotationData) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      const response = await fetch(`http://localhost:8001/projects/quotations/${quotationId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(quotationData)
+      });
+      
+      if (response.ok) {
+        const updatedQuotation = await response.json();
+        
+        // Actualizar la cotización en el estado general
+        setQuotations(prev => prev.map(q => q.quotation_id === quotationId ? updatedQuotation : q));
+        
+        // Actualizar las cotizaciones por proyecto
+        setProjectQuotations(prev => {
+          const newProjectQuotations = { ...prev };
+          const projectId = updatedQuotation.project_id;
+          
+          if (newProjectQuotations[projectId]) {
+            newProjectQuotations[projectId] = newProjectQuotations[projectId].map(q => 
+              q.quotation_id === quotationId ? updatedQuotation : q
+            );
+          }
+          
+          return newProjectQuotations;
+        });
+        
+        setShowQuotationModal(false);
+        setSelectedQuotation(null);
+        await fetchQuotationsSummary();
+        return updatedQuotation;
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al actualizar la cotización');
+      }
+    } catch (err) {
+      console.error('Error updating quotation:', err);
+      throw err;
+    }
+  };
+
+  const deleteQuotation = async (quotationId) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      const response = await fetch(`http://localhost:8001/projects/quotations/${quotationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        // Encontrar la cotización antes de eliminarla para obtener el project_id
+        const quotationToDelete = quotations.find(q => q.quotation_id === quotationId);
+        
+        // Actualizar la cotización en el estado general
+        setQuotations(prev => prev.filter(q => q.quotation_id !== quotationId));
+        
+        // Actualizar las cotizaciones por proyecto
+        if (quotationToDelete) {
+          setProjectQuotations(prev => {
+            const newProjectQuotations = { ...prev };
+            const projectId = quotationToDelete.project_id;
+            
+            if (newProjectQuotations[projectId]) {
+              newProjectQuotations[projectId] = newProjectQuotations[projectId].filter(q => q.quotation_id !== quotationId);
+            }
+            
+            return newProjectQuotations;
+          });
+        }
+        
+        await fetchQuotationsSummary();
+        return true;
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al eliminar la cotización');
+      }
+    } catch (err) {
+      console.error('Error deleting quotation:', err);
+      throw err;
+    }
+  };
+
+  const fetchAllProjectQuotations = async (projectsToFetch = null) => {
+    try {
+      console.log('🚀 fetchAllProjectQuotations started');
+      
+      // Usar los proyectos pasados como parámetro o el estado actual
+      const projectsToUse = projectsToFetch || projects;
+      console.log('📊 Projects to fetch quotations for:', projectsToUse);
+      
+      setQuotationLoading(true);
+      const quotationsMap = {};
+      
+      for (const project of projectsToUse) {
+        console.log('🔍 Fetching quotations for project:', project.project_id, project.name);
+        const projectQuotations = await fetchProjectQuotations(project.project_id);
+        console.log('📋 Quotations received for project', project.project_id, ':', projectQuotations);
+        quotationsMap[project.project_id] = projectQuotations;
+      }
+      
+      console.log('📊 Final quotationsMap:', quotationsMap);
+      setProjectQuotations(quotationsMap);
+      console.log('✅ fetchAllProjectQuotations completed successfully');
+    } catch (err) {
+      console.error('❌ Error fetching all project quotations:', err);
+      setError('Error al cargar las cotizaciones de los proyectos');
+    } finally {
+      setQuotationLoading(false);
+    }
+  };
+
+  // Funciones de filtrado para cotizaciones
+  const getQuotationsByProject = (projectId) => {
+    console.log('🔍 getQuotationsByProject called for projectId:', projectId);
+    console.log('📊 projectQuotations state:', projectQuotations);
+    
+    const quotations = projectQuotations[projectId] || [];
+    console.log('📋 Raw quotations for project', projectId, ':', quotations);
+    
+    // Aplicar filtros
+    let filteredQuotations = quotations;
+
+    if (quotationStatusFilter) {
+      console.log('🔍 Filtering by status:', quotationStatusFilter);
+      filteredQuotations = filteredQuotations.filter(q => q.status === quotationStatusFilter);
+      console.log('📋 After status filter:', filteredQuotations);
+    }
+
+    if (quotationSearchFilter) {
+      console.log('🔍 Filtering by search:', quotationSearchFilter);
+      filteredQuotations = filteredQuotations.filter(q => 
+        q.description?.toLowerCase().includes(quotationSearchFilter.toLowerCase()) ||
+        q.quotation_id.toString().includes(quotationSearchFilter) ||
+        q.total_amount.toString().includes(quotationSearchFilter)
+      );
+      console.log('📋 After search filter:', filteredQuotations);
+    }
+
+    // Filtrar cuotas pagadas si no se quieren mostrar
+    if (!showPaidInstallments) {
+      console.log('🔍 Filtering out paid installments');
+      filteredQuotations = filteredQuotations.filter(q => q.total_pending > 0);
+      console.log('📋 After paid filter:', filteredQuotations);
+    }
+
+    console.log('✅ Final filtered quotations for project', projectId, ':', filteredQuotations);
+    return filteredQuotations;
+  };
+
+  const clearQuotationFilters = () => {
+    setQuotationProjectFilter('');
+    setQuotationStatusFilter('');
+    setQuotationSearchFilter('');
+  };
+
+  const getNextInstallment = (quotation) => {
+    if (!quotation.installments || quotation.installments.length === 0) return null;
+    return quotation.installments.find(inst => !inst.is_paid) || null;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Sin fecha';
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen p-6 bg-gradient-to-br from-gray-50 to-gray-100">
@@ -662,262 +1076,12 @@ export default function ProjectManagement() {
     <div className="min-h-screen p-6 bg-gray-50">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className={`text-3xl font-bold ${theme.PRIMARY_COLOR_CLASS}`}>
-            Centro de Proyectos
-          </h1>
-          <p className="text-gray-600 mt-2">
-            Gestión integral y analíticas de proyectos de la organización
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          {/* Controles de selección múltiple - Solo para super_user */}
-          {isSuperUser && (
-            <>
-              {!isSelectionMode ? (
-                <button
-                  onClick={() => setIsSelectionMode(true)}
-                  className="px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 font-medium shadow-lg flex items-center space-x-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Selección Múltiple</span>
-                </button>
-              ) : (
-                <div className="flex items-center space-x-3">
-                  <div className="bg-purple-100 text-purple-800 px-4 py-3 rounded-lg font-medium flex items-center space-x-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>{selectedProjects.size} seleccionados</span>
-                  </div>
-                  <button
-                    onClick={selectAllProjects}
-                    className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 font-medium flex items-center space-x-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Seleccionar Todo</span>
-                  </button>
-                  <button
-                    onClick={handleBulkDelete}
-                    disabled={selectedProjects.size === 0 || bulkDeleteLoading}
-                    className="px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center space-x-2"
-                  >
-                    {bulkDeleteLoading ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        <span>Eliminando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        <span>Eliminar</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={clearSelection}
-                    className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all duration-300 font-medium flex items-center space-x-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span>Cancelar</span>
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-          <button
-            onClick={handleCreateProject}
-            className={`px-6 py-3 ${theme.PRIMARY_BUTTON_CLASS} rounded-lg transition-colors font-medium flex items-center space-x-2`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Nuevo Proyecto</span>
-          </button>
-        </div>
+        {/* Los botones de selección múltiple y nuevo proyecto se moverán al header de filtros */}
       </div>
-
-      {/* 🚀 INDICADOR ÉPICO DE FILTROS ACTIVOS - NIVEL BILL GATES */}
-      {(searchFilter || clientFilter || sortConfig.key) && (
-        <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl shadow-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl shadow-lg animate-pulse">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-amber-800">🎯 Filtros Activos</h3>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {searchFilter && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 animate-pulse">
-                      🔍 "{searchFilter}"
-                    </span>
-                  )}
-                  {clientFilter && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 animate-pulse" style={{ animationDelay: '0.1s' }}>
-                      🏢 {clientFilter}
-                    </span>
-                  )}
-                  {sortConfig.key && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 animate-pulse" style={{ animationDelay: '0.2s' }}>
-                      📊 {sortConfig.key} ({sortConfig.direction === 'asc' ? '↑' : '↓'})
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                setSearchFilter('');
-                setClientFilter('');
-                setSortConfig({ key: null, direction: 'asc' });
-              }}
-              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 font-medium shadow-lg"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Limpiar Todo
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Estadísticas principales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {/* Total Proyectos */}
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 p-5 shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-          {/* Elementos flotantes animados */}
-          <div className="absolute -top-2 -right-2 w-20 h-20 bg-white/5 rounded-full animate-pulse"></div>
-          <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-white/5 rounded-full animate-bounce" style={{ animationDelay: '0.5s' }}></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
-                <svg className="w-5 h-5 text-white animate-pulse group-hover:animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-7H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z" />
-                </svg>
-              </div>
-              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-all duration-300 group-hover:scale-110 ${
-                stats.total_projects.change.startsWith('+') ? 'bg-green-100 text-green-800 animate-pulse' : 
-                stats.total_projects.change.startsWith('-') ? 'bg-red-100 text-red-800' : 'bg-white/20 text-white'
-              }`}>
-                {stats.total_projects.change}
-              </div>
-            </div>
-            <div>
-              <p className="text-blue-100 text-sm font-medium mb-1 group-hover:text-white transition-colors duration-300">Total Proyectos</p>
-              <p className="text-2xl font-bold text-white mb-1 transform-gpu group-hover:scale-110 transition-transform duration-300 origin-left">{stats.total_projects.value}</p>
-              <p className="text-blue-200 text-xs group-hover:text-blue-100 transition-colors duration-300">En la organización</p>
-            </div>
-          </div>
-          {/* Efecto de brillo en hover */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-        </div>
-
-        {/* Proyectos Activos */}
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-          {/* Elementos flotantes animados */}
-          <div className="absolute top-0 right-0 w-12 h-12 bg-white/5 rounded-full animate-ping"></div>
-          <div className="absolute bottom-2 left-2 w-8 h-8 bg-white/5 rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
-                <svg className="w-5 h-5 text-white group-hover:animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-all duration-300 group-hover:scale-110 ${
-                stats.active_projects.change.startsWith('+') ? 'bg-green-100 text-green-800 animate-pulse' : 
-                stats.active_projects.change.startsWith('-') ? 'bg-red-100 text-red-800' : 'bg-white/20 text-white'
-              }`}>
-                {stats.active_projects.change}
-              </div>
-            </div>
-            <div>
-              <p className="text-blue-100 text-sm font-medium mb-1 group-hover:text-white transition-colors duration-300">Activos</p>
-              <p className="text-2xl font-bold text-white mb-1 transform-gpu group-hover:scale-110 transition-transform duration-300 origin-left">{stats.active_projects.value}</p>
-              <p className="text-blue-200 text-xs group-hover:text-blue-100 transition-colors duration-300">En desarrollo</p>
-            </div>
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-        </div>
-
-        {/* Completados */}
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-500 to-green-600 p-5 shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-          {/* Elementos flotantes animados */}
-          <div className="absolute top-1 left-1 w-6 h-6 bg-white/10 rounded-full animate-ping" style={{ animationDelay: '0.3s' }}></div>
-          <div className="absolute bottom-0 right-0 w-14 h-14 bg-white/5 rounded-full animate-pulse" style={{ animationDelay: '1.5s' }}></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
-                <svg className="w-5 h-5 text-white group-hover:animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-all duration-300 group-hover:scale-110 ${
-                stats.completed_projects.change.startsWith('+') ? 'bg-green-100 text-green-800 animate-pulse' : 
-                stats.completed_projects.change.startsWith('-') ? 'bg-red-100 text-red-800' : 'bg-white/20 text-white'
-              }`}>
-                {stats.completed_projects.change}
-              </div>
-            </div>
-            <div>
-              <p className="text-green-100 text-sm font-medium mb-1 group-hover:text-white transition-colors duration-300">Completados</p>
-              <p className="text-2xl font-bold text-white mb-1 transform-gpu group-hover:scale-110 transition-transform duration-300 origin-left">{stats.completed_projects.value}</p>
-              <p className="text-green-200 text-xs group-hover:text-green-100 transition-colors duration-300">Finalizados</p>
-            </div>
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-        </div>
-
-        {/* Atrasados */}
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-orange-500 to-red-500 p-5 shadow-md hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-          {/* Elementos flotantes animados */}
-          <div className="absolute top-2 right-2 w-10 h-10 bg-white/5 rounded-full animate-bounce" style={{ animationDelay: '0.7s' }}></div>
-          <div className="absolute bottom-1 left-3 w-4 h-4 bg-white/10 rounded-full animate-ping" style={{ animationDelay: '2s' }}></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
-                <svg className="w-5 h-5 text-white group-hover:animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-all duration-300 group-hover:scale-110 ${
-                stats.overdue_projects.change.startsWith('+') ? 'bg-red-100 text-red-800 animate-pulse' : 
-                stats.overdue_projects.change.startsWith('-') ? 'bg-green-100 text-green-800' : 'bg-white/20 text-white'
-              }`}>
-                {stats.overdue_projects.change}
-              </div>
-            </div>
-            <div>
-              <p className="text-orange-100 text-sm font-medium mb-1 group-hover:text-white transition-colors duration-300">Atrasados</p>
-              <p className="text-2xl font-bold text-white mb-1 transform-gpu group-hover:scale-110 transition-transform duration-300 origin-left">{stats.overdue_projects.value}</p>
-              <p className="text-orange-200 text-xs group-hover:text-orange-100 transition-colors duration-300">Requieren atención</p>
-            </div>
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-        </div>
-      </div>
+      {/* Eliminados los stats coloridos principales */}
+      {/* Eliminada la grid de stats */}
 
       {/* Navegación por pestañas */}
       <div className="relative overflow-hidden rounded-2xl bg-white shadow-lg border border-gray-200 mb-6">
@@ -925,9 +1089,9 @@ export default function ProjectManagement() {
         <div className="relative z-10 border-b border-gray-200">
           <nav className="flex space-x-2 px-6 py-4">
             {[
-              { id: 'overview', label: 'Resumen Ejecutivo', icon: '📊' },
-              { id: 'analytics', label: 'Analíticas de Tiempo', icon: '📈' },
-              { id: 'projects', label: 'Lista de Proyectos', icon: '📋' }
+              { id: 'overview', label: 'Resumen', icon: '📊' },
+              { id: 'projects', label: 'Proyectos', icon: '📋' },
+              { id: 'quotations', label: 'Cotizaciones', icon: '💰' }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1033,7 +1197,7 @@ export default function ProjectManagement() {
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                     </div>
 
-                    {/* Usuarios activos */}
+                    {/* Cotizaciones abiertas y total pendiente */}
                     <div className="group relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-sm border border-gray-200/60 p-4 shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 hover:scale-[1.02]">
                       <div className="absolute inset-0 bg-gradient-to-br from-blue-50/40 to-indigo-50/20"></div>
                       <div className="absolute top-1 right-1 w-12 h-12 bg-blue-100/20 rounded-full"></div>
@@ -1041,23 +1205,25 @@ export default function ProjectManagement() {
                         <div className="flex items-center justify-between mb-3">
                           <div className="p-2.5 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-md group-hover:scale-110 transition-transform duration-300">
                             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
                         </div>
                         <div>
-                          <p className="text-blue-700 text-sm font-medium mb-1 group-hover:text-blue-800 transition-colors duration-300">Usuarios Activos</p>
+                          <p className="text-blue-700 text-sm font-medium mb-1 group-hover:text-blue-800 transition-colors duration-300">Cotizaciones Abiertas</p>
                           <p className="text-2xl font-bold text-gray-900 mb-1 transform-gpu group-hover:scale-105 transition-transform duration-300 origin-left">
-                            {timeAnalytics.projects.reduce((sum, p) => sum + (p.unique_users || 0), 0)}
+                            {calculateOpenQuotations()}
                           </p>
-                          <p className="text-blue-600 text-xs group-hover:text-blue-700 transition-colors duration-300">Colaboradores</p>
+                          <p className="text-blue-600 text-xs group-hover:text-blue-700 transition-colors duration-300">
+                            {formatCurrency(calculateTotalPending())} pendiente
+                          </p>
                         </div>
                       </div>
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                     </div>
                   </div>
 
-                  {/* Sección de Top Proyectos y Distribución */}
+                  {/* Sección de Top Proyectos y Progreso */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Top 5 Proyectos por Horas */}
                     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300">
@@ -1100,114 +1266,6 @@ export default function ProjectManagement() {
             </div>
           </div>
         ))}
-                      </div>
-      </div>
-
-                    {/* Distribución por Estado */}
-                    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl shadow-lg">
-                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-      </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-800">📊 Distribución</h3>
-                            <p className="text-sm text-gray-600">Por estado de proyecto</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        {(() => {
-                          // Definir el orden lógico de los estados y sus colores estratégicos
-                          const statusOrder = [
-                            { key: 'registered_initiative', label: 'Iniciativa Registrada', color: 'from-gray-400 to-gray-500' },
-                            { key: 'in_quotation', label: 'En Cotización', color: 'from-blue-400 to-blue-500' },
-                            { key: 'proposal_approved', label: 'Propuesta Aprobada', color: 'from-indigo-400 to-indigo-500' },
-                            { key: 'in_planning', label: 'En Planeación', color: 'from-purple-400 to-purple-500' },
-                            { key: 'in_progress', label: 'En Progreso', color: 'from-emerald-400 to-emerald-500' },
-                            { key: 'at_risk', label: 'En Riesgo', color: 'from-amber-400 to-amber-500' },
-                            { key: 'suspended', label: 'Suspendido', color: 'from-orange-400 to-orange-500' },
-                            { key: 'completed', label: 'Completado', color: 'from-green-500 to-green-600' },
-                            { key: 'canceled', label: 'Cancelado', color: 'from-red-400 to-red-500' },
-                            { key: 'post_delivery_support', label: 'Soporte Post-Entrega', color: 'from-teal-400 to-teal-500' }
-                          ];
-
-                          // Contar proyectos por estado
-                          const statusCounts = timeAnalytics.projects.reduce((acc, project) => {
-                            acc[project.status] = (acc[project.status] || 0) + 1;
-                            return acc;
-                          }, {});
-
-                          // Filtrar solo los estados que tienen proyectos y mantener el orden
-                          return statusOrder
-                            .filter(status => statusCounts[status.key] > 0)
-                            .map((status, index) => {
-                              const count = statusCounts[status.key];
-                              const percentage = Math.round((count / timeAnalytics.projects.length) * 100);
-                              
-                              return (
-                                <div key={status.key} className="space-y-2">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-gray-700">{status.label}</span>
-                                    <span className="text-sm font-bold text-gray-900">{count} ({percentage}%)</span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                    <div 
-                                      className={`h-2 bg-gradient-to-r ${status.color} rounded-full transition-all duration-1000 ease-out`}
-                                      style={{ width: `${percentage}%` }}
-                                    ></div>
-                                  </div>
-                                </div>
-                              );
-                            });
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Sección de Eficiencia y Progreso */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Análisis de Eficiencia */}
-                    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl shadow-lg">
-                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-800">⚡ Eficiencia</h3>
-                            <p className="text-sm text-gray-600">Análisis de rendimiento</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        {['En tiempo', 'Ligeramente retrasado', 'Retrasado'].map((efficiency, index) => {
-                          const count = timeAnalytics.projects.filter(p => p.efficiency === efficiency).length;
-                          const percentage = Math.round((count / timeAnalytics.projects.length) * 100);
-                          const colors = ['from-emerald-500 to-emerald-600', 'from-amber-500 to-amber-600', 'from-rose-500 to-rose-600'];
-                          const icons = ['✅', '⚠️', '🚨'];
-                          return (
-                            <div key={efficiency} className="space-y-2">
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-lg">{icons[index]}</span>
-                                  <span className="text-sm font-medium text-gray-700">{efficiency}</span>
-                                </div>
-                                <span className="text-sm font-bold text-gray-900">{count} ({percentage}%)</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                                <div 
-                                  className={`h-3 bg-gradient-to-r ${colors[index]} rounded-full transition-all duration-1000 ease-out`}
-                                  style={{ width: `${percentage}%` }}
-                                ></div>
-                              </div>
-                            </div>
-                          );
-                        })}
                       </div>
                     </div>
 
@@ -1298,582 +1356,286 @@ export default function ProjectManagement() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Sección de Distribución y Eficiencia */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Distribución por Estado */}
+                    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300">
+                      <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl shadow-lg">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div>
+                            <h3 className="text-lg font-bold text-gray-800">📊 Distribución</h3>
+                            <p className="text-sm text-gray-600">Por estado de proyecto</p>
+                    </div>
+                  </div>
+                    </div>
+                      <div className="space-y-4">
+                        {(() => {
+                          // Definir el orden lógico de los estados y sus colores estratégicos
+                          const statusOrder = [
+                            { key: 'registered_initiative', label: 'Iniciativa Registrada', color: 'from-gray-400 to-gray-500' },
+                            { key: 'in_quotation', label: 'En Cotización', color: 'from-blue-400 to-blue-500' },
+                            { key: 'proposal_approved', label: 'Propuesta Aprobada', color: 'from-indigo-400 to-indigo-500' },
+                            { key: 'in_planning', label: 'En Planeación', color: 'from-purple-400 to-purple-500' },
+                            { key: 'in_progress', label: 'En Progreso', color: 'from-emerald-400 to-emerald-500' },
+                            { key: 'at_risk', label: 'En Riesgo', color: 'from-amber-400 to-amber-500' },
+                            { key: 'suspended', label: 'Suspendido', color: 'from-orange-400 to-orange-500' },
+                            { key: 'completed', label: 'Completado', color: 'from-green-500 to-green-600' },
+                            { key: 'canceled', label: 'Cancelado', color: 'from-red-400 to-red-500' },
+                            { key: 'post_delivery_support', label: 'Soporte Post-Entrega', color: 'from-teal-400 to-teal-500' }
+                          ];
+
+                          // Contar proyectos por estado
+                          const statusCounts = timeAnalytics.projects.reduce((acc, project) => {
+                            acc[project.status] = (acc[project.status] || 0) + 1;
+                            return acc;
+                          }, {});
+
+                          // Crear array con estados que tienen proyectos y ordenar por cantidad descendente
+                          const statusWithCounts = statusOrder
+                            .filter(status => statusCounts[status.key] > 0)
+                            .map(status => ({
+                              ...status,
+                              count: statusCounts[status.key]
+                            }))
+                            .sort((a, b) => b.count - a.count); // Orden descendente por cantidad
+
+                          return statusWithCounts.map((status) => {
+                            const count = status.count;
+                            const percentage = Math.round((count / timeAnalytics.projects.length) * 100);
+                            const projectsInStatus = timeAnalytics.projects.filter(p => p.status === status.key);
+                            
+                            return (
+                              <div key={status.key} className="group relative">
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900 transition-colors cursor-pointer">
+                                      {status.label}
+                              </span>
+                                    <span className="text-sm font-bold text-gray-900 group-hover:text-gray-700 transition-colors">
+                                      {count} ({percentage}%)
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                    <div 
+                                      className={`h-2 bg-gradient-to-r ${status.color} rounded-full transition-all duration-1000 ease-out`}
+                                      style={{ width: `${percentage}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                                
+                                {/* Tooltip con proyectos del estado */}
+                                <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto z-50">
+                                  <div className="p-3">
+                                    <h4 className="font-semibold text-gray-800 mb-2">{status.label} ({count})</h4>
+                                    <div className="max-h-40 overflow-y-auto space-y-1">
+                                      {projectsInStatus.map(project => (
+                                        <div key={project.project_id} className="flex items-center justify-between text-sm">
+                                          <span className="text-gray-700 truncate">{project.name}</span>
+                                          <span className="text-gray-500 text-xs">{project.progress_percentage || 0}%</span>
+                              </div>
+                                      ))}
+                              </div>
+                          </div>
+                                  <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
+                                </div>
+                                  </div>
+                            );
+                          });
+                        })()}
+                                </div>
+                              </div>
+
+                    {/* Sección de Eficiencia */}
+                    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300">
+                      <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl shadow-lg">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800">⚡ Eficiencia</h3>
+                            <p className="text-sm text-gray-600">Análisis de rendimiento</p>
+                    </div>
+                  </div>
+                      </div>
+                      <div className="space-y-4">
+                        {(() => {
+                          // Definir las opciones de eficiencia con sus colores e iconos
+                          const efficiencyOptions = [
+                            { value: 'En tiempo', color: 'from-emerald-500 to-emerald-600', icon: '✅' },
+                            { value: 'Ligeramente retrasado', color: 'from-amber-500 to-amber-600', icon: '⚠️' },
+                            { value: 'Retrasado', color: 'from-rose-500 to-rose-600', icon: '🚨' }
+                          ];
+
+                          // Contar proyectos por eficiencia y ordenar por cantidad descendente
+                          const efficiencyCounts = efficiencyOptions
+                            .map(option => ({
+                              ...option,
+                              count: timeAnalytics.projects.filter(p => p.efficiency === option.value).length
+                            }))
+                            .filter(option => option.count > 0)
+                            .sort((a, b) => b.count - a.count); // Orden descendente por cantidad
+
+                          return efficiencyCounts.map((efficiency) => {
+                            const count = efficiency.count;
+                            const percentage = Math.round((count / timeAnalytics.projects.length) * 100);
+                            const projectsInEfficiency = timeAnalytics.projects.filter(p => p.efficiency === efficiency.value);
+                            
+                            return (
+                              <div key={efficiency.value} className="group relative">
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                                      <span className="text-lg">{efficiency.icon}</span>
+                                      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900 transition-colors cursor-pointer">
+                                        {efficiency.value}
+                                      </span>
+                    </div>
+                                    <span className="text-sm font-bold text-gray-900 group-hover:text-gray-700 transition-colors">
+                                      {count} ({percentage}%)
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                    <div 
+                                      className={`h-3 bg-gradient-to-r ${efficiency.color} rounded-full transition-all duration-1000 ease-out`}
+                                      style={{ width: `${percentage}%` }}
+                                    ></div>
+                  </div>
+                </div>
+                
+                                {/* Tooltip con proyectos de la eficiencia */}
+                                <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto z-50">
+                                  <div className="p-3">
+                                    <h4 className="font-semibold text-gray-800 mb-2">{efficiency.value} ({count})</h4>
+                                    <div className="max-h-40 overflow-y-auto space-y-1">
+                                      {projectsInEfficiency.map(project => (
+                                        <div key={project.project_id} className="flex items-center justify-between text-sm">
+                                          <span className="text-gray-700 truncate">{project.name}</span>
+                                          <span className="text-gray-500 text-xs">{project.progress_percentage || 0}%</span>
+                      </div>
+                                      ))}
+                    </div>
+                  </div>
+                                  <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
+                  </div>
+                  </div>
+                            );
+                          });
+                        })()}
+                </div>
+              </div>
+                  </div>
                 </>
               ) : (
                 /* Mensaje elegante cuando no hay datos */
                 <div className="text-center py-12">
-                  <div className="relative inline-block">
+                    <div className="relative inline-block">
                     <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                       <svg className="w-12 h-12 text-blue-500 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
+                        </svg>
+                      </div>
                     <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-500 rounded-full animate-ping"></div>
-                  </div>
+                    </div>
                   <h3 className="text-2xl font-bold text-gray-900 mb-4">📊 Resumen Ejecutivo</h3>
                   <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
                     Vista general de todos los proyectos de la organización con métricas clave y tendencias de rendimiento.
                   </p>
                   <div className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium shadow-lg">
                     <svg className="w-5 h-5 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Próximamente disponible
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Pestaña Analíticas de Tiempo */}
-          {activeTab === 'analytics' && timeAnalytics && (
-            <div className="space-y-6">
-              {/* 🚀 FILTROS ÉPICOS - NIVEL BILL GATES */}
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border border-blue-200 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
-                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800">Filtros Avanzados</h3>
-                      <p className="text-sm text-gray-600">Encuentra exactamente lo que buscas</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                      </svg>
-                      {getSortedAndFilteredProjects().length} resultados
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Búsqueda general */}
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      🔍 Búsqueda General
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Ej: 'en curso', 'completado', 'retrasado', nombre del proyecto..."
-                        value={searchFilter}
-                        onChange={(e) => setSearchFilter(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white/80 backdrop-blur-sm"
-                      />
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                      </div>
-                      {searchFilter && (
-                        <button
-                          onClick={() => setSearchFilter('')}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                        >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Filtro por cliente */}
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      🏢 Filtrar por Cliente
-                    </label>
-                    <select
-                      value={clientFilter}
-                      onChange={(e) => setClientFilter(e.target.value)}
-                      className="w-full py-3 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white/80 backdrop-blur-sm"
-                    >
-                      <option value="">Todos los clientes</option>
-                      {clients.map(client => (
-                        <option key={client.client_id} value={client.name}>
-                          {client.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {/* Botón de limpiar filtros */}
-                  <div className="flex items-end">
-                    <button
-                      onClick={() => {
-                        setSearchFilter('');
-                        setClientFilter('');
-                        setSortConfig({ key: null, direction: 'asc' });
-                      }}
-                      className="w-full py-3 px-4 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 transition-all duration-300 transform hover:scale-105 font-medium shadow-lg"
-                    >
-                      🧹 Limpiar Filtros
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                      <tr>
-                        {/* Columna de selección - Solo para super_user */}
-                        {isSuperUser && isSelectionMode && (
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            <input
-                              type="checkbox"
-                              checked={selectedProjects.size === getSortedAndFilteredProjects().length && getSortedAndFilteredProjects().length > 0}
-                              onChange={selectedProjects.size === getSortedAndFilteredProjects().length ? clearSelection : selectAllProjects}
-                              className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                            />
-                          </th>
-                        )}
-                        <th 
-                          className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                          onClick={() => handleSort('name')}
-                          data-sort="name"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span>Proyecto</span>
-                            {getSortIcon('name')}
-                          </div>
-                        </th>
-                        <th 
-                          className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                          onClick={() => handleSort('status')}
-                          data-sort="status"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span>Estado</span>
-                            {getSortIcon('status')}
-                          </div>
-                        </th>
-                        <th 
-                          className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                          onClick={() => handleSort('progress_percentage')}
-                          data-sort="progress_percentage"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span>Progreso</span>
-                            {getSortIcon('progress_percentage')}
-                          </div>
-                        </th>
-                        <th 
-                          className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                          onClick={() => handleSort('total_hours')}
-                          data-sort="total_hours"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span>Horas</span>
-                            {getSortIcon('total_hours')}
-                          </div>
-                        </th>
-                        <th 
-                          className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                          onClick={() => handleSort('efficiency')}
-                          data-sort="efficiency"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span>Eficiencia</span>
-                            {getSortIcon('efficiency')}
-                          </div>
-                        </th>
-                        <th 
-                          className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                          onClick={() => handleSort('unique_users')}
-                          data-sort="unique_users"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span>Equipo</span>
-                            {getSortIcon('unique_users')}
-                          </div>
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                      {getSortedAndFilteredProjects().length === 0 ? (
-                        <tr>
-                          <td colSpan={isSuperUser && isSelectionMode ? "8" : "7"} className="px-4 py-12 text-center">
-                            <div className="flex flex-col items-center justify-center space-y-4">
-                              <div className="relative">
-                                <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center animate-pulse">
-                                  <svg className="w-10 h-10 text-gray-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                  </svg>
-                                </div>
-                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full animate-ping"></div>
-                              </div>
-                              <div className="text-center">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2">🔍 No se encontraron proyectos</h3>
-                                <p className="text-gray-500 mb-4">Intenta ajustar tus filtros o buscar con otros términos</p>
-                                <button
-                                  onClick={() => {
-                                    setSearchFilter('');
-                                    setClientFilter('');
-                                    setSortConfig({ key: null, direction: 'asc' });
-                                  }}
-                                  className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-105 font-medium shadow-lg"
-                                >
-                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                  </svg>
-                                  Limpiar filtros
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        getSortedAndFilteredProjects().map((project, index) => (
-                          <tr key={project.project_id} className={`hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} ${selectedProjects.has(project.project_id) ? 'bg-purple-50 border-l-4 border-purple-500' : ''}`}>
-                            {/* Checkbox de selección - Solo para super_user */}
-                            {isSuperUser && isSelectionMode && (
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedProjects.has(project.project_id)}
-                                  onChange={() => toggleProjectSelection(project.project_id)}
-                                  className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                                />
-                              </td>
-                            )}
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                <div className="text-sm font-medium text-gray-900">{project.name}</div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(project.status)}`}>
-                                {getStatusLabel(project.status)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="flex items-center space-x-2">
-                                <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[80px]">
-                                  <div 
-                                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300" 
-                                    style={{ width: `${Math.min(project.progress_percentage, 100)}%` }}
-                                  ></div>
-                                </div>
-                                <span className="text-sm font-medium text-gray-700 min-w-[35px]">{project.progress_percentage}%</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
-                                {project.total_hours}h <span className="text-gray-400">/</span> <span className="text-gray-600">{project.estimated_hours || 'N/A'}h</span>
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {project.hours_remaining > 0 ? `${project.hours_remaining}h restantes` : 'Completado'}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <span className={`text-sm font-semibold ${getEfficiencyColor(project.efficiency)}`}>
-                                {project.efficiency}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="space-y-1">
-                                <div className="flex items-center space-x-2">
-                                  <div className="flex items-center space-x-1">
-                                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                                    <span className="text-sm font-medium text-gray-900">{project.unique_users}</span>
-                                    <span className="text-xs text-gray-500">usuarios</span>
-                          </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <div className="flex items-center space-x-1">
-                                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                                    </svg>
-                                    <span className="text-sm font-medium text-gray-900">{project.total_entries}</span>
-                                    <span className="text-xs text-gray-500">entradas</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="flex space-x-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log('Edit button clicked for project card:', project);
-                                    handleEditProject(project);
-                                  }}
-                                  className="group p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                                  title="Editar proyecto"
-                                >
-                                  <svg className="w-4 h-4 transition-transform duration-200 group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log('Delete button clicked for project card:', project);
-                                    handleDeleteProject(project);
-                                  }}
-                                  className="group p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                                  title="Eliminar proyecto"
-                                >
-                                  <svg className="w-4 h-4 transition-transform duration-200 group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Pestaña Lista de Proyectos */}
-          {activeTab === 'projects' && (
-            <div className="space-y-6">
-              {/* 🚀 FILTROS ÉPICOS - NIVEL BILL GATES */}
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-6 border border-green-200 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
-                      </svg>
-                        </div>
-                        <div>
-                      <h3 className="text-lg font-bold text-gray-800">Filtros de Proyectos</h3>
-                      <p className="text-sm text-gray-600">Explora todos los proyectos de la organización</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                      </svg>
-                      {getFilteredProjectsList().length} proyectos
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Búsqueda general */}
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      🔍 Búsqueda General
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Buscar por nombre, estado, código..."
-                        value={searchFilter}
-                        onChange={(e) => setSearchFilter(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300 bg-white/80 backdrop-blur-sm"
-                      />
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                      </div>
-                      {searchFilter && (
-                        <button
-                          onClick={() => setSearchFilter('')}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                        >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Filtro por cliente */}
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      🏢 Filtrar por Cliente
-                    </label>
-                    <select
-                      value={clientFilter}
-                      onChange={(e) => setClientFilter(e.target.value)}
-                      className="w-full py-3 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-300 bg-white/80 backdrop-blur-sm"
-                    >
-                      <option value="">Todos los clientes</option>
-                      {clients.map(client => (
-                        <option key={client.client_id} value={client.name}>
-                          {client.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {/* Botón de limpiar filtros */}
-                  <div className="flex items-end">
-                    <button
-                      onClick={() => {
-                        setSearchFilter('');
-                        setClientFilter('');
-                        setSortConfig({ key: null, direction: 'asc' });
-                      }}
-                      className="w-full py-3 px-4 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 transition-all duration-300 transform hover:scale-105 font-medium shadow-lg"
-                    >
-                      🧹 Limpiar Filtros
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {getFilteredProjectsList().length === 0 ? (
-                  <div className="col-span-full text-center py-12">
-                    <div className="relative inline-block">
-                      <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                        <svg className="w-10 h-10 text-gray-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                      </div>
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full animate-ping"></div>
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">🔍 No se encontraron proyectos</h3>
-                    <p className="text-gray-500 mb-4">No hay proyectos que coincidan con los filtros aplicados. Intenta con otros filtros o crea un nuevo proyecto.</p>
-                    <button
-                      onClick={() => {
-                        setSearchFilter('');
-                        setClientFilter('');
-                        setSortConfig({ key: null, direction: 'asc' });
-                      }}
-                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-300 transform hover:scale-105 font-medium shadow-lg"
-                    >
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      Limpiar filtros
-                    </button>
+                    Próximamente disponible
                   </div>
-                ) : (
-                  getFilteredProjectsList().map((project, index) => (
-                    <div 
-                      key={project.project_id} 
-                      className={`group relative overflow-hidden bg-white border border-gray-200 rounded-lg p-6 hover:shadow-xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105 ${selectedProjects.has(project.project_id) ? 'ring-2 ring-purple-500 bg-purple-50' : ''}`}
-                      style={{ animationDelay: `${index * 0.1}s` }}
-                    >
-                      {/* Checkbox de selección - Solo para super_user */}
-                      {isSuperUser && isSelectionMode && (
-                        <div className="absolute top-4 left-4 z-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedProjects.has(project.project_id)}
-                            onChange={() => toggleProjectSelection(project.project_id)}
-                            className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2 shadow-lg"
-                          />
                         </div>
                       )}
-                      
-                      {/* Elementos flotantes animados */}
-                      <div className="absolute -top-1 -right-1 w-8 h-8 bg-blue-50 rounded-full opacity-0 group-hover:opacity-100 animate-ping transition-opacity duration-300"></div>
-                      <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-blue-100 rounded-full opacity-0 group-hover:opacity-100 animate-pulse transition-opacity duration-500" style={{ animationDelay: '0.2s' }}></div>
-                      
-                      <div className={`flex justify-between items-start mb-4 ${isSuperUser && isSelectionMode ? 'ml-8' : ''}`}>
-                        <h3 className="text-lg font-semibold text-gray-900 truncate group-hover:text-blue-700 transition-colors duration-300">{project.name}</h3>
-                        <div className="flex space-x-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              console.log('Edit button clicked for project card:', project);
-                              handleEditProject(project);
-                            }}
-                            className="group p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                            title="Editar proyecto"
-                          >
-                            <svg className="w-4 h-4 transition-transform duration-200 group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              console.log('Delete button clicked for project card:', project);
-                              handleDeleteProject(project);
-                            }}
-                            className="group p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                            title="Eliminar proyecto"
-                          >
-                            <svg className="w-4 h-4 transition-transform duration-200 group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center group-hover:scale-105 transition-transform duration-300">
-                          <span className="text-sm text-gray-600">Estado:</span>
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full transition-all duration-300 group-hover:scale-110 ${getStatusColor(project.status)}`}>
-                            {getStatusLabel(project.status)}
-                          </span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center group-hover:scale-105 transition-transform duration-300">
-                          <span className="text-sm text-gray-600">Cliente:</span>
-                          <span className="text-sm font-medium text-gray-900 group-hover:text-blue-700 transition-colors duration-300">
-                            {clients.find(c => c.client_id === project.client_id)?.name || 'N/A'}
-                          </span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center group-hover:scale-105 transition-transform duration-300">
-                          <span className="text-sm text-gray-600">Código:</span>
-                          <span className="text-sm font-mono text-gray-900 group-hover:text-blue-700 transition-colors duration-300">{project.code || 'N/A'}</span>
-                        </div>
-                        
-                        {project.start_date && (
-                          <div className="flex justify-between items-center group-hover:scale-105 transition-transform duration-300">
-                            <span className="text-sm text-gray-600">Inicio:</span>
-                            <span className="text-sm text-gray-900 group-hover:text-blue-700 transition-colors duration-300">
-                              {new Date(project.start_date).toLocaleDateString()}
-                            </span>
                           </div>
                         )}
                         
-                        {project.end_date && (
-                          <div className="flex justify-between items-center group-hover:scale-105 transition-transform duration-300">
-                            <span className="text-sm text-gray-600">Fin:</span>
-                            <span className="text-sm text-gray-900 group-hover:text-blue-700 transition-colors duration-300">
-                              {new Date(project.end_date).toLocaleDateString()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Efecto de brillo en hover */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-50/50 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+          {/* Pestaña Proyectos */}
+          {activeTab === 'projects' && (
+            <ProjectsView
+              projects={projects}
+              clients={clients}
+              timeAnalytics={timeAnalytics}
+              searchFilter={searchFilter}
+              setSearchFilter={setSearchFilter}
+              clientFilter={clientFilter}
+              setClientFilter={setClientFilter}
+              sortConfig={sortConfig}
+              setSortConfig={setSortConfig}
+              projectViewMode={projectViewMode}
+              setProjectViewMode={setProjectViewMode}
+              isSelectionMode={isSelectionMode}
+              setIsSelectionMode={setIsSelectionMode}
+              selectedProjects={selectedProjects}
+              setSelectedProjects={setSelectedProjects}
+              selectedProject={selectedProject}
+              setSelectedProject={setSelectedProject}
+              showModal={showModal}
+              setShowModal={setShowModal}
+              getSortedAndFilteredProjects={getSortedAndFilteredProjects}
+              handleSort={handleSort}
+              getSortIcon={getSortIcon}
+              getStatusColor={getStatusColor}
+              getStatusLabel={getStatusLabel}
+              getEfficiencyColor={getEfficiencyColor}
+              getProgressColors={getProgressColors}
+              toggleProjectSelection={toggleProjectSelection}
+              selectAllProjects={selectAllProjects}
+              clearSelection={clearSelection}
+              handleEditProject={handleEditProject}
+              handleDeleteProject={handleDeleteProject}
+              handleUpdateProjectStatus={handleUpdateProjectStatus}
+              isSuperUser={isSuperUser}
+            />
+          )}
+
+          {/* Pestaña Cotizaciones */}
+          {activeTab === 'quotations' && (
+            <Quotations 
+              projects={projects}
+              clients={clients}
+              quotations={quotations}
+              quotationsSummary={quotationsSummary}
+              projectQuotations={projectQuotations}
+              quotationViewMode={quotationViewMode}
+              setQuotationViewMode={setQuotationViewMode}
+              showPaidInstallments={showPaidInstallments}
+              setShowPaidInstallments={setShowPaidInstallments}
+              quotationProjectFilter={quotationProjectFilter}
+              setQuotationProjectFilter={setQuotationProjectFilter}
+              quotationStatusFilter={quotationStatusFilter}
+              setQuotationStatusFilter={setQuotationStatusFilter}
+              quotationSearchFilter={quotationSearchFilter}
+              setQuotationSearchFilter={setQuotationSearchFilter}
+              quotationLoading={quotationLoading}
+              setQuotationLoading={setQuotationLoading}
+              showQuotationModal={showQuotationModal}
+              setShowQuotationModal={setShowQuotationModal}
+              selectedQuotation={selectedQuotation}
+              setSelectedQuotation={setSelectedQuotation}
+              selectedProject={selectedProject}
+              setSelectedProject={setSelectedProject}
+              fetchQuotationsSummary={fetchQuotationsSummary}
+              fetchAllProjectQuotations={fetchAllProjectQuotations}
+              getQuotationsByProject={getQuotationsByProject}
+              clearQuotationFilters={clearQuotationFilters}
+              getNextInstallment={getNextInstallment}
+              formatDate={formatDate}
+              createQuotation={createQuotation}
+              updateQuotation={updateQuotation}
+              deleteQuotation={deleteQuotation}
+              isSuperUser={isSuperUser}
+            />
           )}
         </div>
       </div>
@@ -1888,8 +1650,37 @@ export default function ProjectManagement() {
         />
       )}
 
-      {/* Error message */}
-      {error && (
+      {/* Modal de cotizaciones */}
+      {showQuotationModal && (
+        <QuotationModal
+          isOpen={showQuotationModal}
+          quotation={selectedQuotation}
+          project={selectedProject}
+          projects={projects}
+          onClose={() => {
+            setShowQuotationModal(false);
+            setSelectedQuotation(null);
+            setSelectedProject(null);
+          }}
+          onSave={async (quotationData) => {
+            try {
+              if (selectedQuotation) {
+                await updateQuotation(selectedQuotation.quotation_id, quotationData);
+              } else {
+                await createQuotation(quotationData);
+              }
+              setShowQuotationModal(false);
+              setSelectedQuotation(null);
+              setSelectedProject(null);
+            } catch (error) {
+              console.error('Error saving quotation:', error);
+            }
+          }}
+        />
+      )}
+
+      {/* Error message con React Portal */}
+      {error && createPortal(
         <div className="fixed bottom-4 right-4 z-50 animate-bounce">
           <div className="bg-gradient-to-r from-red-500 to-red-600 border border-red-400 text-white px-6 py-4 rounded-lg shadow-xl transform transition-all duration-300 hover:scale-105">
             <div className="flex items-center space-x-3">
@@ -1901,11 +1692,12 @@ export default function ProjectManagement() {
               <span className="font-medium">{error}</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Success message */}
-      {successMessage && (
+      {/* Success message con React Portal */}
+      {successMessage && createPortal(
         <div className="fixed bottom-4 right-4 z-50 animate-bounce">
           <div className="bg-gradient-to-r from-green-500 to-green-600 border border-green-400 text-white px-6 py-4 rounded-lg shadow-xl transform transition-all duration-300 hover:scale-105">
             <div className="flex items-center space-x-3">
@@ -1917,7 +1709,8 @@ export default function ProjectManagement() {
               <span className="font-medium">{successMessage}</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

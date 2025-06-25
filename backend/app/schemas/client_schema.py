@@ -27,6 +27,7 @@ class ClientOut(ClientBase):
     client_id: int
     created_at: datetime
     updated_at: datetime
+    rating_average: Optional[float] = None
 
     class Config:
         from_attributes = True

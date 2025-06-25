@@ -1,20 +1,24 @@
-import { useNavigate, useLocation, NavLink } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiChevronDown, FiLogOut, FiZap } from 'react-icons/fi';
+import { AnimatePresence } from 'framer-motion';
+import { FiChevronDown, FiLogOut, FiZap, FiChevronsLeft } from 'react-icons/fi';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { sidebarItems } from './sidebarConfig';
+import { useFocusMode } from "../../context/FocusModeContext.jsx";
+import { getSidebarItemsForUser } from './sidebarConfig';
 import ProfileModal from '../Profile/ProfileModal';
 
 const Sidebar = ({ collapsed, onMenuClick }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const theme = useAppTheme();
   const { user, logout, profileImage } = useAuth();
+  const { isFocusMode } = useFocusMode();
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Obtener items del sidebar filtrados por rol
+  const sidebarItems = getSidebarItemsForUser(user?.role);
 
   // Hotkeys para navegación rápida (⌘ + Número)
   useHotkeys('cmd+1', () => navigate('/home'));
@@ -27,6 +31,22 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
       setExpandedSections(new Set());
     }
   }, [collapsed]);
+
+  // Efecto para contraer automáticamente el sidebar cuando se active el modo enfoque
+  useEffect(() => {
+    if (isFocusMode && !collapsed) {
+      // Solo contraer si el modo enfoque se acaba de activar y el sidebar no está colapsado
+      // Usar un ref para evitar contraer múltiples veces
+      const hasContracted = sessionStorage.getItem('focusModeSidebarContracted');
+      if (!hasContracted) {
+        onMenuClick();
+        sessionStorage.setItem('focusModeSidebarContracted', 'true');
+      }
+    } else if (!isFocusMode) {
+      // Limpiar el flag cuando se desactiva el modo enfoque
+      sessionStorage.removeItem('focusModeSidebarContracted');
+    }
+  }, [isFocusMode, collapsed, onMenuClick]);
 
   const handleLogout = () => {
     if (window.confirm('¿Estás seguro de que deseas cerrar sesión?')) {
@@ -47,7 +67,7 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
       // Programar la expansión de la sección después de que el sidebar se expanda
       setTimeout(() => {
         setExpandedSections(prev => {
-          const next = new Set();
+          const next = new Set(prev);
           next.add(text);
           return next;
         });
@@ -89,50 +109,43 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
     if (item.children) {
       const isExpanded = expandedSections.has(item.text);
       const paddingLeft = level * 12;
-      const isMainWorkspace = item.text === "Espacios de trabajo";
-      const isWorkspaceChild = level === 1; // Hijos directos de "Espacios de trabajo"
+      const isMainSection = level === 0; // Secciones principales (Inicio, Espacios de trabajo, Desarrollo)
 
       return (
         <div key={item.text} className={`mt-2 ${level > 0 ? 'ml-2' : ''}`}>
           <button
             type="button"
-            onClick={() => toggleSection(item.text, isMainWorkspace)}
+            onClick={() => toggleSection(item.text, isMainSection)}
             className={`
               flex items-center justify-between w-full px-3 py-2 cursor-pointer 
               hover:bg-gray-50 rounded-lg
-              ${isMainWorkspace || isWorkspaceChild ? 'text-xs font-semibold text-gray-500 uppercase tracking-wider' : 'text-sm font-medium text-gray-700'}
+              ${isMainSection ? 'text-sm font-semibold text-gray-700' : 'text-xs font-semibold text-gray-500 uppercase tracking-wider'}
               transition-all
             `}
             style={{ paddingLeft: collapsed ? 12 : paddingLeft + 12 }}
           >
             <div className="flex items-center gap-3">
-              <item.icon className={`text-lg ${isMainWorkspace || isWorkspaceChild ? 'text-gray-500' : theme.PRIMARY_COLOR_CLASS}`} />
+              <item.icon className={`text-lg ${isMainSection ? theme.PRIMARY_COLOR_CLASS : 'text-gray-500'}`} />
               {!collapsed && <span>{item.text}</span>}
             </div>
             {!collapsed && (
-              <motion.span
-                animate={{ rotate: isExpanded ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
+              <span
                 className="text-gray-400"
               >
                 <FiChevronDown />
-              </motion.span>
+              </span>
             )}
           </button>
           <AnimatePresence>
             {(!collapsed && isExpanded) && (
-              <motion.ul
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
+              <ul
                 className="mt-1 space-y-1"
                 style={{ listStyle: 'none', paddingLeft: 0 }}
               >
                 {item.children.map(child =>
                   renderSidebarItem(child, { isSubmenu: true, level: level + 1 })
                 )}
-              </motion.ul>
+              </ul>
             )}
           </AnimatePresence>
         </div>
@@ -182,15 +195,16 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
   };
 
   return (
-    <motion.aside
-      initial={{ width: collapsed ? 80 : 260 }}
-      animate={{ width: collapsed ? 80 : 260 }}
+    <aside
       className={`fixed top-0 left-0 h-screen bg-white border-r border-gray-100 shadow-sm z-30 transition-all duration-300 flex flex-col ${collapsed ? 'items-center' : ''} ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}
-      style={{ minWidth: collapsed ? 80 : 260, width: collapsed ? 80 : 260 }}
+      style={{ 
+        minWidth: collapsed ? 80 : 256, 
+        width: collapsed ? 80 : 256,
+        display: 'flex'
+      }}
     >
       {/* Logo */}
-      <motion.div
-        whileHover={{ scale: 1.05 }}
+      <div
         className="flex items-center justify-center h-16 border-b border-gray-100 cursor-pointer"
         onClick={() => navigate('/home')}
       >
@@ -204,7 +218,7 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
             </span>
           )}
         </div>
-      </motion.div>
+      </div>
 
       {/* Navegación Principal */}
       <nav className="flex-1 overflow-y-auto px-3 py-6">
@@ -212,6 +226,23 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
           {sidebarItems.map(item => renderSidebarItem(item))}
         </ul>
       </nav>
+
+      {/* Botón para contraer */}
+      <div className="px-3 py-2 border-t border-gray-100">
+        <button
+          onClick={onMenuClick}
+          className={`flex items-center w-full p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors ${
+            collapsed ? 'justify-center' : 'gap-3'
+          }`}
+        >
+          <FiChevronsLeft
+            className={`text-lg transition-transform duration-300 ${
+              collapsed ? 'rotate-180' : ''
+            }`}
+          />
+          {!collapsed && <span className="text-sm font-medium">Contraer</span>}
+        </button>
+      </div>
 
       {/* Perfil de Usuario */}
       <div className={`p-4 border-t border-gray-100 ${collapsed ? 'flex flex-col items-center' : ''}`}>
@@ -251,7 +282,7 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
       />
-    </motion.aside>
+    </aside>
   );
 };
 

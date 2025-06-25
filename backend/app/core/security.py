@@ -7,7 +7,6 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.crud import user_crud
 
 # Configuración de seguridad
 SECRET_KEY = "tu_clave_secreta_super_segura_cambiame_en_produccion"  # Cambia esto en producción
@@ -51,10 +50,43 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     except JWTError:
         raise credentials_exception
     
+    # Importar aquí para evitar importación circular
+    from app.crud import user_crud
     user = user_crud.get_user_by_username(db, username)
     if user is None:
         raise credentials_exception
     return user 
+
+async def get_current_external_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Obtiene el usuario externo actual basado en el token JWT."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        user_type: str = payload.get("type")
+        
+        if user_id is None or user_type != "external":
+            raise credentials_exception
+            
+        # Extraer el ID del usuario externo del formato "external_{id}"
+        if not user_id.startswith("external_"):
+            raise credentials_exception
+            
+        external_user_id = int(user_id.replace("external_", ""))
+        
+    except (JWTError, ValueError):
+        raise credentials_exception
+    
+    # Importar aquí para evitar importación circular
+    from app.crud import user_crud
+    external_user = user_crud.get_external_user(db, external_user_id=external_user_id)
+    if external_user is None:
+        raise credentials_exception
+    return external_user
 
 async def get_current_user_organization(
     token: Annotated[str, Depends(oauth2_scheme)],

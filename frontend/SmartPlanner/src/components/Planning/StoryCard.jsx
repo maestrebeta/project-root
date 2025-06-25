@@ -79,8 +79,12 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
   const assignedUser = users.find(u => u.user_id === Number(story.assigned_user_id));
   
   // Calcular horas totales estimadas
-  const totalEstimatedHours = story.estimated_hours || 
-    (story.ui_hours || 0) + (story.development_hours || 0) + (story.testing_hours || 0) + (story.documentation_hours || 0);
+  const totalEstimatedHours = 
+    Number(story.estimated_hours) || 
+    ((Number(story.ui_hours) || 0) + 
+     (Number(story.development_hours) || 0) + 
+     (Number(story.testing_hours) || 0) + 
+     (Number(story.documentation_hours) || 0));
   
   const hasWarnings = !story.assigned_user_id || totalEstimatedHours === 0;
   const state = kanbanStates?.find(s => s.key === story.status);

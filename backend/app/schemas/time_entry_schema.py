@@ -115,6 +115,13 @@ class TimeEntryOut(TimeEntryBase):
     updated_at: datetime
     duration_hours: Optional[float] = None
 
+    # Validadores para manejar valores None desde la base de datos
+    @validator('billable', pre=True)
+    def validate_billable(cls, v):
+        if v is None:
+            return True
+        return bool(v)
+
     class Config:
         from_attributes = True
 

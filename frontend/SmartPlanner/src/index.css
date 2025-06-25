@@ -49,12 +49,10 @@
 
 .app-content {
   flex: 1;
-  margin-left: 16rem;
   transition: margin-left 0.3s ease;
-}
-
-.app-sidebar.collapsed + .app-content {
-  margin-left: 5rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 .app-header {

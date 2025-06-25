@@ -34,7 +34,7 @@ export default function UsersTable() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.token}`
       };
-    } catch (error) {
+    } catch {
       throw new Error('Error de autenticación');
     }
   };
@@ -43,7 +43,7 @@ export default function UsersTable() {
   const fetchOrganizations = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/organizations/', {
+      const response = await fetch('http://localhost:8001/organizations/', {
         headers,
         credentials: 'include'
       });
@@ -55,8 +55,8 @@ export default function UsersTable() {
       
       const data = await response.json();
       setOrganizations(data);
-    } catch (error) {
-      console.error('Error al cargar las organizaciones:', error);
+    } catch {
+      console.error('Error al cargar las organizaciones');
     }
   };
 
@@ -67,11 +67,8 @@ export default function UsersTable() {
         throw new Error('Usuario no autenticado');
       }
 
-      const session = localStorage.getItem('session');
-      const { token, user } = JSON.parse(session);
-
       const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/users/', {
+      const response = await fetch('http://localhost:8001/users/', {
         headers,
         credentials: 'include'
       });
@@ -82,7 +79,20 @@ export default function UsersTable() {
       }
       
       const data = await response.json();
-      setUsers(data);
+      console.log('Usuarios obtenidos del backend:', data);
+      console.log('Usuario actual es super_user:', isSuperUser);
+      
+      // Filtrar usuarios según el rol del usuario actual
+      let filteredUsers = data;
+      if (!isSuperUser) {
+        // Si no es super_user, ocultar otros super_users
+        filteredUsers = data.filter(user => user.role !== 'super_user');
+        console.log('Usuarios filtrados (no super_user):', filteredUsers);
+      } else {
+        console.log('Mostrando todos los usuarios (incluyendo super_users)');
+      }
+      
+      setUsers(filteredUsers);
       setError('');
     } catch (error) {
       console.error('Error al cargar los usuarios:', error);
@@ -137,8 +147,8 @@ export default function UsersTable() {
       const currentUserOrganizationId = session.user.organization_id;
 
       const url = editId
-        ? `http://localhost:8000/users/${editId}`
-        : 'http://localhost:8000/users/';
+        ? `http://localhost:8001/users/${editId}`
+        : 'http://localhost:8001/users/';
       const method = editId ? 'PUT' : 'POST';
 
       // Preparar el cuerpo de la petición según sea creación o actualización
@@ -187,9 +197,22 @@ export default function UsersTable() {
       const responseData = await response.json();
       console.log('Respuesta exitosa:', responseData);
 
+      // Si es una edición, actualizar el usuario en el estado local inmediatamente
+      if (editId) {
+        setUsers(prevUsers => 
+          prevUsers.map(user => 
+            user.user_id === editId 
+              ? { ...user, ...responseData }
+              : user
+          )
+        );
+      }
+
       setShowForm(false);
       setEditId(null);
-      resetForm(); // Usar la función resetForm
+      resetForm();
+      
+      // Recargar la lista de usuarios para aplicar el filtrado correcto
       await fetchUsers();
     } catch (error) {
       console.error('Error completo:', error);
@@ -200,18 +223,48 @@ export default function UsersTable() {
   };
 
   // Editar usuario
-  const handleEdit = (userId, userData) => {
-    setForm({
-      username: userData.username || '',
-      full_name: userData.full_name || '',
-      email: userData.email || '',
-      role: userData.role || '',
-      password: '', // Resetear password en edición
-      organization_id: userData.organization_id || null
-    });
-    setEditId(userId);
-    setShowForm(true);
-    setError('');
+  const handleEdit = async (userId, userData) => {
+    try {
+      // Obtener datos actualizados del backend
+      const headers = getAuthHeaders();
+      const response = await fetch(`http://localhost:8001/users/${userId}`, {
+        headers,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al obtener datos del usuario');
+      }
+      
+      const updatedUserData = await response.json();
+      console.log('Datos actualizados del usuario:', updatedUserData);
+      
+      setForm({
+        username: updatedUserData.username || '',
+        full_name: updatedUserData.full_name || '',
+        email: updatedUserData.email || '',
+        role: updatedUserData.role || '',
+        password: '', // Resetear password en edición
+        organization_id: updatedUserData.organization_id || null
+      });
+      setEditId(userId);
+      setShowForm(true);
+      setError('');
+    } catch (error) {
+      console.error('Error al obtener datos del usuario:', error);
+      // Fallback: usar los datos del estado local
+      setForm({
+        username: userData.username || '',
+        full_name: userData.full_name || '',
+        email: userData.email || '',
+        role: userData.role || '',
+        password: '', // Resetear password en edición
+        organization_id: userData.organization_id || null
+      });
+      setEditId(userId);
+      setShowForm(true);
+      setError('');
+    }
   };
 
   // Eliminar usuario
@@ -222,7 +275,7 @@ export default function UsersTable() {
 
     try {
       const headers = getAuthHeaders();
-      const response = await fetch(`http://localhost:8000/users/${userId}`, {
+      const response = await fetch(`http://localhost:8001/users/${userId}`, {
         method: 'DELETE',
         headers,
         credentials: 'include'
@@ -335,7 +388,7 @@ export default function UsersTable() {
                   <option value="admin">Administrador</option>
                   <option value="dev">Desarrollador</option>
                   <option value="infra">Infraestructura</option>
-                  <option value="super_user">Super Usuario</option>
+                  {isSuperUser && <option value="super_user">Super Usuario</option>}
                 </select>
               </div>
               {isSuperUser && (

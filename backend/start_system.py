@@ -106,7 +106,7 @@ def verify_endpoints():
         ("/clients/", "Clientes")
     ]
     
-    base_url = "http://localhost:8000"
+    base_url = "http://localhost:8001"
     
     for endpoint, description in endpoints_to_check:
         try:
@@ -189,7 +189,7 @@ def start_backend():
             sys.executable, "-m", "uvicorn",
             "app.main:app",
             "--host", "0.0.0.0",
-            "--port", "8000",
+            "--port", "8001",
             "--reload"
         ]
         
@@ -215,7 +215,7 @@ def start_backend():
                 print_status(f"El servidor terminó inesperadamente: {output}", "ERROR")
                 return None
             
-            if check_port(8000):
+            if check_port(8001):
                 print_status("Servidor backend iniciado correctamente", "SUCCESS")
                 return process
             
@@ -269,14 +269,14 @@ def show_system_info():
     print_status("🎉 Sistema SmartPlanner iniciado exitosamente!", "SUCCESS")
     print("\n📋 Servicios activos:")
     
-    if check_port(8000):
-        print("   🔗 Backend API: http://localhost:8000")
-        print("   📚 Documentación: http://localhost:8000/docs")
-        print("   🔍 Redoc: http://localhost:8000/redoc")
+    if check_port(8001):
+        print("   🔗 Backend API: http://localhost:8001")
+        print("   📚 Documentación: http://localhost:8001/docs")
+        print("   🔍 Redoc: http://localhost:8001/redoc")
     
     # Verificar si el frontend está ejecutándose manualmente
-    if check_port(5173):
-        print("   🌐 Frontend: http://localhost:5173 (ejecutándose manualmente)")
+    if check_port(3000):
+        print("   🌐 Frontend: http://localhost:3000 (ejecutándose manualmente)")
     else:
         print("   🌐 Frontend: Ejecutar manualmente con 'npm run dev' en /frontend/SmartPlanner")
     
@@ -335,14 +335,14 @@ def main():
         print("   📧 Email: admin@smartplanner.com")
         
         print("\n🚀 Para iniciar el sistema:")
-        print("   1. Backend: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
+        print("   1. Backend: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload")
         print("   2. Frontend: cd frontend/SmartPlanner && npm run dev")
         
         print("\n🔗 URLs del sistema:")
-        print("   🌐 Frontend: http://localhost:5173")
-        print("   🔗 Backend API: http://localhost:8000")
-        print("   📚 Documentación: http://localhost:8000/docs")
-        print("   🔍 Redoc: http://localhost:8000/redoc")
+        print("   🌐 Frontend: http://localhost:3000")
+        print("   🔗 Backend API: http://localhost:8001")
+        print("   📚 Documentación: http://localhost:8001/docs")
+        print("   🔍 Redoc: http://localhost:8001/redoc")
         
         print("\n⚡ Características del sistema:")
         print("   🤖 IA activada con análisis predictivo")

@@ -37,7 +37,7 @@ export default function ProyectosTable() {
         throw new Error('Token de autenticación no encontrado');
       }
 
-      const response = await fetch('http://localhost:8000/projects/', {
+      const response = await fetch('http://localhost:8001/projects/', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${parsedSession.token}`,
@@ -78,7 +78,7 @@ export default function ProyectosTable() {
         throw new Error('Token de autenticación no encontrado');
       }
 
-      const response = await fetch('http://localhost:8000/clients/', {
+      const response = await fetch('http://localhost:8001/clients/', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${parsedSession.token}`,
@@ -128,8 +128,8 @@ export default function ProyectosTable() {
       }
 
       const url = editId
-        ? `http://localhost:8000/projects/${editId}`
-        : 'http://localhost:8000/projects/';
+        ? `http://localhost:8001/projects/${editId}`
+        : 'http://localhost:8001/projects/';
       const method = editId ? 'PUT' : 'POST';
 
       const projectData = {
@@ -204,7 +204,7 @@ export default function ProyectosTable() {
           throw new Error('Token de autenticación no encontrado');
         }
 
-        const response = await fetch(`http://localhost:8000/projects/${id}`, {
+        const response = await fetch(`http://localhost:8001/projects/${id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,

@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
   // Función para obtener los datos completos del usuario
   const fetchUserDetails = async (username, token) => {
     try {
-      const response = await fetch(`http://localhost:8000/users?username=${username}`, {
+      const response = await fetch(`http://localhost:8001/users?username=${username}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }) => {
       formData.append('password', password);
       formData.append('grant_type', 'password');
 
-      const response = await fetch('http://localhost:8000/auth/login', {
+      const response = await fetch('http://localhost:8001/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -127,17 +127,27 @@ export const AuthProvider = ({ children }) => {
 
       const data = await response.json();
       
+      console.log('Respuesta completa del login:', data);
+      
       if (!data.access_token) {
         throw new Error('Token no recibido del servidor');
       }
 
+      // Verificar que tenemos información del usuario
+      if (!data.user) {
+        console.error('No se recibió información del usuario:', data);
+        throw new Error('Información del usuario no recibida del servidor');
+      }
+
+      console.log('Información del usuario recibida:', data.user);
+
       // Actualizar imagen de perfil desde el backend
-      if (data.user.profile_image) {
+      if (data.user && data.user.profile_image) {
         updateProfileImage(data.user.profile_image);
       }
       
       // Aplicar preferencias de tema desde el backend
-      if (data.user.theme_preferences) {
+      if (data.user && data.user.theme_preferences) {
         theme.setPrimaryColor(data.user.theme_preferences.primary_color);
         theme.setFont(data.user.theme_preferences.font_class);
         theme.setFontSize(data.user.theme_preferences.font_size_class);
@@ -147,11 +157,7 @@ export const AuthProvider = ({ children }) => {
       const session = {
         user: {
           ...data.user,
-          organization_id: 
-            data.user.organization_id || 
-            data.user.organization?.organization_id || 
-            data.organization?.organization_id || 
-            null
+          organization_id: data.user.organization_id || null
         },
         token: data.access_token,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas
@@ -162,11 +168,6 @@ export const AuthProvider = ({ children }) => {
       console.log('Datos completos del usuario:', data.user);
       console.log('Datos de sesión:', session);
       console.log('ID de organización:', session.user.organization_id);
-      console.log('Estructura de organización:', {
-        organization_id: data.user.organization_id,
-        organization: data.user.organization,
-        data_organization: data.organization
-      });
       console.groupEnd();
 
       localStorage.setItem('session', JSON.stringify(session));
@@ -175,7 +176,8 @@ export const AuthProvider = ({ children }) => {
       // Disparar evento de inicio de sesión para sincronizar tema
       window.dispatchEvent(new CustomEvent('userLoggedIn'));
       
-      navigate('/home');
+      // No navegar automáticamente, dejar que el componente Login maneje la navegación
+      // navigate('/home');
       return true;
     } catch (error) {
       console.error('Error completo de inicio de sesión:', error);
@@ -219,7 +221,7 @@ export const AuthProvider = ({ children }) => {
       };
 
       const response = await makeAuthenticatedRequest(
-        `http://localhost:8000/users/${currentUser.user_id}`,
+        `http://localhost:8001/users/${currentUser.user_id}`,
         {
           method: 'PUT',
           body: JSON.stringify(updateData)
@@ -267,6 +269,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    // Marcar que el usuario acaba de cerrar sesión
+    localStorage.setItem('smartplanner_just_logged_out', 'true');
+    
+    // Desactivar modo enfoque antes de limpiar la sesión
+    // Remover clases CSS del modo enfoque
+    document.body.classList.remove('focus-mode-active');
+    
+    // Salir de pantalla completa si está activa
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(err => {
+        console.log('Error al salir de pantalla completa durante logout:', err);
+      });
+    }
+
     localStorage.removeItem('session');
     setUser(null);
     setProfileImage(null);

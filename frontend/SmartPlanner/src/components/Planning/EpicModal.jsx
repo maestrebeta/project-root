@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import ReactDOM from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { 
   FiX, FiSave, FiZap, FiTarget, FiCalendar, FiFlag, FiTag, FiEdit3, 
   FiCheck, FiAlertCircle, FiStar, FiTrendingUp, FiUsers, FiClock,
@@ -316,21 +317,16 @@ export default function EpicModal({
 
   if (!isOpen) return null;
 
-  return (
+  return ReactDOM.createPortal(
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
-      >
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[1000] p-4">
         <motion.div
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: -20 }}
+          transition={{ duration: 0.3, ease: 'easeInOut' }}
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Header Épico */}
           <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 text-white">
@@ -722,7 +718,8 @@ export default function EpicModal({
             </div>
           </form>
         </motion.div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </AnimatePresence>,
+    document.getElementById('root')
   );
 } 

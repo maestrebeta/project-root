@@ -371,7 +371,7 @@ class IntelligentSystemManager:
     def check_backend_service(self) -> bool:
         """Verifica si el servicio backend está funcionando"""
         try:
-            response = requests.get("http://localhost:8000/docs", timeout=5)
+            response = requests.get("http://localhost:8001/docs", timeout=5)
             return response.status_code == 200
         except:
             return False

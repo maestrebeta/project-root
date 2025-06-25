@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # from backend.app.schemas.project_schema import ProjectCreate, ProjectUpdate
 # from backend.app.crud import project_crud as crud
@@ -14,8 +14,24 @@ from app.models.user_models import User
 from app.models.organization_models import Organization
 from app.models.project_models import Project
 from app.models.time_entry_models import TimeEntry
+from app.crud.project_crud import (
+    create_project, get_projects, get_project, update_project, delete_project,
+    create_quotation, get_quotation_with_calculations, get_project_quotations,
+    update_quotation, delete_quotation, update_installment_payment_status,
+    get_quotations_summary, get_quotations_by_client
+)
+from app.schemas.project_schema import (
+    ProjectOut,
+    QuotationCreate, QuotationUpdate, QuotationResponse, QuotationWithProjectInfo
+)
+from pydantic import BaseModel
+from datetime import date, datetime, timedelta
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+class InstallmentPaymentUpdate(BaseModel):
+    is_paid: bool
+    payment_reference: Optional[str] = None
 
 @router.post("/", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 def create_project(
@@ -43,7 +59,6 @@ def get_projects_stats(
     """
     try:
         from sqlalchemy import func
-        from datetime import datetime, timedelta
         
         organization_id = current_user.organization_id
         
@@ -151,6 +166,8 @@ def get_projects_time_analytics(
             Project.status,
             Project.client_id,
             Project.estimated_hours,
+            Project.start_date,
+            Project.end_date,
             func.coalesce(func.sum(TimeEntry.duration_hours), 0).label('total_hours'),
             func.count(TimeEntry.entry_id).label('total_entries'),
             func.count(func.distinct(TimeEntry.user_id)).label('unique_users')
@@ -159,7 +176,7 @@ def get_projects_time_analytics(
         ).filter(
             Project.organization_id == organization_id
         ).group_by(
-            Project.project_id, Project.name, Project.status, Project.client_id, Project.estimated_hours
+            Project.project_id, Project.name, Project.status, Project.client_id, Project.estimated_hours, Project.start_date, Project.end_date
         ).all()
         
         # Procesar datos
@@ -173,28 +190,95 @@ def get_projects_time_analytics(
             
             # Calcular progreso basado en horas
             progress_percentage = 0
-            if estimated_hours > 0:
+            
+            # Si el proyecto está completado, el progreso siempre es 100%
+            if stat.status == 'completed':
+                progress_percentage = 100
+            elif estimated_hours > 0:
                 progress_percentage = min((total_hours / estimated_hours) * 100, 100)
             elif total_hours > 0:
                 # Si no hay estimación pero hay horas trabajadas, usar lógica basada en estado
-                if stat.status == 'completed':
-                    progress_percentage = 100
-                elif stat.status == 'in_progress':
+                if stat.status == 'in_progress':
                     progress_percentage = 65
                 elif stat.status == 'in_planning':
                     progress_percentage = 25
                 else:
                     progress_percentage = 10
             
-            # Calcular eficiencia
+            # Calcular eficiencia considerando fechas y horas
             efficiency = "N/A"
-            if estimated_hours > 0 and total_hours > 0:
-                if total_hours <= estimated_hours:
-                    efficiency = "En tiempo"
-                elif total_hours <= estimated_hours * 1.1:
-                    efficiency = "Ligeramente retrasado"
-                else:
+            today = date.today()
+            
+            # Función para calcular días hábiles entre dos fechas
+            def get_working_days(start_date, end_date):
+                """Calcula días hábiles entre dos fechas (excluyendo fines de semana)"""
+                if start_date > end_date:
+                    return 0
+                
+                working_days = 0
+                current_date = start_date
+                while current_date <= end_date:
+                    # 0 = Lunes, 6 = Domingo
+                    if current_date.weekday() < 5:  # Lunes a Viernes
+                        working_days += 1
+                    current_date += timedelta(days=1)
+                return working_days
+            
+            # Si el proyecto tiene fecha de fin
+            if stat.end_date:
+                # Si la fecha de fin ya pasó y el proyecto no está completado
+                if stat.end_date < today and stat.status != 'completed':
                     efficiency = "Retrasado"
+                # Si el proyecto está completado
+                elif stat.status == 'completed':
+                    efficiency = "En tiempo"
+                # Si la fecha de fin está en el futuro
+                elif stat.end_date > today:
+                    # Calcular días hábiles restantes
+                    working_days_remaining = get_working_days(today, stat.end_date)
+                    
+                    # Si faltan 15 días hábiles o menos
+                    if working_days_remaining <= 15:
+                        efficiency = "Ligeramente retrasado"
+                    else:
+                        # Calcular eficiencia basada en horas si hay estimación
+                        if estimated_hours > 0 and total_hours > 0:
+                            if total_hours <= estimated_hours:
+                                efficiency = "En tiempo"
+                            elif total_hours <= estimated_hours * 1.1:
+                                efficiency = "Ligeramente retrasado"
+                            else:
+                                efficiency = "Retrasado"
+                        else:
+                            # Si no hay estimación de horas, usar lógica basada en estado
+                            if stat.status in ['in_progress', 'at_risk']:
+                                efficiency = "En tiempo"
+                            elif stat.status in ['suspended', 'canceled']:
+                                efficiency = "N/A"
+                            else:
+                                efficiency = "En tiempo"
+                else:
+                    # Proyecto completado en tiempo
+                    efficiency = "En tiempo"
+            else:
+                # Si no hay fecha de fin, usar solo lógica de horas
+                if estimated_hours > 0 and total_hours > 0:
+                    if total_hours <= estimated_hours:
+                        efficiency = "En tiempo"
+                    elif total_hours <= estimated_hours * 1.1:
+                        efficiency = "Ligeramente retrasado"
+                    else:
+                        efficiency = "Retrasado"
+                else:
+                    # Si no hay estimación de horas, usar lógica basada en estado
+                    if stat.status == 'completed':
+                        efficiency = "En tiempo"
+                    elif stat.status in ['in_progress', 'at_risk']:
+                        efficiency = "En tiempo"
+                    elif stat.status in ['suspended', 'canceled']:
+                        efficiency = "N/A"
+                    else:
+                        efficiency = "En tiempo"
             
             project_data = {
                 "project_id": stat.project_id,
@@ -207,7 +291,9 @@ def get_projects_time_analytics(
                 "unique_users": stat.unique_users,
                 "progress_percentage": round(progress_percentage, 1),
                 "efficiency": efficiency,
-                "hours_remaining": max(0, estimated_hours - total_hours) if estimated_hours > 0 else 0
+                "hours_remaining": max(0, estimated_hours - total_hours) if estimated_hours > 0 else 0,
+                "start_date": stat.start_date.isoformat() if stat.start_date else None,
+                "end_date": stat.end_date.isoformat() if stat.end_date else None
             }
             
             projects_analytics.append(project_data)
@@ -239,46 +325,34 @@ def get_projects_time_analytics(
 def read_projects(
     skip: int = 0, 
     limit: int = 100, 
+    client_id: Optional[int] = None,
+    status: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_organization)
 ):
     """
-    Obtener proyectos de la organización del usuario actual
+    Obtener proyectos de la organización del usuario actual con filtros opcionales
     """
-    try:
-        # Verificar si el usuario tiene una organización
-        if not current_user or not current_user.organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="El usuario no tiene una organización asignada"
-            )
+    return project_crud.get_projects_by_organization(
+        db, 
+        current_user.organization_id, 
+        skip, 
+        limit,
+        client_id=client_id,
+        status=status
+    )
 
-        # Obtener la organización
-        organization = db.query(Organization).filter(
-            Organization.organization_id == current_user.organization_id
-        ).first()
-
-        if not organization:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Organización no encontrada"
-            )
-
-        proyectos = project_crud.get_projects_by_organization(
-            db, 
-            current_user.organization_id, 
-            skip=skip, 
-            limit=limit
-        )
-        
-        return proyectos
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Error al obtener proyectos: {str(e)}"
-        )
+@router.get("/organization/{organization_id}", response_model=List[ProjectOut])
+def read_by_organization(
+    organization_id: int,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener proyectos de una organización específica (para formularios externos)
+    """
+    return project_crud.get_projects_by_organization(db, organization_id, skip, limit)
 
 @router.get("/{project_id}", response_model=ProjectOut)
 def read_project(
@@ -442,3 +516,186 @@ def delete_project(
         return deleted_project
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+# Endpoints para Cotizaciones
+@router.post("/quotations/", response_model=QuotationResponse, tags=["Cotizaciones"])
+def create_project_quotation(
+    quotation_data: QuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Crear una nueva cotización para un proyecto"""
+    try:
+        return create_quotation(db, quotation_data, current_user.user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error al crear la cotización: {str(e)}"
+        )
+
+@router.get("/quotations/summary", tags=["Cotizaciones"])
+def get_quotations_summary_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener resumen de cotizaciones de la organización"""
+    try:
+        print(f"Debug: User ID: {current_user.user_id}, Organization ID: {current_user.organization_id}")
+        
+        if not current_user.organization_id:
+            print("Error: Usuario no tiene organización asignada")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Usuario no tiene organización asignada"
+            )
+        
+        result = get_quotations_summary(db, current_user.organization_id)
+        print(f"Debug: Summary result: {result}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_quotations_summary_endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}"
+        )
+
+@router.get("/quotations/{quotation_id}", response_model=QuotationResponse, tags=["Cotizaciones"])
+def get_project_quotation(
+    quotation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener una cotización específica"""
+    quotation = get_quotation_with_calculations(db, quotation_id)
+    if not quotation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cotización no encontrada"
+        )
+    return quotation
+
+@router.get("/{project_id}/quotations", response_model=List[QuotationWithProjectInfo], tags=["Cotizaciones"])
+def get_project_quotations_list(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener todas las cotizaciones de un proyecto"""
+    return get_project_quotations(db, project_id)
+
+@router.put("/quotations/{quotation_id}", response_model=QuotationResponse, tags=["Cotizaciones"])
+def update_project_quotation(
+    quotation_id: int,
+    quotation_data: QuotationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Actualizar una cotización"""
+    quotation = update_quotation(db, quotation_id, quotation_data)
+    if not quotation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cotización no encontrada"
+        )
+    return quotation
+
+@router.delete("/quotations/{quotation_id}", tags=["Cotizaciones"])
+def delete_project_quotation(
+    quotation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Eliminar una cotización"""
+    success = delete_quotation(db, quotation_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cotización no encontrada"
+        )
+    return {"message": "Cotización eliminada exitosamente"}
+
+@router.put("/quotations/installments/{installment_id}/payment", tags=["Cotizaciones"])
+def update_installment_payment(
+    installment_id: int,
+    payment_data: InstallmentPaymentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Actualizar el estado de pago de una cuota"""
+    installment = update_installment_payment_status(
+        db, 
+        installment_id, 
+        payment_data.is_paid, 
+        payment_data.payment_reference
+    )
+    if not installment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cuota no encontrada"
+        )
+    return installment
+
+@router.get("/quotations/by-client/{client_id}", tags=["Cotizaciones"])
+def get_quotations_by_client_endpoint(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener todas las cotizaciones de un cliente específico"""
+    try:
+        print(f"Debug: Getting quotations for client {client_id}, User ID: {current_user.user_id}")
+        
+        if not current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Usuario no tiene organización asignada"
+            )
+        
+        # Verificar que el cliente pertenece a la organización del usuario
+        from ..crud.client_crud import get_client
+        client = get_client(db, client_id)
+        if not client or client.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cliente no encontrado"
+            )
+        
+        # Obtener todas las cotizaciones del cliente
+        result = get_quotations_by_client(db, client_id, current_user.organization_id)
+        print(f"Debug: Found {len(result)} quotations for client {client_id}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_quotations_by_client_endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}"
+        )
+
+@router.get("/by-client/{client_id}/info", tags=["Proyectos"])
+def get_client_projects_info_endpoint(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Obtener información detallada de proyectos de un cliente específico
+    """
+    try:
+        info = project_crud.get_client_projects_info(db, client_id, current_user.organization_id)
+        return {
+            "client_id": client_id,
+            "total_projects": info["total_projects"],
+            "overdue_projects": info["overdue_projects"],
+            "at_risk_projects": info["at_risk_projects"]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener información de proyectos del cliente: {str(e)}"
+        )

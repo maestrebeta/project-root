@@ -151,19 +151,19 @@ export const useProjectsAndTags = () => {
 
       // Cargar proyectos, clientes y entradas de tiempo en paralelo
       const [projectsResponse, clientsResponse, timeEntriesResponse] = await Promise.all([
-        fetch('http://localhost:8000/projects/', {
+        fetch('http://localhost:8001/projects/', {
           headers: {
             'Authorization': `Bearer ${session.token}`,
             'Accept': 'application/json'
           }
         }),
-        fetch('http://localhost:8000/clients/', {
+        fetch('http://localhost:8001/clients/', {
           headers: {
             'Authorization': `Bearer ${session.token}`,
             'Accept': 'application/json'
           }
         }),
-        fetch('http://localhost:8000/time-entries/', {
+        fetch('http://localhost:8001/time-entries/', {
           headers: {
             'Authorization': `Bearer ${session.token}`,
             'Accept': 'application/json'
@@ -298,7 +298,7 @@ export const useTaskStates = () => {
         const session = JSON.parse(localStorage.getItem('session'));
         if (!session?.token || !user?.organization_id) return;
 
-        const response = await fetch(`http://localhost:8000/organizations/${user.organization_id}/task-states`, {
+        const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
           headers: {
             'Authorization': `Bearer ${session.token}`,
             'Accept': 'application/json'
@@ -326,7 +326,7 @@ export const useTaskStates = () => {
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token || !user?.organization_id) return;
 
-      const response = await fetch(`http://localhost:8000/organizations/${user.organization_id}/task-states`, {
+      const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -342,7 +342,7 @@ export const useTaskStates = () => {
       } else {
         console.error('Error al actualizar estados:', await response.text());
         // Recargar estados del backend en caso de error
-        const currentStates = await fetch(`http://localhost:8000/organizations/${user.organization_id}/task-states`, {
+        const currentStates = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
           headers: {
             'Authorization': `Bearer ${session.token}`,
             'Accept': 'application/json'

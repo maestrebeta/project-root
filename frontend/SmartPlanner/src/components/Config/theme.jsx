@@ -1,5 +1,5 @@
 import { useAppTheme } from "../../context/ThemeContext";
-import ThemeManager from "./Config/ThemeManager";
+import ThemeManager from "./ThemeManager";
 
 export default function ThemeConfigPage() {
   const theme = useAppTheme();

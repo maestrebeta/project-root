@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiX, FiSave, FiTrash2, FiCopy, FiUser, FiCalendar, FiClock, FiTarget, 
@@ -154,7 +155,7 @@ export default function StoryDetailsModal({
   const [focusedField, setFocusedField] = useState(null);
   const [validationStatus, setValidationStatus] = useState({});
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showSubSpecModal, setShowSubSpecModal] = useState(false);
+  const [showSubSpecializationModal, setShowSubSpecializationModal] = useState(false);
   
   const titleInputRef = useRef(null);
   const isNew = !task || !task.story_id;
@@ -287,18 +288,17 @@ export default function StoryDetailsModal({
 
   // Manejar cambio de especialización
   const handleSpecializationChange = (newSpecialization) => {
-    // Si se selecciona "Desarrollo", mostrar modal de sub-especializaciones
-    if (newSpecialization === 'development') {
-      setShowSubSpecModal(true);
-      return;
-    }
-    
-    // Para otras especializaciones, cambiar directamente
+    // Cambiar la especialización inmediatamente
     setFormData(prev => ({ 
       ...prev, 
       specialization: newSpecialization,
-      sub_specializations: [] // Limpiar sub-especializaciones
+      sub_specializations: newSpecialization === 'development' ? prev.sub_specializations : [] // Mantener sub-especializaciones si ya es desarrollo
     }));
+    
+    // Si se selecciona "Desarrollo", mostrar modal de sub-especializaciones
+    if (newSpecialization === 'development') {
+      setShowSubSpecializationModal(true);
+    }
   };
 
   // Confirmar sub-especializaciones de desarrollo
@@ -308,7 +308,7 @@ export default function StoryDetailsModal({
       specialization: 'development',
       sub_specializations: selectedSubSpecs
     }));
-    setShowSubSpecModal(false);
+    setShowSubSpecializationModal(false);
   };
 
   // Manejar cambios en el formulario
@@ -524,21 +524,19 @@ export default function StoryDetailsModal({
   const selectedEpic = epics.find(e => e.epic_id === parseInt(formData.epic_id));
   const assignedUser = users.find(u => u.user_id === parseInt(formData.assigned_user_id));
 
-  return (
+  return ReactDOM.createPortal(
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-start z-[1000] p-4 sm:p-6 md:p-8"
+        onClick={onClose}
       >
         <motion.div
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col"
+          initial={{ opacity: 0, scale: 0.95, y: -20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ duration: 0.3, ease: 'easeInOut' }}
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col my-auto"
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Header Épico */}
           <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 text-white p-6">
@@ -1149,17 +1147,18 @@ export default function StoryDetailsModal({
             </div>
           </div>
         </motion.div>
-      </motion.div>
+      </div>
       
       {/* Modal de Sub-especializaciones */}
-      {showSubSpecModal && (
+      {showSubSpecializationModal && (
         <SubSpecializationModal
           onConfirm={handleConfirmSubSpecializations}
-          onCancel={() => setShowSubSpecModal(false)}
+          onCancel={() => setShowSubSpecializationModal(false)}
           currentSubSpecs={formData.sub_specializations}
         />
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.getElementById('root')
   );
 }
 
@@ -1177,12 +1176,15 @@ function SubSpecializationModal({ onConfirm, onCancel, currentSubSpecs = [] }) {
     );
   };
   
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[2000] p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
@@ -1241,6 +1243,7 @@ function SubSpecializationModal({ onConfirm, onCancel, currentSubSpecs = [] }) {
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

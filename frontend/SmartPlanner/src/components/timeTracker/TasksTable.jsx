@@ -89,19 +89,19 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
         }
 
         const [projectsResponse, clientsResponse, usersResponse] = await Promise.all([
-          fetch('http://localhost:8000/projects/', {
+          fetch('http://localhost:8001/projects/', {
             headers: {
               'Authorization': `Bearer ${session.token}`,
               'Accept': 'application/json'
             }
           }),
-          fetch('http://localhost:8000/clients/', {
+          fetch('http://localhost:8001/clients/', {
             headers: {
               'Authorization': `Bearer ${session.token}`,
               'Accept': 'application/json'
             }
           }),
-          fetch('http://localhost:8000/users/', {
+          fetch('http://localhost:8001/users/', {
             headers: {
               'Authorization': `Bearer ${session.token}`,
               'Accept': 'application/json'
@@ -192,8 +192,8 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
     };
 
     const url = editId
-      ? `http://localhost:8000/time-entries/${editId}`
-      : 'http://localhost:8000/time-entries/';
+      ? `http://localhost:8001/time-entries/${editId}`
+      : 'http://localhost:8001/time-entries/';
     const method = editId ? 'PUT' : 'POST';
 
     await fetch(url, {
@@ -215,7 +215,7 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
       status: "",
       user_id: ""
     });
-    fetch('http://localhost:8000/time-entries/')
+    fetch('http://localhost:8001/time-entries/')
       .then(res => res.json())
       .then(setTasks);
     setLoading(false);

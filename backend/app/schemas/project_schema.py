@@ -1,6 +1,7 @@
 from pydantic import BaseModel, validator, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
+from decimal import Decimal
 
 
 class ProjectBase(BaseModel):
@@ -106,3 +107,74 @@ class ProjectOut(ProjectBase):
 
     class Config:
         from_attributes = True
+
+# Schemas para Cotizaciones
+class QuotationInstallmentBase(BaseModel):
+    installment_number: int = Field(..., ge=1, description="Número de la cuota")
+    percentage: Decimal = Field(..., ge=0, le=100, description="Porcentaje del total")
+    amount: Decimal = Field(..., ge=0, description="Monto calculado")
+    due_date: Optional[date] = Field(None, description="Fecha de vencimiento")
+    is_paid: bool = Field(default=False, description="Indica si la cuota está pagada")
+    paid_date: Optional[date] = Field(None, description="Fecha de pago")
+    payment_reference: Optional[str] = Field(None, max_length=100, description="Referencia del pago")
+    notes: Optional[str] = Field(None, description="Notas adicionales")
+
+class QuotationInstallmentCreate(QuotationInstallmentBase):
+    pass
+
+class QuotationInstallmentUpdate(BaseModel):
+    installment_number: Optional[int] = Field(None, ge=1, description="Número de la cuota")
+    percentage: Optional[Decimal] = Field(None, ge=0, le=100, description="Porcentaje del total")
+    amount: Optional[Decimal] = Field(None, ge=0, description="Monto calculado")
+    due_date: Optional[date] = Field(None, description="Fecha de vencimiento")
+    is_paid: Optional[bool] = Field(None, description="Indica si la cuota está pagada")
+    paid_date: Optional[date] = Field(None, description="Fecha de pago")
+    payment_reference: Optional[str] = Field(None, max_length=100, description="Referencia del pago")
+    notes: Optional[str] = Field(None, description="Notas adicionales")
+
+class QuotationInstallmentResponse(QuotationInstallmentBase):
+    installment_id: int
+    quotation_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class QuotationBase(BaseModel):
+    project_id: int = Field(..., description="ID del proyecto")
+    total_amount: Decimal = Field(..., ge=0, description="Monto total de la cotización")
+    currency: str = Field(default="USD", description="Moneda de la cotización")
+    status: str = Field(default="draft", description="Estado de la cotización")
+    description: Optional[str] = Field(None, description="Descripción de la cotización")
+
+class QuotationCreate(QuotationBase):
+    installments: List[QuotationInstallmentCreate] = Field(..., description="Lista de cuotas")
+
+class QuotationUpdate(BaseModel):
+    total_amount: Optional[Decimal] = Field(None, ge=0, description="Monto total de la cotización")
+    currency: Optional[str] = Field(None, description="Moneda de la cotización")
+    status: Optional[str] = Field(None, description="Estado de la cotización")
+    description: Optional[str] = Field(None, description="Descripción de la cotización")
+    installments: Optional[List[QuotationInstallmentCreate]] = Field(None, description="Lista de cuotas")
+
+class QuotationResponse(QuotationBase):
+    quotation_id: int
+    created_by_user_id: int
+    created_at: datetime
+    updated_at: datetime
+    installments: List[QuotationInstallmentResponse] = []
+    
+    # Información adicional calculada
+    total_paid: Optional[Decimal] = None
+    total_pending: Optional[Decimal] = None
+    paid_installments: Optional[int] = None
+    total_installments: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+class QuotationWithProjectInfo(QuotationResponse):
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
+    created_by_name: Optional[str] = None

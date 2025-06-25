@@ -37,7 +37,31 @@ def read_all(
     """
     Obtener clientes de la organización del usuario actual
     """
-    return client_crud.get_clients_by_organization(db, current_user.organization_id, skip, limit)
+    clients = client_crud.get_clients_by_organization(db, current_user.organization_id, skip, limit)
+    
+    # Agregar promedio de calificaciones a cada cliente
+    for client in clients:
+        client.rating_average = client_crud.get_client_rating_average(db, client.client_id)
+    
+    return clients
+
+@router.get("/organization/{organization_id}", response_model=list[client_schema.ClientOut])
+def read_by_organization(
+    organization_id: int,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener clientes de una organización específica (para formularios externos)
+    """
+    clients = client_crud.get_clients_by_organization(db, organization_id, skip, limit)
+    
+    # Agregar promedio de calificaciones a cada cliente
+    for client in clients:
+        client.rating_average = client_crud.get_client_rating_average(db, client.client_id)
+    
+    return clients
 
 @router.get("/stats", response_model=dict)
 def get_clients_stats(
@@ -253,6 +277,9 @@ def read(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Cliente no encontrado o no autorizado"
         )
+    
+    # Agregar promedio de calificaciones
+    db_client.rating_average = client_crud.get_client_rating_average(db, client_id)
     
     return db_client
 

@@ -6,7 +6,7 @@ export const debugAuth = async () => {
   try {
     // 1. Verificar conectividad con el servidor
     console.log('1. Verificando conectividad...');
-    const healthResponse = await fetch('http://localhost:8000/docs');
+    const healthResponse = await fetch('http://localhost:8001/docs');
     console.log(`Servidor responde: ${healthResponse.status}`);
     
     // 2. Probar login con credenciales conocidas
@@ -16,7 +16,7 @@ export const debugAuth = async () => {
     formData.append('password', 'admin123');
     formData.append('grant_type', 'password');
 
-    const loginResponse = await fetch('http://localhost:8000/auth/login', {
+    const loginResponse = await fetch('http://localhost:8001/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -35,7 +35,7 @@ export const debugAuth = async () => {
       
       // 3. Probar endpoint protegido
       console.log('3. Probando endpoint protegido...');
-      const statsResponse = await fetch('http://localhost:8000/users/stats', {
+      const statsResponse = await fetch('http://localhost:8001/users/stats', {
         headers: {
           'Authorization': `Bearer ${loginData.access_token}`,
           'Content-Type': 'application/json'

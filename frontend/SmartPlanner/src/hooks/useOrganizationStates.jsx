@@ -54,7 +54,7 @@ export const useOrganizationStates = () => {
         console.log('Obteniendo estados para organización:', user.organization_id);
 
         const response = await fetch(
-          `http://localhost:8000/organizations/${user.organization_id}/task-states`,
+          `http://localhost:8001/organizations/${user.organization_id}/task-states`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -135,7 +135,7 @@ export const useOrganizationStates = () => {
       };
 
       const response = await fetch(
-        `http://localhost:8000/organizations/${user.organization_id}/task-states`,
+        `http://localhost:8001/organizations/${user.organization_id}/task-states`,
         {
           method: 'PUT',
           headers: {

@@ -1,595 +1,1168 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ClientsTable from './ClientsTable';
+import { useAuth } from '../../context/AuthContext';
+import { 
+  FiPlus, FiFilter, FiSearch, FiEye, FiEyeOff, FiCheckCircle, 
+  FiClock, FiAlertCircle, FiUser, FiCalendar, FiTag, FiMessageSquare,
+  FiEdit2, FiTrash2, FiMoreVertical, FiArrowRight, FiUsers, FiTarget,
+  FiTrendingUp, FiTrendingDown, FiActivity, FiStar, FiZap, FiRefreshCw, 
+  FiGrid, FiList, FiX, FiAlertTriangle, FiDollarSign
+} from 'react-icons/fi';
+import ClientModal from './ClientModal';
+import ClientCard from './ClientCard';
+import ClientTable from './ClientTable';
 
 export default function Clients() {
-  const [activeView, setActiveView] = useState('resumen');
-  const [stats, setStats] = useState({});
-  const [analyticsData, setAnalyticsData] = useState({});
+  const { user, isAuthenticated } = useAuth();
+  const [clients, setClients] = useState([]);
+  const [countries, setCountries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  // Estados para análisis inteligente
-  const [clientInsights, setClientInsights] = useState({});
-  const [revenueAnalysis, setRevenueAnalysis] = useState({});
-  const [marketIntelligence, setMarketIntelligence] = useState({});
-  const [strategicRecommendations, setStrategicRecommendations] = useState([]);
-
+  const [successMessage, setSuccessMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(new Set()); // Para rastrear qué clientes están siendo actualizados
+  const [savingClient, setSavingClient] = useState(false); // Para rastrear si se está guardando un cliente
+  
+  // Estados para el modal
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  
+  // Estados para filtros y búsqueda
+  const [searchFilter, setSearchFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' o 'table'
+  const [showFilters, setShowFilters] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
+  
+  // Estados para ordenamiento
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+  
+  // Estados para caché de datos y manejo de estado de carga
+  const [dataCache, setDataCache] = useState({
+    quotations: {},
+    tickets: {},
+    projects: {},
+    projectsInfo: {},
+    lastUpdate: null
+  });
+  
+  // Determinar si el usuario puede gestionar clientes
+  const canManageClients = user?.role === 'super_user' || user?.role === 'admin';
+  
+  // Cargar datos iniciales
   useEffect(() => {
-    if (activeView === 'resumen') {
-      fetchAllData();
+    if (isAuthenticated && user?.organization_id) {
+      fetchInitialData();
     }
-  }, [activeView]);
+  }, [isAuthenticated, user]);
 
-  const getAuthHeaders = () => {
-    try {
-      const session = JSON.parse(localStorage.getItem('session'));
-      if (!session?.token) {
-        throw new Error('No hay sesión activa');
-      }
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.token}`
-      };
-    } catch (error) {
-      throw new Error('Error de autenticación');
-    }
-  };
-
-  const fetchAllData = async () => {
+  const fetchInitialData = async () => {
     setLoading(true);
-    setError('');
     try {
       await Promise.all([
-        fetchStats(),
-        fetchClientAnalytics(),
-        fetchClientInsights(),
-        fetchRevenueAnalysis(),
-        fetchMarketIntelligence()
+        fetchClients(),
+        fetchCountries()
       ]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setError('Error al cargar los datos del dashboard');
+    } catch (err) {
+      console.error('Error fetching initial data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchStats = async () => {
+  const fetchClients = async () => {
     try {
-      const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/clients/stats', { headers });
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
       }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
+
+      console.log('Fetching clients from backend...');
+      const clientsResponse = await fetch('http://localhost:8001/clients/', {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!clientsResponse.ok) {
+        console.error('Error response:', clientsResponse.status, clientsResponse.statusText);
+        const errorText = await clientsResponse.text();
+        console.error('Error details:', errorText);
+        throw new Error(`Error al cargar los clientes: ${clientsResponse.status}`);
+      }
+
+      const clientsData = await clientsResponse.json();
+      console.log('Raw clients data:', clientsData);
+      
+      // Mostrar progreso de enriquecimiento de datos
+      setLoading(true);
+      console.log('Enriqueciendo datos de clientes con información del backend...');
+      
+      // Enriquecer los datos con información real del backend
+      const enrichedClients = await Promise.all(clientsData.map(async (client, index) => {
+        try {
+          console.log(`Procesando cliente ${index + 1}/${clientsData.length}: ${client.name}`);
+          
+          // Obtener datos reales de cotizaciones, tickets y proyectos para este cliente
+          const [quotationsData, ticketsData] = await Promise.all([
+            fetchClientQuotations(client.client_id),
+            fetchClientTickets(client.client_id)
+          ]);
+
+          // Calcular métricas reales
+          const pendingQuotesAmount = quotationsData.reduce((total, quotation) => {
+            // Usar total_pending del backend si está disponible, sino calcular manualmente
+            if (quotation.total_pending !== undefined) {
+              console.log(`Usando total_pending del backend para cotización ${quotation.quotation_id}: ${quotation.total_pending}`);
+              return total + (quotation.total_pending || 0);
+            }
+            // Fallback: calcular manualmente si no hay total_pending del backend
+            console.log(`Calculando manualmente para cotización ${quotation.quotation_id || 'sin_id'}`);
+            const pendingAmount = quotation.installments?.reduce((sum, installment) => {
+              return installment.is_paid ? sum : sum + (installment.amount || 0);
+            }, 0) || 0;
+            return total + pendingAmount;
+          }, 0);
+          
+          console.log(`Total cotizaciones pendientes para cliente ${client.name}: ${pendingQuotesAmount} (de ${quotationsData.length} cotizaciones)`);
+
+          // Depurar tickets para este cliente
+          console.log(`Tickets raw data for client ${client.name}:`, ticketsData);
+          console.log(`Total tickets found: ${ticketsData.length}`);
+          
+          const openTicketsCount = ticketsData.filter(ticket => {
+            const isOpen = ticket.status !== 'cerrado' && 
+                          ticket.status !== 'resuelto' && 
+                          ticket.status !== 'canceled' &&
+                          ticket.status !== 'closed';
+            console.log(`Ticket ${ticket.ticket_id || 'no-id'} - Status: ${ticket.status}, Is Open: ${isOpen}`);
+            return isOpen;
+          }).length;
+          
+          console.log(`Open tickets count for client ${client.name}: ${openTicketsCount}`);
+
+          // Obtener información de proyectos desde el backend
+          const [projectsDataInfo, projectsInfo] = await Promise.all([
+            fetchClientProjects(client.client_id),
+            fetchClientProjectsInfo(client.client_id)
+          ]);
+
+          // Depurar proyectos para este cliente
+          console.log(`Projects raw data for client ${client.name}:`, projectsDataInfo);
+          console.log(`Projects info for client ${client.name}:`, projectsInfo);
+          console.log(`Total projects found: ${projectsDataInfo.length}`);
+
+          // Usar la información calculada en el backend para mayor consistencia
+          const delayedProjectsCount = projectsInfo?.overdue_projects || 0;
+          const riskProjectsCount = projectsInfo?.at_risk_projects || 0;
+          
+          console.log(`Delayed projects count for client ${client.name}: ${delayedProjectsCount}`);
+          console.log(`Risk projects count for client ${client.name}: ${riskProjectsCount}`);
+
+          const enrichedClient = {
+            ...client,
+            pending_quotes_amount: Math.round(pendingQuotesAmount),
+            rating_average: client.rating_average || 0, // Usar calificación real del backend
+            open_tickets_count: openTicketsCount,
+            delayed_projects_count: delayedProjectsCount,
+            risk_projects_count: riskProjectsCount,
+            projects_count: projectsDataInfo.length,
+            total_quotes_amount: Math.round(quotationsData.reduce((total, q) => total + (q.total_amount || 0), 0))
+          };
+
+          console.log(`Cliente ${client.name} enriquecido:`, {
+            pendingQuotes: enrichedClient.pending_quotes_amount,
+            openTickets: enrichedClient.open_tickets_count,
+            delayedProjects: enrichedClient.delayed_projects_count,
+            riskProjects: enrichedClient.risk_projects_count
+          });
+
+          return enrichedClient;
+        } catch (error) {
+          console.error(`Error enriching client ${client.client_id} (${client.name}):`, error);
+          // En caso de error, devolver datos por defecto
+          return {
+            ...client,
+            pending_quotes_amount: 0,
+            rating_average: 0,
+            open_tickets_count: 0,
+            delayed_projects_count: 0,
+            risk_projects_count: 0,
+            projects_count: 0,
+            total_quotes_amount: 0
+          };
+        }
+      }));
+      
+      console.log('Enriched clients:', enrichedClients);
+      setClients(enrichedClients);
+      
+      // Calcular y actualizar estadísticas del dashboard basándose en datos reales
+      const dashboardStats = calculateDashboardStats(enrichedClients);
+      // Aquí podrías llamar a una función para actualizar las estadísticas globales si es necesario
+      console.log('Dashboard stats calculated:', dashboardStats);
+      
+    } catch (err) {
+      console.error('Error fetching clients:', err);
+      // Si hay error, establecer una lista vacía pero no fallar completamente
+      setClients([]);
     }
   };
 
-  const fetchClientAnalytics = async () => {
+  const fetchCountries = async () => {
     try {
-      const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/clients/analytics', { headers });
-      if (response.ok) {
-        const data = await response.json();
-        setAnalyticsData(data);
-        generateStrategicRecommendations(data);
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
       }
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
+
+      console.log('Fetching countries from backend...');
+      const response = await fetch('http://localhost:8001/countries/', {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const countriesData = await response.json();
+        setCountries(countriesData);
+      } else {
+        console.error('Error fetching countries:', response.status, response.statusText);
+        // Continuar sin países si hay error
+        setCountries([]);
+      }
+    } catch (err) {
+      console.error('Error fetching countries:', err);
+      setCountries([]);
     }
   };
 
-  const fetchClientInsights = async () => {
-    // Simulación de insights inteligentes de clientes
-    const insights = {
-      clientLifecycleAnalysis: {
-        avgAcquisitionCost: 2500,
-        avgLifetimeValue: 45000,
-        churnRate: 8.5,
-        retentionRate: 91.5,
-        growthRate: 23.4
-      },
-      segmentPerformance: [
-        { segment: 'Enterprise', clients: 12, revenue: 850000, growth: '+15%', satisfaction: 4.8 },
-        { segment: 'Corporate', clients: 28, revenue: 620000, growth: '+8%', satisfaction: 4.5 },
-        { segment: 'Small Business', clients: 45, revenue: 280000, growth: '+25%', satisfaction: 4.2 },
-        { segment: 'Startup', clients: 18, revenue: 95000, growth: '+40%', satisfaction: 4.0 }
-      ],
-      riskAnalysis: {
-        highRiskClients: 3,
-        mediumRiskClients: 7,
-        lowRiskClients: 93,
-        churnPrediction: [
-          { clientName: 'TechCorp Ltd', risk: 85, reason: 'Reducción en proyectos' },
-          { clientName: 'StartupXYZ', risk: 72, reason: 'Retrasos en pagos' }
-        ]
-      },
-      opportunityMatrix: {
-        upsellOpportunities: 15,
-        crossSellOpportunities: 23,
-        renewalOpportunities: 8,
-        expansionPotential: '$320,000'
+  // Funciones auxiliares para obtener datos específicos por cliente
+  const fetchClientQuotations = async (clientId) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) return [];
+
+      // Verificar si los datos están en caché y son recientes
+      const cachedData = dataCache.quotations[clientId];
+      const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
+
+      if (isCacheValid) {
+        console.log('Usando datos de cotizaciones de caché para el cliente:', clientId);
+        return cachedData.data;
       }
-    };
-    setClientInsights(insights);
-  };
 
-  const fetchRevenueAnalysis = async () => {
-    // Simulación de análisis de ingresos avanzado
-    const analysis = {
-      revenueStreams: [
-        { stream: 'Desarrollo de Software', revenue: 1200000, percentage: 45, trend: '+12%' },
-        { stream: 'Consultoría', revenue: 800000, percentage: 30, trend: '+8%' },
-        { stream: 'Soporte y Mantenimiento', revenue: 450000, percentage: 17, trend: '+5%' },
-        { stream: 'Capacitación', revenue: 200000, percentage: 8, trend: '+25%' }
-      ],
-      profitabilityAnalysis: {
-        grossMargin: 68.5,
-        netMargin: 22.3,
-        avgProjectMargin: 35.7,
-        costPerAcquisition: 2500,
-        revenuePerEmployee: 125000
-      },
-      forecastAccuracy: {
-        q1Accuracy: 94.2,
-        q2Accuracy: 89.7,
-        q3Accuracy: 91.5,
-        q4Forecast: 2850000,
-        confidenceLevel: 87
+      // Usar el endpoint directo para obtener cotizaciones por cliente
+      const response = await fetch(`http://localhost:8001/projects/quotations/by-client/${clientId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const quotations = await response.json();
+        
+        // Actualizar caché
+        setDataCache(prev => ({
+          ...prev,
+          quotations: {
+            ...prev.quotations,
+            [clientId]: {
+              data: Array.isArray(quotations) ? quotations : [],
+              timestamp: Date.now()
+            }
+          }
+        }));
+
+        console.log(`Fetched ${quotations.length} quotations for client ${clientId} using direct endpoint`);
+        return Array.isArray(quotations) ? quotations : [];
+      } else {
+        console.error(`Error fetching quotations for client ${clientId}:`, response.status, response.statusText);
+        return [];
       }
-    };
-    setRevenueAnalysis(analysis);
+
+    } catch (error) {
+      console.error(`Error fetching quotations for client ${clientId}:`, error);
+      return [];
+    }
   };
 
-  const fetchMarketIntelligence = async () => {
-    // Simulación de inteligencia de mercado
-    const intelligence = {
-      competitivePosition: {
-        marketShare: 12.5,
-        competitorAnalysis: [
-          { competitor: 'CompetitorA', marketShare: 18.2, strength: 'Precio' },
-          { competitor: 'CompetitorB', marketShare: 15.7, strength: 'Tecnología' },
-          { competitor: 'CompetitorC', marketShare: 14.1, strength: 'Experiencia' }
-        ]
-      },
-      industryTrends: [
-        { trend: 'Transformación Digital', impact: 'high', opportunity: 85 },
-        { trend: 'Cloud Computing', impact: 'high', opportunity: 78 },
-        { trend: 'AI/ML Integration', impact: 'medium', opportunity: 65 },
-        { trend: 'Cybersecurity', impact: 'high', opportunity: 92 }
-      ],
-      marketOpportunities: {
-        emergingMarkets: ['HealthTech', 'FinTech', 'EdTech'],
-        untappedSegments: ['Government', 'Non-Profit'],
-        growthPotential: '$1.2M',
-        timeToMarket: '6-9 months'
+  const fetchClientTickets = async (clientId) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) return [];
+
+      // Verificar si los datos están en caché y son recientes
+      const cachedData = dataCache.tickets[clientId];
+      const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
+
+      if (isCacheValid) {
+        console.log('Usando datos de tickets de caché para el cliente:', clientId);
+        return cachedData.data;
       }
-    };
-    setMarketIntelligence(intelligence);
-  };
 
-  const generateStrategicRecommendations = (data) => {
-    const recommendations = [
-      {
-        type: 'growth',
-        priority: 'high',
-        title: 'Estrategia de Clientes Premium',
-        description: 'Desarrollar programa de cuentas clave',
-        action: 'Implementar estrategia de upselling dirigida',
-        impact: 'Incremento potencial de 40-60% en ingresos por cliente',
-        timeline: '3-6 meses'
-      },
-      {
-        type: 'retention',
-        priority: 'high',
-        title: 'Programa de Retención Proactiva',
-        description: 'Sistema de alerta temprana para riesgo de churn',
-        action: 'Crear dashboard de salud del cliente',
-        impact: 'Reducción del 25% en tasa de abandono',
-        timeline: '2-4 meses'
-      },
-      {
-        type: 'expansion',
-        priority: 'medium',
-        title: 'Diversificación de Servicios',
-        description: 'Oportunidad en mercados emergentes',
-        action: 'Desarrollar capacidades especializadas',
-        impact: 'Nuevo flujo de ingresos de $500K-1M anual',
-        timeline: '6-12 meses'
-      },
-      {
-        type: 'optimization',
-        priority: 'medium',
-        title: 'Optimización de Márgenes',
-        description: 'Margen neto actual del 22.3% puede mejorarse',
-        action: 'Automatizar procesos y optimizar costos',
-        impact: 'Incremento de 3-5 puntos en margen neto',
-        timeline: '4-8 meses'
+      const response = await fetch(`http://localhost:8001/tickets/?client_id=${clientId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log(`Tickets API response for client ${clientId}:`, response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Tickets raw response for client ${clientId}:`, data);
+        
+        // Actualizar caché
+        setDataCache(prev => ({
+          ...prev,
+          tickets: {
+            ...prev.tickets,
+            [clientId]: {
+              data: Array.isArray(data) ? data : [],
+              timestamp: Date.now()
+            }
+          }
+        }));
+        
+        console.log(`Processed tickets for client ${clientId}:`, Array.isArray(data) ? data.length : 'not array');
+        return Array.isArray(data) ? data : [];
+      } else {
+        console.error(`Error fetching tickets for client ${clientId}:`, response.status, response.statusText);
+        return [];
       }
-    ];
-    setStrategicRecommendations(recommendations);
+    } catch (error) {
+      console.error(`Error fetching tickets for client ${clientId}:`, error);
+      return [];
+    }
   };
 
-  const getPriorityColor = (priority) => {
-    const colors = {
-      high: 'bg-red-100 text-red-800 border-red-200',
-      medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      low: 'bg-green-100 text-green-800 border-green-200'
+  const fetchClientProjects = async (clientId) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) return [];
+
+      // Verificar si los datos están en caché y son recientes
+      const cachedData = dataCache.projects[clientId];
+      const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
+
+      if (isCacheValid) {
+        console.log('Usando datos de proyectos de caché para el cliente:', clientId);
+        return cachedData.data;
+      }
+
+      const response = await fetch(`http://localhost:8001/projects/?client_id=${clientId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Actualizar caché
+        setDataCache(prev => ({
+          ...prev,
+          projects: {
+            ...prev.projects,
+            [clientId]: {
+              data: Array.isArray(data) ? data : [],
+              timestamp: Date.now()
+            }
+          }
+        }));
+        return Array.isArray(data) ? data : [];
+      }
+      return [];
+    } catch (error) {
+      console.error(`Error fetching projects for client ${clientId}:`, error);
+      return [];
+    }
+  };
+
+  const fetchClientProjectsInfo = async (clientId) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) return { total_projects: 0, overdue_projects: 0, at_risk_projects: 0 };
+
+      // Verificar si los datos están en caché y son recientes
+      const cachedData = dataCache.projectsInfo?.[clientId];
+      const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
+
+      if (isCacheValid) {
+        console.log('Usando datos de información de proyectos de caché para el cliente:', clientId);
+        return cachedData.data;
+      }
+
+      const response = await fetch(`http://localhost:8001/projects/by-client/${clientId}/info`, {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Actualizar caché
+        setDataCache(prev => ({
+          ...prev,
+          projectsInfo: {
+            ...prev.projectsInfo,
+            [clientId]: {
+              data: data,
+              timestamp: Date.now()
+            }
+          }
+        }));
+        return data;
+      }
+      return { total_projects: 0, overdue_projects: 0, at_risk_projects: 0 };
+    } catch (error) {
+      console.error(`Error fetching projects info for client ${clientId}:`, error);
+      return { total_projects: 0, overdue_projects: 0, at_risk_projects: 0 };
+    }
+  };
+
+  // Función para limpiar el caché cuando sea necesario
+  const clearDataCache = () => {
+    setDataCache({
+      quotations: {},
+      tickets: {},
+      projects: {},
+      projectsInfo: {},
+      lastUpdate: null
+    });
+  };
+
+  // Limpiar caché cuando se actualiza un cliente
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    clearDataCache();
+    await fetchClients();
+    setRefreshing(false);
+  };
+
+  // Filtrar clientes según los filtros aplicados
+  const getFilteredClients = () => {
+    let filtered = clients;
+    
+    // Filtrar por búsqueda
+    if (searchFilter) {
+      filtered = filtered.filter(client => 
+        client.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
+        client.code?.toLowerCase().includes(searchFilter.toLowerCase()) ||
+        client.contact_email?.toLowerCase().includes(searchFilter.toLowerCase()) ||
+        client.tax_id?.toLowerCase().includes(searchFilter.toLowerCase())
+      );
+    }
+    
+    // Filtrar por estado
+    if (statusFilter !== 'all') {
+      const isActive = statusFilter === 'active';
+      filtered = filtered.filter(client => client.is_active === isActive);
+    }
+    
+    // Filtrar por país
+    if (countryFilter !== 'all') {
+      filtered = filtered.filter(client => client.country_code === countryFilter);
+    }
+    
+    // Filtrar clientes inactivos según el toggle
+    if (!showInactive) {
+      filtered = filtered.filter(client => client.is_active);
+    }
+    
+    // Ordenar
+    filtered.sort((a, b) => {
+      // Si no hay configuración de ordenamiento específica, ordenar por severidad
+      if (sortConfig.key === 'name' && sortConfig.direction === 'asc') {
+        // Calcular score de severidad (tickets abiertos * 2 + proyectos en riesgo * 1.5)
+        const aSeverity = (a.open_tickets_count || 0) * 2 + 
+                         ((a.delayed_projects_count || 0) + (a.risk_projects_count || 0)) * 1.5;
+        const bSeverity = (b.open_tickets_count || 0) * 2 + 
+                         ((b.delayed_projects_count || 0) + (b.risk_projects_count || 0)) * 1.5;
+        
+        // Ordenar por severidad descendente (más crítico primero)
+        if (aSeverity !== bSeverity) {
+          return bSeverity - aSeverity;
+        }
+        
+        // Si tienen la misma severidad, ordenar por nombre alfabéticamente
+        return a.name.localeCompare(b.name);
+      }
+      
+      // Ordenamiento normal por la columna seleccionada
+      const aValue = a[sortConfig.key];
+      const bValue = b[sortConfig.key];
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+      
+      return sortConfig.direction === 'asc' 
+        ? (aValue || 0) - (bValue || 0)
+        : (bValue || 0) - (aValue || 0);
+    });
+    
+    return filtered;
+  };
+
+  // Obtener estadísticas
+  const getStats = () => {
+    const total = clients.length;
+    const active = clients.filter(c => c.is_active).length;
+    const inactive = total - active;
+    const withProjects = clients.filter(c => (c.projects_count || 0) > 0).length;
+    const totalProjects = clients.reduce((sum, c) => sum + (c.projects_count || 0), 0);
+    const totalHours = clients.reduce((sum, c) => sum + (c.total_hours_registered || 0), 0);
+    
+    // Nuevas estadísticas solicitadas
+    const pendingQuotes = clients.reduce((sum, c) => sum + (c.pending_quotes_amount || 0), 0);
+    
+    // Calcular promedio real de calificaciones
+    const clientsWithRatings = clients.filter(c => c.rating_average !== undefined && c.rating_average !== null);
+    const averageRating = clientsWithRatings.length > 0 
+      ? clientsWithRatings.reduce((sum, c) => sum + (c.rating_average || 0), 0) / clientsWithRatings.length
+      : 0;
+    
+    const openTickets = clients.reduce((sum, c) => sum + (c.open_tickets_count || 0), 0);
+    const delayedProjects = clients.reduce((sum, c) => sum + (c.delayed_projects_count || 0), 0);
+    const riskProjects = clients.reduce((sum, c) => sum + (c.risk_projects_count || 0), 0);
+    
+    return { 
+      total, 
+      active, 
+      inactive, 
+      withProjects, 
+      totalProjects, 
+      totalHours,
+      pendingQuotes,
+      averageRating: Math.round(averageRating * 10) / 10, // Redondear a 1 decimal
+      openTickets,
+      delayedProjects,
+      riskProjects
     };
-    return colors[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const getRecommendationIcon = (type) => {
-    const icons = {
-      growth: '📈',
-      retention: '🛡️',
-      expansion: '🌍',
-      optimization: '⚙️'
+  // Función para calcular estadísticas del dashboard basándose en datos reales
+  const calculateDashboardStats = (clientsData) => {
+    if (!clientsData || clientsData.length === 0) {
+      return {
+        totalPendingQuotations: 0,
+        overallRating: 0,
+        openTickets: 0,
+        delayedProjects: 0
+      };
+    }
+
+    const totalPendingQuotations = clientsData.reduce((total, client) => 
+      total + (client.pending_quotes_amount || 0), 0
+    );
+
+    const openTickets = clientsData.reduce((total, client) => 
+      total + (client.open_tickets_count || 0), 0
+    );
+
+    const delayedProjects = clientsData.reduce((total, client) => 
+      total + (client.delayed_projects_count || 0) + (client.risk_projects_count || 0), 0
+    );
+
+    // Calcular promedio real de calificaciones
+    const clientsWithRatings = clientsData.filter(client => client.rating_average !== undefined && client.rating_average !== null);
+    const overallRating = clientsWithRatings.length > 0 
+      ? clientsWithRatings.reduce((sum, client) => sum + (client.rating_average || 0), 0) / clientsWithRatings.length
+      : 0;
+
+    return {
+      totalPendingQuotations: Math.round(totalPendingQuotations),
+      overallRating: Math.round(overallRating * 10) / 10, // Redondear a 1 decimal
+      openTickets,
+      delayedProjects
     };
-    return icons[type] || '💡';
   };
 
-  const getRiskColor = (risk) => {
-    if (risk >= 80) return 'text-red-600 bg-red-50';
-    if (risk >= 60) return 'text-yellow-600 bg-yellow-50';
-    return 'text-green-600 bg-green-50';
+  // Manejar creación/edición de clientes
+  const handleSaveClient = async (clientData) => {
+    setSavingClient(true);
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      const url = selectedClient 
+        ? `http://localhost:8001/clients/${selectedClient.client_id}`
+        : 'http://localhost:8001/clients/';
+      
+      const method = selectedClient ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(clientData)
+      });
+
+      if (response.ok) {
+        const updatedClient = await response.json();
+        
+        if (selectedClient) {
+          // Actualizar cliente existente en el estado local
+          setClients(prevClients => 
+            prevClients.map(client => 
+              client.client_id === selectedClient.client_id 
+                ? { ...client, ...updatedClient }
+                : client
+            )
+          );
+          setSuccessMessage('Cliente actualizado correctamente');
+        } else {
+          // Agregar nuevo cliente al estado local
+          setClients(prevClients => [...prevClients, updatedClient]);
+          setSuccessMessage('Cliente creado correctamente');
+        }
+        
+        // Limpiar caché para forzar actualización en la próxima carga
+        clearDataCache();
+        
+        // Cerrar el modal
+        setShowClientModal(false);
+        setSelectedClient(null);
+        
+        // Auto-ocultar mensaje de éxito
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al guardar el cliente');
+      }
+    } catch (err) {
+      console.error('Error saving client:', err);
+      setError(err.message || 'Error al guardar el cliente');
+      setTimeout(() => setError(''), 5000);
+      throw err; // Re-lanzar el error para que el modal lo maneje
+    } finally {
+      setSavingClient(false);
+    }
   };
+
+  // Manejar eliminación de clientes
+  const handleDeleteClient = async (clientId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) return;
+    
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      const response = await fetch(`http://localhost:8001/clients/${clientId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.token}`
+        }
+      });
+
+      if (response.ok) {
+        // Remover cliente del estado local
+        setClients(prevClients => 
+          prevClients.filter(client => client.client_id !== clientId)
+        );
+        
+        // Limpiar caché
+        clearDataCache();
+        
+        setSuccessMessage('Cliente eliminado correctamente');
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al eliminar el cliente');
+      }
+    } catch (err) {
+      console.error('Error deleting client:', err);
+      setError(err.message || 'Error al eliminar el cliente');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  // Manejar cambio de estado de cliente
+  const handleStatusChange = async (clientId, newStatus) => {
+    console.log('Cambiando estado del cliente:', clientId, 'nuevo estado:', newStatus);
+    
+    // Agregar el cliente al set de clientes siendo actualizados
+    setUpdatingStatus(prev => new Set([...prev, clientId]));
+    
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      
+      // Obtener los datos completos del cliente
+      const currentClient = clients.find(c => c.client_id === clientId);
+      if (!currentClient) {
+        throw new Error('Cliente no encontrado');
+      }
+      
+      // Enviar todos los datos del cliente con el estado actualizado
+      const updatedClientData = {
+        name: currentClient.name,
+        code: currentClient.code,
+        is_active: newStatus,
+        country_code: currentClient.country_code,
+        address: currentClient.address,
+        contact_email: currentClient.contact_email,
+        contact_phone: currentClient.contact_phone,
+        tax_id: currentClient.tax_id,
+        organization_id: session.user.organization_id
+      };
+      
+      const response = await fetch(`http://localhost:8001/clients/${clientId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedClientData)
+      });
+
+      if (response.ok) {
+        // Actualizar solo el cliente específico en el estado local
+        setClients(prevClients => 
+          prevClients.map(client => 
+            client.client_id === clientId 
+              ? { ...client, is_active: newStatus }
+              : client
+          )
+        );
+        
+        // Limpiar caché para forzar actualización en la próxima carga
+        clearDataCache();
+        
+        setSuccessMessage(`Cliente ${newStatus ? 'activado' : 'desactivado'} correctamente`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al actualizar el estado del cliente');
+      }
+    } catch (err) {
+      console.error('Error updating client status:', err);
+      setError(err.message || 'Error al actualizar el estado del cliente');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      // Remover el cliente del set de clientes siendo actualizados
+      setUpdatingStatus(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(clientId);
+        return newSet;
+      });
+    }
+  };
+
+  // Obtener nombre del país
+  const getCountryName = (countryCode) => {
+    const country = countries.find(c => c.country_code === countryCode);
+    return country ? country.country_name : countryCode;
+  };
+
+  // Limpiar todos los filtros
+  const clearAllFilters = () => {
+    setSearchFilter('');
+    setStatusFilter('all');
+    setCountryFilter('all');
+    setShowInactive(false);
+  };
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
+  const stats = getStats();
+  const filteredClients = getFilteredClients();
+  const hasActiveFilters = searchFilter || statusFilter !== 'all' || countryFilter !== 'all';
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative">
+            <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-spin mx-auto mb-6">
+              <div className="w-16 h-16 bg-white rounded-full m-2"></div>
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <FiUsers className="w-8 h-8 text-white animate-pulse" />
+            </div>
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Cargando clientes</h3>
+          <p className="text-gray-600">Preparando tu cartera de clientes...</p>
+        </div>
       </div>
     );
   }
 
-  const renderIntelligentSummary = () => (
-    <div className="space-y-8">
-      {/* Header Ejecutivo */}
-      <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-xl p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">Centro de Inteligencia de Clientes</h2>
-            <p className="text-green-100">Análisis avanzado de valor, retención y oportunidades de crecimiento</p>
-          </div>
-          <div className="text-right">
-            <div className="text-3xl font-bold">{stats.total_clients?.value || '0'}</div>
-            <div className="text-sm text-green-100">Clientes Activos</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Métricas Clave de Negocio */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div 
-          className="bg-white rounded-xl p-6 shadow-lg border border-gray-100"
-          whileHover={{ scale: 1.02 }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Valor de Vida del Cliente</p>
-              <p className="text-2xl font-bold text-gray-900">${clientInsights.clientLifecycleAnalysis?.avgLifetimeValue?.toLocaleString()}</p>
-              <p className="text-sm text-green-600">ROI: 18x</p>
-            </div>
-            <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">💰</span>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          className="bg-white rounded-xl p-6 shadow-lg border border-gray-100"
-          whileHover={{ scale: 1.02 }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Tasa de Retención</p>
-              <p className="text-2xl font-bold text-gray-900">{clientInsights.clientLifecycleAnalysis?.retentionRate}%</p>
-              <p className="text-sm text-green-600">+2.3% vs industria</p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🛡️</span>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          className="bg-white rounded-xl p-6 shadow-lg border border-gray-100"
-          whileHover={{ scale: 1.02 }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Crecimiento Anual</p>
-              <p className="text-2xl font-bold text-gray-900">{clientInsights.clientLifecycleAnalysis?.growthRate}%</p>
-              <p className="text-sm text-green-600">Superando objetivos</p>
-            </div>
-            <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">📈</span>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          className="bg-white rounded-xl p-6 shadow-lg border border-gray-100"
-          whileHover={{ scale: 1.02 }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Oportunidades de Expansión</p>
-              <p className="text-2xl font-bold text-gray-900">{clientInsights.opportunityMatrix?.expansionPotential}</p>
-              <p className="text-sm text-blue-600">{clientInsights.opportunityMatrix?.upsellOpportunities} oportunidades</p>
-            </div>
-            <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🎯</span>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Análisis de Segmentos y Riesgo */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🎯 Rendimiento por Segmento</h3>
-          <div className="space-y-4">
-            {clientInsights.segmentPerformance?.map((segment, index) => (
-              <div key={index} className="p-4 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-medium text-gray-900">{segment.segment}</span>
-                  <span className="text-sm text-green-600 font-semibold">{segment.growth}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <div className="text-gray-600">Clientes</div>
-                    <div className="font-semibold">{segment.clients}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-600">Ingresos</div>
-                    <div className="font-semibold">${(segment.revenue / 1000).toFixed(0)}K</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-600">Satisfacción</div>
-                    <div className="font-semibold">{segment.satisfaction}/5</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">⚠️ Análisis de Riesgo</h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-red-50 rounded-lg">
-                <div className="text-2xl font-bold text-red-600">{clientInsights.riskAnalysis?.highRiskClients}</div>
-                <div className="text-sm text-red-600">Alto Riesgo</div>
-              </div>
-              <div className="p-3 bg-yellow-50 rounded-lg">
-                <div className="text-2xl font-bold text-yellow-600">{clientInsights.riskAnalysis?.mediumRiskClients}</div>
-                <div className="text-sm text-yellow-600">Riesgo Medio</div>
-              </div>
-              <div className="p-3 bg-green-50 rounded-lg">
-                <div className="text-2xl font-bold text-green-600">{clientInsights.riskAnalysis?.lowRiskClients}%</div>
-                <div className="text-sm text-green-600">Bajo Riesgo</div>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="font-medium text-gray-900">Predicción de Churn</h4>
-              {clientInsights.riskAnalysis?.churnPrediction?.map((client, index) => (
-                <div key={index} className={`p-3 rounded-lg ${getRiskColor(client.risk)}`}>
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">{client.clientName}</span>
-                    <span className="text-sm font-semibold">{client.risk}% riesgo</span>
-                  </div>
-                  <div className="text-sm opacity-75">{client.reason}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Análisis de Ingresos */}
-      <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">💼 Análisis de Flujos de Ingresos</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {revenueAnalysis.revenueStreams?.map((stream, index) => (
-            <div key={index} className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-600 mb-1">{stream.stream}</div>
-              <div className="text-xl font-bold text-gray-900">${(stream.revenue / 1000).toFixed(0)}K</div>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-sm text-gray-500">{stream.percentage}%</span>
-                <span className="text-sm text-green-600 font-semibold">{stream.trend}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">{revenueAnalysis.profitabilityAnalysis?.grossMargin}%</div>
-            <div className="text-sm text-gray-600">Margen Bruto</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">{revenueAnalysis.profitabilityAnalysis?.netMargin}%</div>
-            <div className="text-sm text-gray-600">Margen Neto</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">${revenueAnalysis.profitabilityAnalysis?.costPerAcquisition}</div>
-            <div className="text-sm text-gray-600">CAC</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">${(revenueAnalysis.profitabilityAnalysis?.revenuePerEmployee / 1000).toFixed(0)}K</div>
-            <div className="text-sm text-gray-600">Ingresos/Empleado</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">{revenueAnalysis.forecastAccuracy?.confidenceLevel}%</div>
-            <div className="text-sm text-gray-600">Precisión Forecast</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Inteligencia de Mercado */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🌍 Posición Competitiva</h3>
-          <div className="space-y-4">
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-3xl font-bold text-blue-600">{marketIntelligence.competitivePosition?.marketShare}%</div>
-              <div className="text-sm text-blue-600">Cuota de Mercado</div>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="font-medium text-gray-900">Análisis Competitivo</h4>
-              {marketIntelligence.competitivePosition?.competitorAnalysis?.map((comp, index) => (
-                <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <span className="text-sm font-medium">{comp.competitor}</span>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold">{comp.marketShare}%</div>
-                    <div className="text-xs text-gray-500">{comp.strength}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Tendencias e Innovación</h3>
-          <div className="space-y-3">
-            {marketIntelligence.industryTrends?.map((trend, index) => (
-              <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-gray-900">{trend.trend}</span>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    trend.impact === 'high' ? 'bg-red-100 text-red-800' : 
-                    trend.impact === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {trend.impact === 'high' ? 'Alto' : trend.impact === 'medium' ? 'Medio' : 'Bajo'} Impacto
-                  </span>
-                </div>
-                <div className="mt-1">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full" 
-                      style={{ width: `${trend.opportunity}%` }}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">Oportunidad: {trend.opportunity}%</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Recomendaciones Estratégicas */}
-      <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">🎯 Recomendaciones Estratégicas</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {strategicRecommendations.map((rec, index) => (
-            <motion.div
-              key={index}
-              className={`p-4 rounded-lg border-2 ${getPriorityColor(rec.priority)}`}
-              whileHover={{ scale: 1.02 }}
-            >
-              <div className="flex items-start space-x-3">
-                <span className="text-2xl">{getRecommendationIcon(rec.type)}</span>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-sm mb-1">{rec.title}</h4>
-                  <p className="text-xs mb-2 opacity-90">{rec.description}</p>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium">Acción: {rec.action}</p>
-                    <p className="text-xs opacity-75">Impacto: {rec.impact}</p>
-                    <p className="text-xs opacity-75">Timeline: {rec.timeline}</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Oportunidades de Mercado */}
-      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-purple-900 mb-4">🌟 Oportunidades de Mercado</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <h4 className="font-medium text-purple-900 mb-2">Mercados Emergentes</h4>
-            <div className="space-y-1">
-              {marketIntelligence.marketOpportunities?.emergingMarkets?.map((market, index) => (
-                <span key={index} className="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs mr-1">
-                  {market}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="font-medium text-purple-900 mb-2">Segmentos Sin Explotar</h4>
-            <div className="space-y-1">
-              {marketIntelligence.marketOpportunities?.untappedSegments?.map((segment, index) => (
-                <span key={index} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs mr-1">
-                  {segment}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="font-medium text-purple-900 mb-2">Potencial de Crecimiento</h4>
-            <div className="text-2xl font-bold text-purple-900">{marketIntelligence.marketOpportunities?.growthPotential}</div>
-            <div className="text-sm text-purple-700">En {marketIntelligence.marketOpportunities?.timeToMarket}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="p-6">
-      {/* Navigation */}
-      <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
-        {[
-          { key: 'resumen', label: '🧠 Inteligencia de Clientes', icon: '📊' },
-          { key: 'tabla', label: '👥 Gestión de Clientes', icon: '⚙️' }
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveView(tab.key)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              activeView === tab.key
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <span className="mr-2">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/30">
+      <div className="w-full p-6">
+        {/* Header mejorado */}
+        <div className="mb-8">
+          {/* Estadísticas con diseño mejorado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">Total Clientes</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+                  <p className="text-xs text-gray-500 mt-1">En cartera</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl">
+                  <FiUsers className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">Cotizaciones Pendientes</p>
+                  <p className="text-3xl font-bold text-orange-600">${stats.pendingQuotes.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">Por facturar</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl">
+                  <FiDollarSign className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">Calificación General</p>
+                  <p className="text-3xl font-bold text-yellow-600">{stats.averageRating.toFixed(1)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Puntuación media</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl">
+                  <FiStar className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">Tickets Abiertos</p>
+                  <p className="text-3xl font-bold text-red-600">{stats.openTickets}</p>
+                  <p className="text-xs text-gray-500 mt-1">Pendientes</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-red-500 to-red-600 rounded-xl">
+                  <FiMessageSquare className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">Proyectos Retrasados</p>
+                  <p className="text-3xl font-bold text-red-600">{stats.delayedProjects}</p>
+                  <p className="text-xs text-gray-500 mt-1">Con retrasos</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-red-500 to-red-600 rounded-xl">
+                  <FiAlertTriangle className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">Proyectos en Riesgo</p>
+                  <p className="text-3xl font-bold text-amber-600">{stats.riskProjects}</p>
+                  <p className="text-xs text-gray-500 mt-1">Necesitan atención</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl">
+                  <FiZap className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Controles y filtros mejorados */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
+          <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
+            {/* Búsqueda mejorada */}
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Buscar clientes por nombre, código, email..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-gray-50 hover:bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Botones de acción */}
+            <div className="flex items-center gap-3">
+              {/* Botón de filtros */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl font-medium transition-all duration-300 ${
+                  hasActiveFilters 
+                    ? 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-200' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <FiFilter className="w-4 h-4" />
+                Filtros
+                {hasActiveFilters && (
+                  <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                )}
+              </button>
+
+              {/* Botón de refrescar */}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all duration-300 disabled:opacity-50"
+              >
+                <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                Actualizar
+              </button>
+
+              {/* Toggle de vista mejorado */}
+              <div className="flex bg-gray-100 rounded-xl p-1">
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
+                    viewMode === 'cards'
+                      ? 'bg-white text-gray-900 shadow-md'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <FiGrid className="w-4 h-4" />
+                  Tarjetas
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
+                    viewMode === 'table'
+                      ? 'bg-white text-gray-900 shadow-md'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <FiList className="w-4 h-4" />
+                  Tabla
+                </button>
+              </div>
+
+              {/* Toggle para mostrar clientes inactivos */}
+              <div className="flex items-center space-x-3 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-3 border border-red-200">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={showInactive}
+                    onChange={(e) => setShowInactive(e.target.checked)}
+                    className="w-4 h-4 text-red-600 border-red-300 rounded focus:ring-red-500 focus:ring-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Mostrar inactivos</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <FiAlertCircle className={`w-4 h-4 ${showInactive ? 'text-red-600' : 'text-gray-400'}`} />
+                  <span className="text-xs text-gray-500">({filteredClients.filter(c => !c.is_active).length} inactivos)</span>
+                </div>
+              </div>
+
+              {/* Botón de nuevo cliente mejorado */}
+              {canManageClients && (
+                <button
+                  onClick={() => {
+                    setSelectedClient(null);
+                    setShowClientModal(true);
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-300 font-medium shadow-lg hover:shadow-xl"
+                >
+                  <FiPlus className="w-5 h-5" />
+                  Nuevo Cliente
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filtros expandibles */}
+          <AnimatePresence>
+            {showFilters && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    >
+                      <option value="all">Todos los estados</option>
+                      <option value="active">Activos</option>
+                      <option value="inactive">Inactivos</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">País</label>
+                    <select
+                      value={countryFilter}
+                      onChange={(e) => setCountryFilter(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    >
+                      <option value="all">Todos los países</option>
+                      {countries.map(country => (
+                        <option key={country.country_code} value={country.country_code}>
+                          {country.country_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2 flex items-end">
+                    <button
+                      onClick={clearAllFilters}
+                      className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-300 font-medium"
+                    >
+                      Limpiar Filtros
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Contenido principal */}
+        <div>
+          {filteredClients.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-32 h-32 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <FiUsers className="w-16 h-16 text-blue-500" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">No se encontraron clientes</h3>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                {hasActiveFilters
+                  ? 'Intenta ajustar los filtros de búsqueda para encontrar más clientes'
+                  : canManageClients 
+                    ? 'Crea el primer cliente para comenzar a gestionar tu cartera'
+                    : 'No hay clientes disponibles actualmente.'
+                }
+              </p>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-300 font-medium shadow-lg"
+                >
+                  <FiZap className="w-4 h-4" />
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              {viewMode === 'cards' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredClients.map((client) => (
+                    <div
+                      key={client.client_id}
+                      className="mt-4"
+                    >
+                      <ClientCard
+                        client={client}
+                        countries={countries}
+                        canManage={canManageClients}
+                        onEdit={() => {
+                          setSelectedClient(client);
+                          setShowClientModal(true);
+                        }}
+                        onDelete={() => handleDeleteClient(client.client_id)}
+                        onStatusChange={handleStatusChange}
+                        getCountryName={getCountryName}
+                        isUpdatingStatus={updatingStatus.has(client.client_id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ClientTable
+                  clients={filteredClients}
+                  countries={countries}
+                  canManage={canManageClients}
+                  onEdit={(client) => {
+                    setSelectedClient(client);
+                    setShowClientModal(true);
+                  }}
+                  onDelete={handleDeleteClient}
+                  onStatusChange={handleStatusChange}
+                  getCountryName={getCountryName}
+                  sortConfig={sortConfig}
+                  onSort={handleSort}
+                  getSortIcon={getSortIcon}
+                  updatingStatus={updatingStatus}
+                />
+              )}
+            </AnimatePresence>
+          )}
+        </div>
       </div>
 
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
-        </div>
-      )}
+      {/* Modal de cliente */}
+      <ClientModal
+        isOpen={showClientModal}
+        onClose={() => {
+          setShowClientModal(false);
+          setSelectedClient(null);
+        }}
+        client={selectedClient}
+        countries={countries}
+        onSave={handleSaveClient}
+        isLoading={savingClient}
+      />
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeView}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-        >
-          {activeView === 'resumen' && renderIntelligentSummary()}
-          {activeView === 'tabla' && <ClientsTable />}
-        </motion.div>
+      {/* Notificaciones */}
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-6 right-6 bg-green-500 text-white px-6 py-4 rounded-xl shadow-lg z-50 flex items-center gap-3"
+          >
+            <FiCheckCircle className="w-5 h-5" />
+            <span className="font-medium">{successMessage}</span>
+          </motion.div>
+        )}
+        
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-6 right-6 bg-red-500 text-white px-6 py-4 rounded-xl shadow-lg z-50 flex items-center gap-3"
+          >
+            <FiAlertCircle className="w-5 h-5" />
+            <span className="font-medium">{error}</span>
+            <button
+              onClick={() => setError('')}
+              className="ml-2 p-1 hover:bg-red-600 rounded-full transition-colors"
+            >
+              <FiX className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
-} 
+}

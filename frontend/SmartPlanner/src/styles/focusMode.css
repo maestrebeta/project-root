@@ -1,0 +1,98 @@
+/* Estilos para el Modo Enfoque */
+
+/* Clase principal para el modo enfoque */
+.focus-mode-active {
+  /* Fondo más oscuro para mayor enfoque */
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
+}
+
+/* Elementos que se ocultan en modo enfoque */
+.focus-mode-hide {
+  transition: all 0.3s ease;
+}
+
+/* Elementos que se expanden en modo enfoque */
+.focus-mode-expand {
+  transition: all 0.3s ease;
+}
+
+/* Cuando el modo enfoque está activo */
+.focus-mode-active .focus-mode-hide {
+  display: none !important;
+  opacity: 0 !important;
+  transform: translateX(-100%) !important;
+}
+
+/* Efectos visuales adicionales para el modo enfoque */
+.focus-mode-active .app-content {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transition: all 0.3s ease !important;
+}
+
+/* Animación de entrada para el modo enfoque */
+@keyframes focusModeEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.focus-mode-active .focus-mode-expand {
+  animation: focusModeEnter 0.3s ease-out;
+}
+
+/* Efectos de hover mejorados en modo enfoque */
+.focus-mode-active button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Transiciones suaves */
+.focus-mode-active * {
+  transition: all 0.2s ease !important;
+}
+
+/* Mejoras en la legibilidad */
+.focus-mode-active {
+  font-weight: 500 !important;
+}
+
+/* Efecto de resaltado para elementos importantes */
+.focus-mode-active .important-element {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
+  border-radius: 8px !important;
+}
+
+/* Estilos para el botón de modo enfoque activo */
+.focus-mode-active .focus-mode-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+}
+
+/* Efectos de partículas de fondo (opcional) */
+.focus-mode-active::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Estilos específicos para cuando se desactiva el modo enfoque */
+.app-content:not(.focus-mode-active) {
+  transition: margin-left 0.3s ease !important;
+}

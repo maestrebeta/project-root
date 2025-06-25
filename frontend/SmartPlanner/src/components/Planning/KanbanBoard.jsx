@@ -72,7 +72,7 @@ const updateStoryStatus = async (storyId, newStatus) => {
       throw new Error('No hay sesión activa');
     }
 
-    const response = await fetch(`http://localhost:8000/epics/stories/${storyId}`, {
+    const response = await fetch(`http://localhost:8001/epics/stories/${storyId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -269,6 +269,13 @@ function DroppableColumn({
   const isExpanded = expandedColumn === columnId;
   const storyCount = column.stories?.length || 0;
   const totalHours = column.stories?.reduce((sum, story) => sum + (story.estimated_hours || 0), 0) || 0;
+  
+  // Formatear horas para mostrar máximo 1 decimal y sin ceros innecesarios
+  const formatHours = (hours) => {
+    if (hours === 0) return '0h';
+    const formatted = parseFloat(hours).toFixed(1);
+    return formatted.endsWith('.0') ? `${parseInt(hours)}h` : `${formatted}h`;
+  };
 
   return (
     <motion.div
@@ -285,9 +292,9 @@ function DroppableColumn({
       {/* Header de la columna */}
       <motion.div 
         className={`
-          p-4 border-b border-gray-200/50 bg-gradient-to-r 
-          ${column.gradient || 'from-gray-100 to-gray-200'} 
-          rounded-t-2xl relative overflow-hidden
+          p-4 border-b border-gray-200/50 
+          ${column.headerBg || 'bg-white/80'}
+          rounded-t-2xl relative overflow-hidden shadow-sm
         `}
         whileHover={{ scale: 1.01 }}
       >
@@ -299,8 +306,8 @@ function DroppableColumn({
             <div className="flex items-center gap-3">
               <div className="text-2xl">{column.icon || '📋'}</div>
               <div>
-                <h3 className="font-bold text-gray-900 text-lg">{column.label}</h3>
-                <div className="flex items-center gap-3 text-sm text-gray-600">
+                <h3 className="font-bold text-gray-900 text-lg drop-shadow-sm">{column.label}</h3>
+                <div className="flex items-center gap-3 text-sm text-gray-700 font-medium">
                   <span className="flex items-center gap-1">
                     <FiActivity className="w-3 h-3" />
                     {storyCount} historias
@@ -308,7 +315,7 @@ function DroppableColumn({
                   {totalHours > 0 && (
                     <span className="flex items-center gap-1">
                       <FiClock className="w-3 h-3" />
-                      {totalHours}h
+                      {formatHours(totalHours)}
                     </span>
                   )}
                 </div>

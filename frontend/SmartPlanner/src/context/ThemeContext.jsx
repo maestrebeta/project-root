@@ -80,7 +80,7 @@ export function ThemeProvider({ children }) {
       
       // Enviar actualización al backend usando la utilidad de autenticación
       const response = await makeAuthenticatedRequest(
-        `http://localhost:8000/users/${currentUser.user_id}/theme`,
+        `http://localhost:8001/users/${currentUser.user_id}/theme`,
         {
           method: 'PATCH',
           body: JSON.stringify(updateData)

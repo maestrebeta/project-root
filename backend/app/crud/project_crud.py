@@ -1,9 +1,17 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from app.models.project_models import Project
-from app.schemas.project_schema import ProjectCreate, ProjectUpdate
+from sqlalchemy import func, and_, or_
+from typing import List, Optional, Dict, Any
+from decimal import Decimal
+from app.models.project_models import Project, ProjectBudget, Quotation, QuotationInstallment
+from app.schemas.project_schema import (
+    ProjectCreate, ProjectUpdate, ProjectOut,
+    QuotationCreate, QuotationUpdate, QuotationResponse, QuotationWithProjectInfo,
+    QuotationInstallmentCreate, QuotationInstallmentUpdate, QuotationInstallmentResponse
+)
 from app.models.organization_models import Organization
 from datetime import datetime, date, timedelta
+from app.models.user_models import User
 
 
 def calculate_estimated_hours(start_date, end_date, project_type='development', organization=None):
@@ -85,9 +93,9 @@ def get_projects(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Project).offset(skip).limit(limit).all()
 
 
-def get_projects_by_organization(db: Session, organization_id: int, skip: int = 0, limit: int = 100):
+def get_projects_by_organization(db: Session, organization_id: int, skip: int = 0, limit: int = 100, client_id: int = None, status: str = None):
     """
-    Obtener proyectos de una organización específica
+    Obtener proyectos de una organización específica con filtros opcionales
     """
     try:
         # Verificar si la organización existe
@@ -97,18 +105,25 @@ def get_projects_by_organization(db: Session, organization_id: int, skip: int = 
             return []
 
         # Buscar proyectos de la organización
-        query = (
-            db.query(Project)
-            .filter(Project.organization_id == organization_id)
-            .offset(skip)
-            .limit(limit)
-        )
+        query = db.query(Project).filter(Project.organization_id == organization_id)
+        
+        # Aplicar filtros opcionales
+        if client_id is not None:
+            query = query.filter(Project.client_id == client_id)
+            print(f"[DEBUG] Filtrando proyectos por client_id: {client_id}")
+        
+        if status is not None:
+            query = query.filter(Project.status == status)
+            print(f"[DEBUG] Filtrando proyectos por status: {status}")
+        
+        # Aplicar paginación
+        query = query.offset(skip).limit(limit)
         
         proyectos = query.all()
         
         print(f"Número de proyectos encontrados: {len(proyectos)}")
         for proyecto in proyectos:
-            print(f"Proyecto: {proyecto.name}, ID: {proyecto.project_id}, Org ID: {proyecto.organization_id}")
+            print(f"Proyecto: {proyecto.name}, ID: {proyecto.project_id}, Org ID: {proyecto.organization_id}, Client ID: {proyecto.client_id}, Status: {proyecto.status}")
         
         return proyectos
     except Exception as e:
@@ -361,3 +376,323 @@ def delete_project(db: Session, project_id: int):
         db.rollback()
         print(f"Error de integridad al eliminar proyecto: {str(e)}")
         raise ValueError("No se pudo eliminar el proyecto. Verifique las dependencias.")
+
+
+# CRUD para Cotizaciones
+def create_quotation(db: Session, quotation_data: QuotationCreate, user_id: int) -> QuotationResponse:
+    """Crear una nueva cotización con sus cuotas"""
+    
+    # Crear la cotización
+    db_quotation = Quotation(
+        project_id=quotation_data.project_id,
+        created_by_user_id=user_id,
+        total_amount=quotation_data.total_amount,
+        currency=quotation_data.currency,
+        status=quotation_data.status,
+        description=quotation_data.description
+    )
+    
+    db.add(db_quotation)
+    db.flush()  # Para obtener el ID de la cotización
+    
+    # Crear las cuotas
+    for installment_data in quotation_data.installments:
+        db_installment = QuotationInstallment(
+            quotation_id=db_quotation.quotation_id,
+            installment_number=installment_data.installment_number,
+            percentage=installment_data.percentage,
+            amount=installment_data.amount,
+            due_date=installment_data.due_date,
+            is_paid=installment_data.is_paid,
+            paid_date=installment_data.paid_date,
+            payment_reference=installment_data.payment_reference,
+            notes=installment_data.notes
+        )
+        db.add(db_installment)
+    
+    db.commit()
+    db.refresh(db_quotation)
+    
+    return get_quotation_with_calculations(db, db_quotation.quotation_id)
+
+def get_quotation(db: Session, quotation_id: int) -> Optional[Quotation]:
+    """Obtener una cotización por ID"""
+    return db.query(Quotation).filter(Quotation.quotation_id == quotation_id).first()
+
+def get_quotation_with_calculations(db: Session, quotation_id: int) -> Optional[QuotationResponse]:
+    """Obtener una cotización con cálculos de pagos"""
+    quotation = db.query(Quotation).filter(Quotation.quotation_id == quotation_id).first()
+    if not quotation:
+        return None
+    
+    # Calcular totales
+    installments = quotation.installments
+    total_paid = sum(inst.amount for inst in installments if inst.is_paid)
+    total_pending = quotation.total_amount - total_paid
+    paid_installments = sum(1 for inst in installments if inst.is_paid)
+    total_installments = len(installments)
+    
+    # Crear respuesta con cálculos
+    response = QuotationResponse(
+        quotation_id=quotation.quotation_id,
+        project_id=quotation.project_id,
+        created_by_user_id=quotation.created_by_user_id,
+        total_amount=quotation.total_amount,
+        currency=quotation.currency,
+        status=quotation.status,
+        description=quotation.description,
+        created_at=quotation.created_at,
+        updated_at=quotation.updated_at,
+        installments=[QuotationInstallmentResponse.from_orm(inst) for inst in installments],
+        total_paid=total_paid,
+        total_pending=total_pending,
+        paid_installments=paid_installments,
+        total_installments=total_installments
+    )
+    
+    return response
+
+def get_project_quotations(db: Session, project_id: int) -> List[QuotationWithProjectInfo]:
+    """Obtener todas las cotizaciones de un proyecto"""
+    quotations = db.query(Quotation).filter(Quotation.project_id == project_id).all()
+    
+    result = []
+    for quotation in quotations:
+        # Obtener información del proyecto y usuario
+        project = db.query(Project).filter(Project.project_id == quotation.project_id).first()
+        user = db.query(User).filter(User.user_id == quotation.created_by_user_id).first()
+        
+        # Calcular totales
+        installments = quotation.installments
+        total_paid = sum(inst.amount for inst in installments if inst.is_paid)
+        total_pending = quotation.total_amount - total_paid
+        paid_installments = sum(1 for inst in installments if inst.is_paid)
+        total_installments = len(installments)
+        
+        response = QuotationWithProjectInfo(
+            quotation_id=quotation.quotation_id,
+            project_id=quotation.project_id,
+            created_by_user_id=quotation.created_by_user_id,
+            total_amount=quotation.total_amount,
+            currency=quotation.currency,
+            status=quotation.status,
+            description=quotation.description,
+            created_at=quotation.created_at,
+            updated_at=quotation.updated_at,
+            installments=[QuotationInstallmentResponse.from_orm(inst) for inst in installments],
+            total_paid=total_paid,
+            total_pending=total_pending,
+            paid_installments=paid_installments,
+            total_installments=total_installments,
+            project_name=project.name if project else None,
+            project_code=project.code if project else None,
+            created_by_name=user.full_name if user else None
+        )
+        result.append(response)
+    
+    return result
+
+def update_quotation(db: Session, quotation_id: int, quotation_data: QuotationUpdate) -> Optional[QuotationResponse]:
+    """Actualizar una cotización"""
+    quotation = get_quotation(db, quotation_id)
+    if not quotation:
+        return None
+    
+    # Actualizar campos básicos
+    for field, value in quotation_data.dict(exclude_unset=True, exclude={'installments'}).items():
+        setattr(quotation, field, value)
+    
+    # Si se incluyen cuotas, actualizarlas
+    if quotation_data.installments is not None:
+        # Eliminar cuotas existentes
+        db.query(QuotationInstallment).filter(QuotationInstallment.quotation_id == quotation_id).delete()
+        
+        # Crear nuevas cuotas
+        for installment_data in quotation_data.installments:
+            db_installment = QuotationInstallment(
+                quotation_id=quotation_id,
+                installment_number=installment_data.installment_number,
+                percentage=installment_data.percentage,
+                amount=installment_data.amount,
+                due_date=installment_data.due_date,
+                is_paid=installment_data.is_paid,
+                paid_date=installment_data.paid_date,
+                payment_reference=installment_data.payment_reference,
+                notes=installment_data.notes
+            )
+            db.add(db_installment)
+    
+    db.commit()
+    db.refresh(quotation)
+    
+    return get_quotation_with_calculations(db, quotation_id)
+
+def delete_quotation(db: Session, quotation_id: int) -> bool:
+    """Eliminar una cotización"""
+    quotation = get_quotation(db, quotation_id)
+    if not quotation:
+        return False
+    
+    db.delete(quotation)
+    db.commit()
+    return True
+
+def update_installment_payment_status(db: Session, installment_id: int, is_paid: bool, payment_reference: Optional[str] = None) -> Optional[QuotationInstallmentResponse]:
+    """Actualizar el estado de pago de una cuota"""
+    installment = db.query(QuotationInstallment).filter(QuotationInstallment.installment_id == installment_id).first()
+    if not installment:
+        return None
+    
+    installment.is_paid = is_paid
+    installment.paid_date = datetime.now().date() if is_paid else None
+    if payment_reference:
+        installment.payment_reference = payment_reference
+    
+    db.commit()
+    db.refresh(installment)
+    
+    return QuotationInstallmentResponse.from_orm(installment)
+
+def get_quotations_summary(db: Session, organization_id: int) -> Dict[str, Any]:
+    """Obtener resumen de cotizaciones para una organización"""
+    # Obtener todas las cotizaciones de proyectos de la organización
+    quotations = db.query(Quotation).join(Project).filter(Project.organization_id == organization_id).all()
+    
+    total_quotations = len(quotations)
+    total_amount = sum(q.total_amount for q in quotations)
+    total_paid = 0
+    total_pending = 0
+    
+    for quotation in quotations:
+        installments = quotation.installments
+        paid_amount = sum(inst.amount for inst in installments if inst.is_paid)
+        total_paid += paid_amount
+        total_pending += quotation.total_amount - paid_amount
+    
+    return {
+        "total_quotations": total_quotations,
+        "total_amount": total_amount,
+        "total_paid": total_paid,
+        "total_pending": total_pending,
+        "payment_percentage": (total_paid / total_amount * 100) if total_amount > 0 else 0
+    }
+
+def get_project_by_name(db: Session, name: str):
+    return db.query(Project).filter(Project.name.ilike(f"%{name}%")).first()
+
+def get_project_by_name_and_organization(db: Session, name: str, organization_id: int):
+    """Buscar proyecto por nombre dentro de una organización específica"""
+    return db.query(Project).filter(
+        Project.name.ilike(f"%{name}%"),
+        Project.organization_id == organization_id
+    ).first()
+
+def get_quotations_by_client(db: Session, client_id: int, organization_id: int) -> List[Dict[str, Any]]:
+    """Obtener todas las cotizaciones de un cliente específico con cálculos"""
+    try:
+        # Obtener todas las cotizaciones de proyectos del cliente
+        quotations = db.query(Quotation).join(Project).filter(
+            Project.client_id == client_id,
+            Project.organization_id == organization_id
+        ).all()
+        
+        print(f"Debug: Found {len(quotations)} quotations for client {client_id}")
+        
+        result = []
+        for quotation in quotations:
+            # Obtener las cuotas de la cotización
+            installments = quotation.installments
+            
+            # Calcular totales
+            total_paid = sum(inst.amount for inst in installments if inst.is_paid)
+            total_pending = quotation.total_amount - total_paid
+            paid_installments = len([inst for inst in installments if inst.is_paid])
+            total_installments = len(installments)
+            
+            # Crear el objeto de respuesta
+            quotation_data = {
+                "quotation_id": quotation.quotation_id,
+                "project_id": quotation.project_id,
+                "description": quotation.description,
+                "total_amount": quotation.total_amount,
+                "total_paid": total_paid,
+                "total_pending": total_pending,
+                "paid_installments": paid_installments,
+                "total_installments": total_installments,
+                "status": quotation.status,
+                "created_at": quotation.created_at,
+                "installments": [
+                    {
+                        "installment_id": inst.installment_id,
+                        "installment_number": inst.installment_number,
+                        "amount": inst.amount,
+                        "percentage": inst.percentage,
+                        "due_date": inst.due_date,
+                        "is_paid": inst.is_paid,
+                        "payment_reference": inst.payment_reference
+                    } for inst in installments
+                ]
+            }
+            
+            result.append(quotation_data)
+            print(f"Debug: Quotation {quotation.quotation_id} - Total: {quotation.total_amount}, Paid: {total_paid}, Pending: {total_pending}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error in get_quotations_by_client: {str(e)}")
+        raise e
+
+def get_client_projects_info(db: Session, client_id: int, organization_id: int):
+    """
+    Obtener información detallada de proyectos de un cliente específico
+    """
+    try:
+        from datetime import datetime
+        
+        # Obtener todos los proyectos del cliente
+        projects = db.query(Project).filter(
+            Project.client_id == client_id,
+            Project.organization_id == organization_id
+        ).all()
+        
+        # Estados que se consideran activos para calcular proyectos atrasados
+        active_statuses = ['in_planning', 'in_progress', 'at_risk', 'suspended']
+        
+        # Estados que se consideran en riesgo
+        at_risk_statuses = ['at_risk', 'suspended']
+        
+        current_date = datetime.now().date()
+        
+        total_projects = len(projects)
+        overdue_projects = 0
+        at_risk_projects = 0
+        
+        for project in projects:
+            # Proyecto atrasado: fecha de fin pasada y estado activo
+            if (project.end_date and 
+                project.end_date < current_date and 
+                project.status in active_statuses):
+                overdue_projects += 1
+                
+            # Proyecto en riesgo: estado específico de riesgo
+            if project.status in at_risk_statuses:
+                at_risk_projects += 1
+        
+        print(f"[DEBUG] Cliente {client_id} - Total proyectos: {total_projects}, Atrasados: {overdue_projects}, En riesgo: {at_risk_projects}")
+        
+        return {
+            "total_projects": total_projects,
+            "overdue_projects": overdue_projects,
+            "at_risk_projects": at_risk_projects,
+            "projects": projects
+        }
+        
+    except Exception as e:
+        print(f"Error al obtener información de proyectos del cliente {client_id}: {str(e)}")
+        return {
+            "total_projects": 0,
+            "overdue_projects": 0,
+            "at_risk_projects": 0,
+            "projects": []
+        }

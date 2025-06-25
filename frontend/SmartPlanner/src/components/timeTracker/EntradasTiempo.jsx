@@ -84,7 +84,7 @@ const EntradasTiempo = ({
           throw new Error('No hay sesión activa');
         }
 
-        const response = await fetch('http://localhost:8000/projects/', {
+        const response = await fetch('http://localhost:8001/projects/', {
           headers: {
             'Authorization': `Bearer ${session.token}`,
             'Accept': 'application/json'

@@ -265,25 +265,25 @@ export default function ProjectPlanningIntegration({ project, onClose }) {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div className="text-center">
                         <div className="text-lg font-bold text-blue-600">
-                          {planningData.userStories.reduce((sum, s) => sum + (s.ui_hours || 0), 0)}h
+                          {planningData.userStories.reduce((sum, s) => sum + (Number(s.ui_hours) || 0), 0)}h
                         </div>
                         <div className="text-blue-700">UI/UX</div>
                       </div>
                       <div className="text-center">
                         <div className="text-lg font-bold text-blue-600">
-                          {planningData.userStories.reduce((sum, s) => sum + (s.development_hours || 0), 0)}h
+                          {planningData.userStories.reduce((sum, s) => sum + (Number(s.development_hours) || 0), 0)}h
                         </div>
                         <div className="text-blue-700">Desarrollo</div>
                       </div>
                       <div className="text-center">
                         <div className="text-lg font-bold text-blue-600">
-                          {planningData.userStories.reduce((sum, s) => sum + (s.testing_hours || 0), 0)}h
+                          {planningData.userStories.reduce((sum, s) => sum + (Number(s.testing_hours) || 0), 0)}h
                         </div>
                         <div className="text-blue-700">Testing</div>
                       </div>
                       <div className="text-center">
                         <div className="text-lg font-bold text-blue-600">
-                          {planningData.userStories.reduce((sum, s) => sum + (s.documentation_hours || 0), 0)}h
+                          {planningData.userStories.reduce((sum, s) => sum + (Number(s.documentation_hours) || 0), 0)}h
                         </div>
                         <div className="text-blue-700">Documentación</div>
                       </div>

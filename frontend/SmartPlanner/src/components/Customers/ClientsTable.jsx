@@ -1,496 +1,586 @@
-import React, { useEffect, useState } from 'react';
-import { useAppTheme } from '../../context/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FiMoreVertical, FiEdit2, FiTrash2, FiMail, FiPhone, FiMapPin, 
+  FiGlobe, FiUser, FiActivity, FiClock, FiCheckCircle, FiAlertCircle,
+  FiEye, FiEyeOff, FiTarget, FiTrendingUp, FiHash, FiChevronDown, 
+  FiChevronUp, FiAlertTriangle, FiDollarSign, FiMessageSquare, FiStar, FiLoader
+} from 'react-icons/fi';
 
-export default function ClientsTable() {
-  const theme = useAppTheme();
-  const { user, isAuthenticated } = useAuth();
-  const [clients, setClients] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    code: "",
-    is_active: true,
-    country_code: "",
-    address: "",
-    contact_email: "",
-    contact_phone: "",
-    tax_id: "",
-    organization_id: null
-  });
-  const [loading, setLoading] = useState(false);
-  const [editId, setEditId] = useState(null);
-  const [error, setError] = useState('');
-  const [countries, setCountries] = useState([]);
+export default function ClientsTable({ 
+  clients, 
+  countries, 
+  canManage, 
+  onEdit, 
+  onDelete, 
+  onStatusChange, 
+  getCountryName,
+  sortConfig,
+  onSort,
+  getSortIcon,
+  updatingStatus = new Set()
+}) {
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [showMenuFor, setShowMenuFor] = useState(null);
 
-  // Obtener token de la sesión
-  const getAuthHeaders = () => {
-    try {
-      const session = JSON.parse(localStorage.getItem('session'));
-      console.log('Sesión completa:', session);
-      if (!session?.token) {
-        throw new Error('No hay sesión activa');
-      }
+  const getStatusInfo = (isActive) => {
+    if (isActive) {
       return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.token}`
+        color: 'green',
+        bgColor: 'bg-green-50',
+        textColor: 'text-green-800',
+        borderColor: 'border-green-200',
+        icon: FiCheckCircle,
+        label: 'Activo'
       };
-    } catch (error) {
-      throw new Error('Error de autenticación');
+    } else {
+      return {
+        color: 'red',
+        bgColor: 'bg-red-50',
+        textColor: 'text-red-800',
+        borderColor: 'border-red-200',
+        icon: FiAlertCircle,
+        label: 'Inactivo'
+      };
     }
   };
 
-  // Cargar países
-  const fetchCountries = async () => {
-    try {
-      const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/countries/', {
-        headers,
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al cargar los países');
-      }
-      
-      const data = await response.json();
-      setCountries(data);
-    } catch (error) {
-      console.error('Error al cargar los países:', error);
-    }
-  };
-
-  // Cargar clientes
-  const fetchClients = async () => {
-    try {
-      const session = localStorage.getItem('session');
-      console.log('Sesión almacenada:', session); // Log de la sesión completa
-
-      if (!session) {
-        throw new Error('No hay sesión activa');
-      }
-
-      const parsedSession = JSON.parse(session);
-      console.log('Token:', parsedSession.token); // Log del token
-      console.log('Usuario:', parsedSession.user); // Log del usuario
-
-      if (!parsedSession.token) {
-        throw new Error('Token de autenticación no encontrado');
-      }
-
-      const response = await fetch('http://localhost:8000/clients/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${parsedSession.token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
-
-      console.log('Respuesta completa:', response);
-      console.log('Estado de la respuesta:', response.status);
-
-      if (!response.ok) {
-        const errorData = await response.text(); // Cambiar a .text() para ver el contenido completo
-        console.error('Datos de error:', errorData);
-        throw new Error(errorData || 'Error al cargar los clientes');
-      }
-
-      const data = await response.json();
-      console.log('Clientes cargados:', data);
-      setClients(data);
-    } catch (error) {
-      console.error('Error completo al cargar los clientes:', error);
-      alert(`Error al cargar clientes: ${error.message}`);
-      setClients([]); 
-    }
-  };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchClients();
-      fetchCountries();
-    }
-  }, [isAuthenticated]);
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setForm({ 
-      ...form, 
-      [name]: type === "checkbox" ? checked : value 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
   };
 
-  // Crear o actualizar cliente
-  const handleCreateOrUpdate = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const session = localStorage.getItem('session');
-      if (!session) {
-        throw new Error('No hay sesión activa');
-      }
-
-      const { token, user } = JSON.parse(session);
-      
-      // Logging detallado para depuración
-      console.group('Depuración de Creación de Cliente');
-      console.log('Sesión completa:', JSON.parse(session));
-      console.log('Token:', token);
-      console.log('Usuario:', user);
-      console.log('organization_id:', user.organization_id);
-      console.log('Estructura de organización:', {
-        organization_id: user.organization_id,
-        organization: user.organization,
-        organization_name: user.organization?.name
-      });
-      console.groupEnd();
-
-      if (!token) {
-        throw new Error('Token de autenticación no encontrado');
-      }
-
-      // Verificar que el usuario tenga una organización
-      if (!user.organization_id) {
-        throw new Error('El usuario no tiene una organización asignada. Por favor, contacte al administrador.');
-      }
-
-      const url = editId
-        ? `http://localhost:8000/clients/${editId}`
-        : 'http://localhost:8000/clients/';
-      const method = editId ? 'PUT' : 'POST';
-
-      const clientData = {
-        name: form.name,
-        code: form.code || null,
-        is_active: form.is_active,
-        country_code: form.country_code || null,
-        address: form.address || null,
-        contact_email: form.contact_email || null,
-        contact_phone: form.contact_phone || null,
-        tax_id: form.tax_id || null,
-        organization_id: user.organization_id  // Agregar explícitamente organization_id
-      };
-
-      const response = await fetch(url, {
-        method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(clientData),
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Error response:', errorData);
-        throw new Error(errorData || 'Error al procesar el cliente');
-      }
-
-      setShowForm(false);
-      setEditId(null);
-      setForm({
-        name: "",
-        code: "",
-        is_active: true,
-        country_code: "",
-        address: "",
-        contact_email: "",
-        contact_phone: "",
-        tax_id: "",
-        organization_id: null
-      });
-      await fetchClients();
-    } catch (error) {
-      console.error('Error completo:', error);
-      
-      // Manejar específicamente errores de autenticación o CORS
-      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        alert('Error de conexión. Por favor, verifica tu conexión de red o el servidor.');
-      } else if (error.message.includes('Unauthorized') || error.message.includes('token')) {
-        alert('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
-      } else {
-        alert(error.message || 'Error al crear/actualizar el cliente');
-      }
-    } finally {
-      setLoading(false);
-    }
+  const handleQuickStatusChange = (clientId, currentStatus) => {
+    console.log('ClientTable - Cambiando estado:', clientId, 'estado actual:', currentStatus, 'nuevo estado:', !currentStatus);
+    onStatusChange(clientId, !currentStatus);
   };
 
-  // Eliminar cliente
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`¿Seguro que deseas eliminar el cliente "${name}" (ID: ${id})?`)) {
-      try {
-        const headers = getAuthHeaders();
-        const response = await fetch(`http://localhost:8000/clients/${id}`, {
-          method: 'DELETE',
-          headers,
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Error al eliminar el cliente');
-        }
-
-        await fetchClients();
-      } catch (error) {
-        console.error('Error:', error);
-        
-        // Manejar específicamente errores de autenticación
-        if (error.message.includes('Unauthorized') || error.message.includes('token')) {
-          setError('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
-        } else {
-          setError(error.message);
-        }
-      }
-    }
+  const getProjectsProgress = (client) => {
+    const projectsCount = client.projects_count || 0;
+    const totalHours = client.total_hours_registered || 0;
+    
+    if (projectsCount === 0) return 0;
+    
+    // Calcular progreso basado en proyectos activos (asumiendo que cada proyecto debería tener al menos 40 horas promedio)
+    const expectedHours = projectsCount * 40;
+    return Math.min((totalHours / expectedHours) * 100, 100);
   };
 
-  // Editar cliente
-  const handleEdit = (client) => {
-    setForm({
-      name: client.name || "",
-      code: client.code || "",
-      is_active: client.is_active,
-      country_code: client.country_code || "",
-      address: client.address || "",
-      contact_email: client.contact_email || "",
-      contact_phone: client.contact_phone || "",
-      tax_id: client.tax_id || "",
-      organization_id: client.organization_id || null
+  const getProgressColor = (progress) => {
+    if (progress >= 80) return 'bg-green-500';
+    if (progress >= 60) return 'bg-blue-500';
+    if (progress >= 40) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const toggleRowExpansion = (clientId) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(clientId)) {
+      newExpanded.delete(clientId);
+    } else {
+      newExpanded.add(clientId);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const handleSort = (key) => {
+    onSort(key);
+  };
+
+  const getSortedClients = () => {
+    return [...clients].sort((a, b) => {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+      
+      // Manejar ordenamiento especial por severidad
+      if (sortConfig.key === 'severity') {
+        aValue = (a.open_tickets_count || 0) * 2 + 
+                ((a.delayed_projects_count || 0) + (a.risk_projects_count || 0)) * 1.5;
+        bValue = (b.open_tickets_count || 0) * 2 + 
+                ((b.delayed_projects_count || 0) + (b.risk_projects_count || 0)) * 1.5;
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+      
+      return sortConfig.direction === 'asc' 
+        ? (aValue || 0) - (bValue || 0)
+        : (bValue || 0) - (aValue || 0);
     });
-    setEditId(client.client_id);
-    setShowForm(true);
-    setError('');
   };
+
+  const sortedClients = getSortedClients();
 
   return (
-    <div className={`${theme.FONT_CLASS}`}>
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
       <div className="overflow-x-auto">
-        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-4 gap-2">
-          <h2 className="text-lg font-bold text-gray-700">Clientes</h2>
-          <button
-            className={`bg-${theme.PRIMARY_COLOR}-600 hover:bg-${theme.PRIMARY_COLOR}-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition`}
-            onClick={() => {
-              setShowForm(true);
-              setEditId(null);
-              setForm({
-                name: "",
-                code: "",
-                is_active: true,
-                country_code: "",
-                address: "",
-                contact_email: "",
-                contact_phone: "",
-                tax_id: "",
-                organization_id: null
-              });
-              setError('');
-            }}
-          >
-            + Nuevo Cliente
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-outlined text-xl">error_outline</span>
-              {error}
-            </div>
-          </div>
-        )}
-
-        {showForm && (
-          <form
-            className="mb-8 rounded-xl border border-gray-100 bg-white/50 backdrop-blur-sm p-6"
-            onSubmit={handleCreateOrUpdate}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del Cliente *</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="name"
-                  placeholder="Nombre del cliente"
-                  value={form.name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Código</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="code"
-                  placeholder="Código del cliente"
-                  value={form.code}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">País</label>
-                <select
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="country_code"
-                  value={form.country_code}
-                  onChange={handleChange}
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+            <tr>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('name')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
                 >
-                  <option value="">Seleccionar país</option>
-                  {countries.map(country => (
-                    <option key={country.country_code} value={country.country_code}>
-                      {country.country_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="address"
-                  placeholder="Dirección"
-                  value={form.address}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email de Contacto</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="contact_email"
-                  type="email"
-                  placeholder="Email de contacto"
-                  value={form.contact_email}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono de Contacto</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="contact_phone"
-                  placeholder="Teléfono"
-                  value={form.contact_phone}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ID Fiscal</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  name="tax_id"
-                  placeholder="ID Fiscal"
-                  value={form.tax_id}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={form.is_active}
-                    onChange={handleChange}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-600">Cliente Activo</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className={`${theme.PRIMARY_BUTTON_CLASS} px-4 py-2 rounded-lg flex items-center gap-2`}
-                disabled={loading}
-              >
-                <span className="material-icons-outlined text-xl">
-                  {editId ? 'save' : 'add'}
-                </span>
-                {loading ? (editId ? "Actualizando..." : "Creando...") : (editId ? "Actualizar" : "Crear")}
-              </button>
-              <button
-                type="button"
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditId(null);
-                  setForm({
-                    name: "",
-                    code: "",
-                    is_active: true,
-                    country_code: "",
-                    address: "",
-                    contact_email: "",
-                    contact_phone: "",
-                    tax_id: "",
-                    organization_id: null
-                  });
-                  setError('');
-                }}
-                disabled={loading}
-              >
-                <span className="material-icons-outlined text-xl">close</span>
-                Cancelar
-              </button>
-            </div>
-          </form>
-        )}
+                  Cliente
+                  <span className="text-gray-400">{getSortIcon('name')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Contacto
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('country_code')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  País
+                  <span className="text-gray-400">{getSortIcon('country_code')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('severity')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  Prioridad
+                  <span className="text-gray-400">{getSortIcon('severity')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('projects_count')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  Proyectos
+                  <span className="text-gray-400">{getSortIcon('projects_count')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('open_tickets_count')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  Tickets
+                  <span className="text-gray-400">{getSortIcon('open_tickets_count')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('pending_quotes_amount')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  Pendiente $
+                  <span className="text-gray-400">{getSortIcon('pending_quotes_amount')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('risk_projects_count')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  En Riesgo
+                  <span className="text-gray-400">{getSortIcon('risk_projects_count')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button 
+                  onClick={() => handleSort('is_active')}
+                  className="flex items-center gap-2 hover:text-gray-700 transition-colors"
+                >
+                  Estado
+                  <span className="text-gray-400">{getSortIcon('is_active')}</span>
+                </button>
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Acciones
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
+                <span className="sr-only">Expandir</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {sortedClients.map((client) => {
+              const statusInfo = getStatusInfo(client.is_active);
+              const StatusIcon = statusInfo.icon;
+              const progress = getProjectsProgress(client);
+              const isExpanded = expandedRows.has(client.client_id);
+              const isHighActivity = (client.projects_count || 0) > 3 || (client.total_hours_registered || 0) > 100;
 
-        <div className="rounded-xl border border-gray-100 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50/50 backdrop-blur-sm">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nombre</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Código</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">País</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white/50 backdrop-blur-sm divide-y divide-gray-200">
-              {clients.map((client) => (
-                <tr key={client.client_id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{client.client_id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{client.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{client.code || 'N/A'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {client.country_code || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                      ${client.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
-                    `}>
-                      {client.is_active ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
-                      onClick={() => handleEdit(client)}
-                    >
-                      <span className="material-icons-outlined text-base">edit</span>
-                      Editar
-                    </button>
-                    <button
-                      className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
-                      onClick={() => handleDelete(client.client_id, client.name)}
-                    >
-                      <span className="material-icons-outlined text-base">delete</span>
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              return (
+                <React.Fragment key={client.client_id}>
+                  <motion.tr 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`hover:bg-gray-50 transition-all duration-200 ${
+                      isHighActivity ? 'bg-blue-50/30' : ''
+                    }`}
+                  >
+                    {/* Cliente */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className={`flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold ${
+                          client.is_active 
+                            ? 'bg-gradient-to-br from-blue-500 to-purple-600' 
+                            : 'bg-gray-400'
+                        }`}>
+                          {client.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="ml-4">
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium text-gray-900">
+                              {client.name}
+                            </div>
+                            {isHighActivity && (
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                                <FiTrendingUp className="w-3 h-3" />
+                                Alta actividad
+                              </div>
+                            )}
+                          </div>
+                          {client.code && (
+                            <div className="flex items-center gap-1 text-xs text-gray-500">
+                              <FiHash className="w-3 h-3" />
+                              {client.code}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Contacto */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        {client.contact_email ? (
+                          <div className="flex items-center gap-2 text-sm text-gray-900">
+                            <FiMail className="w-3 h-3 text-gray-400" />
+                            <span className="truncate max-w-[150px]">{client.contact_email}</span>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500">Sin email</div>
+                        )}
+                        {client.contact_phone && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <FiPhone className="w-3 h-3" />
+                            {client.contact_phone}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* País */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {client.country_code ? (
+                        <div className="flex items-center gap-2 text-sm text-gray-900">
+                          <span className={`fi fi-${client.country_code.toLowerCase()}`}></span>
+                          <span className="truncate max-w-[100px]">{getCountryName(client.country_code)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-500">N/A</span>
+                      )}
+                    </td>
+
+                    {/* Severidad/Prioridad */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const severityScore = (client.open_tickets_count || 0) * 2 + 
+                                            ((client.delayed_projects_count || 0) + (client.risk_projects_count || 0)) * 1.5;
+                        if (severityScore >= 10) {
+                          return (
+                            <div className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                              <FiAlertTriangle className="w-3 h-3" />
+                              Alta
+                            </div>
+                          );
+                        } else if (severityScore >= 5) {
+                          return (
+                            <div className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                              <FiAlertCircle className="w-3 h-3" />
+                              Media
+                            </div>
+                          );
+                        } else if (severityScore > 0) {
+                          return (
+                            <div className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                              <FiClock className="w-3 h-3" />
+                              Baja
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                              <FiCheckCircle className="w-3 h-3" />
+                              Normal
+                            </div>
+                          );
+                        }
+                      })()}
+                    </td>
+
+                    {/* Proyectos */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <FiTarget className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-900">
+                          {client.projects_count || 0}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Tickets Abiertos */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <FiMessageSquare className={`w-4 h-4 ${
+                          (client.open_tickets_count || 0) > 5 ? 'text-red-500' :
+                          (client.open_tickets_count || 0) > 2 ? 'text-amber-500' : 'text-gray-400'
+                        }`} />
+                        <span className={`text-sm font-medium ${
+                          (client.open_tickets_count || 0) > 5 ? 'text-red-600' :
+                          (client.open_tickets_count || 0) > 2 ? 'text-amber-600' : 'text-gray-900'
+                        }`}>
+                          {client.open_tickets_count || 0}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Cotizaciones Pendientes */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <FiDollarSign className="w-4 h-4 text-orange-500" />
+                        <span className="text-sm font-medium text-orange-600">
+                          ${(client.pending_quotes_amount || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Proyectos en Riesgo */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <FiAlertTriangle className={`w-4 h-4 ${
+                          ((client.delayed_projects_count || 0) + (client.risk_projects_count || 0)) > 2 ? 'text-red-500' :
+                          ((client.delayed_projects_count || 0) + (client.risk_projects_count || 0)) > 0 ? 'text-amber-500' : 'text-gray-400'
+                        }`} />
+                        <span className={`text-sm font-medium ${
+                          ((client.delayed_projects_count || 0) + (client.risk_projects_count || 0)) > 2 ? 'text-red-600' :
+                          ((client.delayed_projects_count || 0) + (client.risk_projects_count || 0)) > 0 ? 'text-amber-600' : 'text-gray-900'
+                        }`}>
+                          {(client.delayed_projects_count || 0) + (client.risk_projects_count || 0)}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Estado */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {canManage ? (
+                        <button
+                          onClick={() => !updatingStatus.has(client.client_id) && handleQuickStatusChange(client.client_id, client.is_active)}
+                          disabled={updatingStatus.has(client.client_id)}
+                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                            updatingStatus.has(client.client_id)
+                              ? 'opacity-70 cursor-not-allowed'
+                              : 'hover:scale-105 hover:shadow-md hover:brightness-95 cursor-pointer'
+                          } ${statusInfo.bgColor} ${statusInfo.textColor} ${statusInfo.borderColor} border`}
+                          title={updatingStatus.has(client.client_id) ? 'Actualizando...' : `Clic para ${client.is_active ? 'desactivar' : 'activar'} el cliente`}
+                        >
+                          {updatingStatus.has(client.client_id) ? (
+                            <FiLoader className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <StatusIcon className="w-3 h-3" />
+                          )}
+                          {updatingStatus.has(client.client_id) ? 'Actualizando...' : statusInfo.label}
+                        </button>
+                      ) : (
+                        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
+                          statusInfo.bgColor
+                        } ${statusInfo.textColor} ${statusInfo.borderColor} border`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {statusInfo.label}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Acciones */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {canManage && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowMenuFor(showMenuFor === client.client_id ? null : client.client_id)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <FiMoreVertical className="w-4 h-4 text-gray-600" />
+                          </button>
+                          
+                          <AnimatePresence>
+                            {showMenuFor === client.client_id && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-10"
+                              >
+                                <button
+                                  onClick={() => {
+                                    onEdit(client);
+                                    setShowMenuFor(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 text-gray-700"
+                                >
+                                  <FiEdit2 className="w-4 h-4" />
+                                  Editar cliente
+                                </button>
+                                
+                                <button
+                                  onClick={() => {
+                                    handleQuickStatusChange(client.client_id, client.is_active);
+                                    setShowMenuFor(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 text-gray-700"
+                                >
+                                  {client.is_active ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
+                                  {client.is_active ? 'Desactivar' : 'Activar'}
+                                </button>
+                                
+                                <hr className="my-2 border-gray-100" />
+                                
+                                <button
+                                  onClick={() => {
+                                    onDelete(client.client_id);
+                                    setShowMenuFor(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left hover:bg-red-50 flex items-center gap-3 text-red-600"
+                                >
+                                  <FiTrash2 className="w-4 h-4" />
+                                  Eliminar cliente
+                                </button>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Expandir */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => toggleRowExpansion(client.client_id)}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                      >
+                        {isExpanded ? (
+                          <FiChevronUp className="w-4 h-4 text-gray-600" />
+                        ) : (
+                          <FiChevronDown className="w-4 h-4 text-gray-600" />
+                        )}
+                      </button>
+                    </td>
+                  </motion.tr>
+
+                  {/* Fila expandida con detalles */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.tr
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                      >
+                        <td colSpan="11" className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Información de contacto detallada */}
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <FiUser className="w-4 h-4" />
+                                Información de Contacto
+                              </h4>
+                              <div className="space-y-2 text-sm">
+                                {client.contact_email && (
+                                  <div className="flex items-center gap-2">
+                                    <FiMail className="w-3 h-3 text-gray-400" />
+                                    <span>{client.contact_email}</span>
+                                  </div>
+                                )}
+                                {client.contact_phone && (
+                                  <div className="flex items-center gap-2">
+                                    <FiPhone className="w-3 h-3 text-gray-400" />
+                                    <span>{client.contact_phone}</span>
+                                  </div>
+                                )}
+                                {client.address && (
+                                  <div className="flex items-start gap-2">
+                                    <FiMapPin className="w-3 h-3 text-gray-400 mt-0.5" />
+                                    <span>{client.address}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Información fiscal y país */}
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <FiGlobe className="w-4 h-4" />
+                                Información Legal
+                              </h4>
+                              <div className="space-y-2 text-sm">
+                                {client.tax_id && (
+                                  <div className="flex items-center gap-2">
+                                    <FiHash className="w-3 h-3 text-gray-400" />
+                                    <span>ID Fiscal: {client.tax_id}</span>
+                                  </div>
+                                )}
+                                {client.country_code && (
+                                  <div className="flex items-center gap-2">
+                                    <span className={`fi fi-${client.country_code.toLowerCase()}`}></span>
+                                    <span>{getCountryName(client.country_code)}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <FiUser className="w-3 h-3 text-gray-400" />
+                                  <span>Creado: {formatDate(client.created_at)}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Métricas de actividad */}
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <FiActivity className="w-4 h-4" />
+                                Métricas de Actividad
+                              </h4>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="text-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+                                  <div className="text-lg font-bold text-orange-600">${(client.pending_quotes_amount || 0).toLocaleString()}</div>
+                                  <div className="text-xs text-gray-500">Pendiente</div>
+                                </div>
+                                <div className="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                                  <div className="text-lg font-bold text-yellow-600">{(client.client_rating || 0).toFixed(1)}</div>
+                                  <div className="text-xs text-gray-500">Calificación</div>
+                                </div>
+                                <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+                                  <div className="text-lg font-bold text-red-600">{client.open_tickets_count || 0}</div>
+                                  <div className="text-xs text-gray-500">Tickets</div>
+                                </div>
+                                <div className="text-center p-3 bg-amber-50 rounded-lg border border-amber-200">
+                                  <div className="text-lg font-bold text-amber-600">{(client.delayed_projects_count || 0) + (client.risk_projects_count || 0)}</div>
+                                  <div className="text-xs text-gray-500">En riesgo</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    )}
+                  </AnimatePresence>
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

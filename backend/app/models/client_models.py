@@ -22,6 +22,8 @@ class Client(Base):
     country = relationship("Country", back_populates="clients")
     projects = relationship("Project", back_populates="client")
     tickets = relationship("Ticket", back_populates="client")
+    external_users = relationship("ExternalUser", back_populates="client")
+    ratings = relationship("OrganizationRating", back_populates="client")
 
     __table_args__ = (
         UniqueConstraint('name', 'organization_id', name='unique_client_name_per_organization'),

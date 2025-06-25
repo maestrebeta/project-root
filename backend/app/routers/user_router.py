@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 # from app.schemas import user_schema
-from app.schemas.user_schema import UserCreate, UserUpdate, UserOut, ThemePreferences
+from app.schemas.user_schema import UserCreate, UserUpdate, UserOut, ThemePreferences, UserOutSimple
 from app.core.database import get_db
 from app.core.security import get_current_user, get_password_hash, get_current_user_organization
 from app.models.user_models import User
@@ -375,35 +375,93 @@ async def get_users_capacity_analytics(
             ]
         }
 
-@router.get("", response_model=List[UserOut])
+@router.get("/test", response_model=List[dict])
+def test_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Endpoint de prueba para verificar serialización"""
+    try:
+        # Construir la consulta base
+        query = db.query(User).options(joinedload(User.organization))
+        
+        # Si el usuario es super_user, puede ver usuarios de todas las organizaciones
+        if current_user.role == 'super_user':
+            logger.info("Super usuario solicitando usuarios de todas las organizaciones")
+        else:
+            # Otros usuarios solo pueden ver usuarios de su organización
+            query = query.filter(User.organization_id == current_user.organization_id)
+            logger.info(f"Filtrando usuarios por organización {current_user.organization_id}")
+        
+        # Aplicar paginación
+        users = query.offset(0).limit(10).all()
+        
+        # Convertir a diccionarios simples
+        result = []
+        for user in users:
+            user_dict = {
+                "user_id": user.user_id,
+                "username": user.username,
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+                "is_active": user.is_active,
+                "organization_id": user.organization_id,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+                "organization": {
+                    "organization_id": user.organization.organization_id,
+                    "name": user.organization.name
+                } if user.organization else None
+            }
+            result.append(user_dict)
+        
+        logger.info(f"Test endpoint: {len(result)} usuarios serializados correctamente")
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error en test endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+@router.get("", response_model=List[UserOutSimple])
 def get_users(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_organization)
 ):
-    logger.info(f"Obteniendo usuarios para la organización {current_user.organization_id}")
+    logger.info(f"Usuario {current_user.username} (rol: {current_user.role}) solicitando lista de usuarios")
     
     try:
-        # Cargar explícitamente la relación de organización
-        users = (
-            db.query(User)
-            .options(joinedload(User.organization))
-            .filter(User.organization_id == current_user.organization_id)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+        # Construir la consulta base sin cargar organization temporalmente
+        query = db.query(User)
         
-        # Logging detallado de usuarios
+        # Si el usuario es super_user, puede ver usuarios de todas las organizaciones
+        if current_user.role == 'super_user':
+            logger.info("Super usuario solicitando usuarios de todas las organizaciones")
+        else:
+            # Otros usuarios solo pueden ver usuarios de su organización
+            query = query.filter(User.organization_id == current_user.organization_id)
+            logger.info(f"Filtrando usuarios por organización: {current_user.organization_id}")
+        
+        # Aplicar paginación
+        users = query.offset(skip).limit(limit).all()
+        
+        logger.info(f"Total de usuarios encontrados: {len(users)}")
+        
+        # Log de cada usuario encontrado
         for user in users:
-            org_name = user.organization.name if user.organization else 'Sin organización'
-            logger.info(f"Usuario: {user.username}, Org ID: {user.organization_id}, Org Name: {org_name}")
+            logger.info(f"Usuario: {user.username}, Org ID: {user.organization_id}, Rol: {user.role}")
+        
+        logger.info(f"Total de usuarios devueltos: {len(users)}")
         
         return users
-    
+        
     except Exception as e:
-        logger.error(f"Error al obtener usuarios: {str(e)}")
+        logger.error(f"Error en get_users: {str(e)}")
+        logger.error(f"Tipo de error: {type(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -413,10 +471,28 @@ def get_user(
     current_user: User = Depends(get_current_user)
 ):
     logger.info(f"Usuario {current_user.username} solicitando detalles del usuario {user_id}")
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return user
+    
+    try:
+        # Cargar el usuario con todas las relaciones necesarias
+        user = (
+            db.query(User)
+            .options(joinedload(User.organization))
+            .filter(User.user_id == user_id)
+            .first()
+        )
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        logger.info(f"Usuario encontrado: {user.username}, Rol: {user.role}, Org: {user.organization_id}")
+        logger.info(f"Datos completos del usuario: {user.__dict__}")
+        
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error al obtener usuario {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 @router.post("", response_model=UserOut)
 def create_user(
@@ -428,6 +504,8 @@ def create_user(
     validate_user_role(current_user, user.role)
     
     logger.info(f"Usuario {current_user.username} intentando crear nuevo usuario")
+    logger.info(f"Datos de especialización recibidos: specialization={user.specialization}, sub_specializations={user.sub_specializations}, hourly_rate={user.hourly_rate}, weekly_capacity={user.weekly_capacity}")
+    
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email ya registrado")
@@ -453,13 +531,20 @@ def create_user(
         is_active=user.is_active,
         profile_image=user.profile_image,
         theme_preferences=theme_prefs,
-        organization_id=organization_id  # Usar la organización del usuario actual
+        organization_id=organization_id,  # Usar la organización del usuario actual
+        # Campos de especialización
+        specialization=user.specialization,
+        sub_specializations=user.sub_specializations,
+        hourly_rate=user.hourly_rate,
+        weekly_capacity=user.weekly_capacity,
+        skills=user.skills
     )
     
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     logger.info(f"Usuario {user.username} creado exitosamente")
+    logger.info(f"Datos de especialización guardados: specialization={db_user.specialization}, sub_specializations={db_user.sub_specializations}, hourly_rate={db_user.hourly_rate}, weekly_capacity={db_user.weekly_capacity}")
     return db_user
 
 @router.put("/{user_id}", response_model=UserOut)
@@ -475,6 +560,8 @@ def update_user(
     
     try:
         logger.info(f"Usuario {current_user.username} intentando actualizar usuario {user_id}")
+        logger.info(f"Datos recibidos para actualización: {user.dict(exclude_unset=True)}")
+        
         db_user = db.query(User).filter(User.user_id == user_id).first()
         if not db_user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -510,14 +597,43 @@ def update_user(
             db_user.organization_id = user.organization_id
             logger.info(f"Actualizando organization_id a: {user.organization_id}")
         
-        # Justo antes de hacer el commit en el método update_user
-        logger.info(f"Datos de usuario a actualizar: {user}")
-        logger.info(f"organization_id recibido: {user.organization_id}")
-        logger.info(f"Tipo de organization_id: {type(user.organization_id)}")
+        # Nuevos campos de especialización
+        if user.specialization is not None:
+            db_user.specialization = user.specialization
+            logger.info(f"Actualizando specialization a: {user.specialization}")
+        
+        if user.sub_specializations is not None:
+            db_user.sub_specializations = user.sub_specializations
+            logger.info(f"Actualizando sub_specializations a: {user.sub_specializations}")
+        
+        if user.hourly_rate is not None:
+            db_user.hourly_rate = user.hourly_rate
+            logger.info(f"Actualizando hourly_rate a: {user.hourly_rate}")
+        
+        if user.weekly_capacity is not None:
+            db_user.weekly_capacity = user.weekly_capacity
+            logger.info(f"Actualizando weekly_capacity a: {user.weekly_capacity}")
+        
+        if user.skills is not None:
+            db_user.skills = user.skills
+            logger.info(f"Actualizando skills a: {user.skills}")
+        
+        # Campos adicionales
+        if user.country_code is not None:
+            db_user.country_code = user.country_code
+        
+        if user.timezone is not None:
+            db_user.timezone = user.timezone
+        
+        if user.language is not None:
+            db_user.language = user.language
         
         db.commit()
         db.refresh(db_user)
+        
         logger.info(f"Usuario {user_id} actualizado exitosamente por {current_user.username}")
+        logger.info(f"Datos finales del usuario: {db_user.__dict__}")
+        
         return db_user
     except Exception as e:
         logger.error(f"Error actualizando usuario {user_id}: {str(e)}")

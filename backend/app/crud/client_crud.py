@@ -111,3 +111,35 @@ def delete_client(db: Session, client_id: int):
         db.rollback()
         print(f"Error de integridad al eliminar cliente: {str(e)}")
         raise ValueError("No se pudo eliminar el cliente. Verifique las dependencias.")
+
+
+def get_client_by_name(db: Session, name: str):
+    return db.query(Client).filter(Client.name.ilike(f"%{name}%")).first()
+
+
+def get_client_by_name_and_organization(db: Session, name: str, organization_id: int):
+    """Buscar cliente por nombre dentro de una organización específica"""
+    return db.query(Client).filter(
+        Client.name.ilike(f"%{name}%"),
+        Client.organization_id == organization_id
+    ).first()
+
+
+def get_client_rating_average(db: Session, client_id: int):
+    """Calcular el promedio de calificaciones de un cliente"""
+    from sqlalchemy import func
+    from app.models.organization_models import OrganizationRating
+    
+    result = db.query(func.avg(OrganizationRating.rating)).filter(
+        OrganizationRating.client_id == client_id
+    ).scalar()
+    
+    return round(float(result) if result else 0.0, 2)
+
+
+def get_client_with_rating(db: Session, client_id: int):
+    """Obtener cliente con su promedio de calificaciones"""
+    client = get_client(db, client_id)
+    if client:
+        client.rating_average = get_client_rating_average(db, client_id)
+    return client

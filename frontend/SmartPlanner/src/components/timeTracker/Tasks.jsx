@@ -27,7 +27,7 @@ const TimeTracker = () => {
         throw new Error('No hay sesión activa');
       }
 
-      const response = await fetch('http://localhost:8000/time-entries/', {
+      const response = await fetch('http://localhost:8001/time-entries/', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Accept': 'application/json'
@@ -87,9 +87,9 @@ const TimeTracker = () => {
         throw new Error('No hay sesión activa');
       }
 
-      console.log('Enviando petición DELETE a:', `http://localhost:8000/time-entries/${taskId}`);
+      console.log('Enviando petición DELETE a:', `http://localhost:8001/time-entries/${taskId}`);
       
-      const response = await fetch(`http://localhost:8000/time-entries/${taskId}`, {
+      const response = await fetch(`http://localhost:8001/time-entries/${taskId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -119,8 +119,8 @@ const TimeTracker = () => {
       }
 
       const url = editTask
-        ? `http://localhost:8000/time-entries/${editTask.entry_id}`
-        : 'http://localhost:8000/time-entries/';
+        ? `http://localhost:8001/time-entries/${editTask.entry_id}`
+        : 'http://localhost:8001/time-entries/';
 
       const response = await fetch(url, {
         method: editTask ? 'PUT' : 'POST',

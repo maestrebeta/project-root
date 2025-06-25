@@ -218,6 +218,21 @@ class UserStoryOut(UserStoryBase):
     class Config:
         from_attributes = True
     
+    @validator('specialization', pre=True, always=True)
+    def validate_specialization(cls, v):
+        if v is None:
+            return 'development'
+        valid_specializations = ['development', 'ui_ux', 'testing', 'documentation', 'management', 'data_analysis']
+        if v not in valid_specializations:
+            return 'development'  # Valor por defecto si no es válido
+        return v
+
+    @validator('is_blocked', pre=True, always=True)
+    def validate_is_blocked(cls, v):
+        if v is None:
+            return False
+        return bool(v)
+    
     @validator('assigned_user', pre=True)
     def transform_assigned_user(cls, v):
         if v is None:
@@ -230,7 +245,7 @@ class UserStoryOut(UserStoryBase):
                 'full_name': v.full_name,
                 'email': v.email,
                 'role': v.role,
-                'specialization': getattr(v, 'specialization', None),
+                'specialization': getattr(v, 'specialization', 'development'),
                 'sub_specializations': getattr(v, 'sub_specializations', None)
             }
         return v

@@ -9,14 +9,12 @@ import CapacityEfficiencyView from './CapacityEfficiencyView';
 export default function Users() {
   const theme = useAppTheme();
   const { user } = useAuth();
-  const [activeView, setActiveView] = useState('resumen');
+  const [activeView, setActiveView] = useState('usuarios');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statsData, setStatsData] = useState([]);
   const [capacityData, setCapacityData] = useState(null);
   const [teamInsights, setTeamInsights] = useState(null);
-  const [performanceMetrics, setPerformanceMetrics] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -31,7 +29,7 @@ export default function Users() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.token}`
       };
-    } catch (error) {
+    } catch {
       throw new Error('Error de autenticación');
     }
   };
@@ -39,7 +37,7 @@ export default function Users() {
   const fetchStats = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/users/stats', { 
+      const response = await fetch('http://localhost:8001/users/stats', { 
         headers,
         credentials: 'include'
       });
@@ -60,14 +58,6 @@ export default function Users() {
           description: 'Usuarios activos en la organización'
         },
         {
-          title: 'Usuarios Activos',
-          value: data.active_users?.value || '0',
-          change: data.active_users?.change || '0%',
-          icon: 'person_check',
-          color: 'green',
-          description: 'Usuarios con sesiones recientes'
-        },
-        {
           title: 'Capacidad Promedio',
           value: data.avg_capacity?.value || '0%',
           change: data.avg_capacity?.change || '0%',
@@ -82,22 +72,6 @@ export default function Users() {
           icon: 'speed',
           color: 'orange',
           description: 'Rendimiento general del equipo'
-        },
-        {
-          title: 'Carga de Trabajo',
-          value: data.total_workload?.value || '0h',
-          change: data.total_workload?.change || '0h',
-          icon: 'work',
-          color: 'indigo',
-          description: 'Horas totales asignadas'
-        },
-        {
-          title: 'Capacidad Disponible',
-          value: data.available_capacity?.value || '0h',
-          change: data.available_capacity?.change || '0h',
-          icon: 'schedule',
-          color: 'teal',
-          description: 'Horas disponibles para nuevos proyectos'
         }
       ];
       
@@ -111,7 +85,7 @@ export default function Users() {
   const fetchCapacityData = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/users/capacity-analytics', { 
+      const response = await fetch('http://localhost:8001/users/capacity-analytics', { 
         headers,
         credentials: 'include'
       });
@@ -142,9 +116,6 @@ export default function Users() {
       
       const data = await response.json();
       setCapacityData(data);
-      
-      // Generar recomendaciones basadas en datos reales
-      generateRecommendations(data);
       
     } catch (error) {
       console.error('Error fetching capacity data:', error);
@@ -209,167 +180,30 @@ export default function Users() {
     }
   };
 
-  const fetchPerformanceMetrics = async () => {
-    // Generar métricas avanzadas basadas en datos reales del backend
-    if (capacityData) {
-      const metrics = {
-        deliveryPredictability: {
-          onTime: Math.max(70, Math.round((capacityData.summary?.avg_efficiency || 0) * 0.9)),
-          early: Math.round((capacityData.summary?.avg_efficiency || 0) > 85 ? 18 : 12),
-          delayed: Math.max(5, Math.round((100 - (capacityData.summary?.avg_efficiency || 0)) * 0.3)),
-          trend: (capacityData.summary?.avg_efficiency || 0) > 75 ? '+5%' : '-2%'
-        },
-        qualityMetrics: {
-          bugRate: Math.max(1.2, 5 - ((capacityData.summary?.avg_efficiency || 0) / 20)),
-          codeReviewScore: Math.min(5, ((capacityData.summary?.avg_efficiency || 0) / 20) + 3),
-          testCoverage: Math.min(95, (capacityData.summary?.avg_efficiency || 0) + 10),
-          customerSatisfaction: Math.min(5, 3.5 + ((capacityData.summary?.avg_efficiency || 0) / 30))
-        },
-        ticketResolution: {
-          rate: 85, // Valor por defecto ya que no tenemos este campo
-          totalResolved: capacityData.users?.reduce((acc, user) => acc + (user.resolved_tickets || 0), 0) || 0,
-          totalAssigned: capacityData.users?.reduce((acc, user) => acc + (user.total_tickets || 0), 0) || 0,
-          avgResolutionTime: '2.3 días',
-          trend: (capacityData.summary?.avg_efficiency || 0) > 80 ? '+8%' : '-3%'
-        },
-        teamHealth: {
-          engagement: Math.max(75, Math.round((capacityData.summary?.avg_efficiency || 0) * 0.95)),
-          retention: Math.max(88, 100 - (capacityData.summary?.overloaded_users || 0) * 2),
-          satisfaction: Math.min(5, ((capacityData.summary?.avg_efficiency || 0) / 20) + 3.2),
-          overloadedMembers: capacityData.summary?.overloaded_users || 0,
-          growthOpportunities: capacityData.users?.filter(u => (u.efficiency_score || 0) > 90).length || 0
-        },
-        innovationMetrics: {
-          learningHours: capacityData.users?.reduce((acc, user) => acc + ((user.efficiency_score || 0) > 85 ? 8 : 4), 0) || 0,
-          crossTraining: Math.round(Object.keys(capacityData.workload_by_specialization || {}).length * 1.5),
-          processImprovements: Math.round((capacityData.summary?.avg_efficiency || 0) / 15),
-          knowledgeSharing: teamInsights?.knowledgeSharing || 0
-        }
-      };
-      setPerformanceMetrics(metrics);
-    }
-  };
-
-  const generateRecommendations = (data) => {
-    const recs = [];
-    
-    // Recomendaciones críticas basadas en sobrecarga
-    if ((data.summary?.overloaded_users || 0) > 0) {
-      recs.push({
-        type: 'warning',
-        priority: 'high',
-        title: 'Redistribuir Carga de Trabajo Crítica',
-        description: `${data.summary.overloaded_users} miembros del equipo están en riesgo de burnout`,
-        action: 'Redistribuir inmediatamente tareas y considerar contratación temporal',
-        impact: 'Prevenir burnout y mantener calidad del trabajo',
-        urgency: 'Inmediata',
-        estimatedCost: '$2,500',
-        roi: '300%',
-        metrics: {
-          burnoutReduction: '85%',
-          qualityImprovement: '25%',
-          retentionImprovement: '40%'
-        }
-      });
-    }
-
-    // Recomendaciones de eficiencia con análisis detallado
-    if ((data.summary?.avg_efficiency || 0) < 75) {
-      const efficiencyGap = 85 - (data.summary?.avg_efficiency || 0);
-      recs.push({
-        type: 'improvement',
-        priority: 'high',
-        title: 'Programa de Optimización de Productividad',
-        description: `Brecha de eficiencia del ${efficiencyGap.toFixed(1)}% representa oportunidad de mejora significativa`,
-        action: 'Implementar metodologías ágiles, automatización y capacitación especializada',
-        impact: `Potencial aumento de productividad del ${Math.round(efficiencyGap * 1.2)}%`,
-        urgency: '2-4 semanas',
-        estimatedCost: '$8,000',
-        roi: '450%',
-        metrics: {
-          productivityIncrease: `${Math.round(efficiencyGap * 1.2)}%`,
-          timeToMarket: '-30%',
-          customerSatisfaction: '+35%'
-        }
-      });
-    }
-
-    // Recomendaciones de gestión de talento
-    const highPerformers = data.users?.filter(u => (u.efficiency_score || 0) > 90).length || 0;
-    if (highPerformers > 0) {
-      recs.push({
-        type: 'strategic',
-        priority: 'medium',
-        title: 'Programa de Retención de Talento',
-        description: `${highPerformers} empleados de alto rendimiento requieren plan de carrera`,
-        action: 'Crear rutas de crecimiento, mentorías y proyectos desafiantes',
-        impact: 'Reducir rotación de talento clave en 60%',
-        urgency: '1 mes',
-        estimatedCost: '$12,000',
-        roi: '520%',
-        metrics: {
-          retentionImprovement: '60%',
-          engagementIncrease: '45%',
-          leadershipPipeline: '+3 candidatos'
-        }
-      });
-    }
-
-    // Recomendaciones de diversificación de skills
-    const specializationGaps = Object.entries(data.workload_by_specialization || {}).filter(([spec, data]) => data.total_users < 2) || [];
-    if (specializationGaps.length > 0) {
-      recs.push({
-        type: 'strategic',
-        priority: 'medium',
-        title: 'Estrategia de Cross-Training',
-        description: `${specializationGaps.length} especializaciones críticas con cobertura insuficiente`,
-        action: 'Implementar programa de capacitación cruzada y certificaciones',
-        impact: 'Reducir riesgo operacional en 70% y aumentar flexibilidad del equipo',
-        urgency: '6-8 semanas',
-        estimatedCost: '$15,000',
-        roi: '380%',
-        metrics: {
-          riskReduction: '70%',
-          teamFlexibility: '+85%',
-          knowledgeSharing: '+60%'
-        }
-      });
-    }
-
-    // Recomendaciones de innovación
-    if ((data.summary?.avg_efficiency || 0) > 80) {
-      recs.push({
-        type: 'success',
-        priority: 'low',
-        title: 'Laboratorio de Innovación',
-        description: 'Equipo de alto rendimiento listo para proyectos de innovación',
-        action: 'Asignar 20% del tiempo a proyectos de investigación y desarrollo',
-        impact: 'Generar nuevas oportunidades de negocio y mantener ventaja competitiva',
-        urgency: '2-3 meses',
-        estimatedCost: '$25,000',
-        roi: '650%',
-        metrics: {
-          innovationProjects: '+5 proyectos',
-          competitiveAdvantage: '+40%',
-          newRevenue: '$150,000'
-        }
-      });
-    }
-
-    setRecommendations(recs);
-  };
-
   const fetchUsers = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch('http://localhost:8000/users', { headers });
+      const response = await fetch('http://localhost:8001/users', { headers });
       
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
       
       const data = await response.json();
-      setUsers(data);
+      console.log('Users.jsx - Usuarios obtenidos del backend:', data);
+      console.log('Users.jsx - Usuario actual es super_user:', user?.role === 'super_user');
+      
+      // Filtrar usuarios según el rol del usuario actual
+      let filteredUsers = data;
+      if (user?.role !== 'super_user') {
+        // Si no es super_user, ocultar otros super_users
+        filteredUsers = data.filter(userData => userData.role !== 'super_user');
+        console.log('Users.jsx - Usuarios filtrados (no super_user):', filteredUsers);
+      } else {
+        console.log('Users.jsx - Mostrando todos los usuarios (incluyendo super_users)');
+      }
+      
+      setUsers(filteredUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -380,17 +214,36 @@ export default function Users() {
     setShowUserModal(true);
   };
 
-  const handleEditUser = (user) => {
+  const handleEditUser = async (user) => {
+    try {
+      // Obtener datos actualizados del backend
+      const headers = getAuthHeaders();
+      const response = await fetch(`http://localhost:8001/users/${user.user_id}`, {
+        headers
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al obtener datos del usuario');
+      }
+      
+      const updatedUser = await response.json();
+      console.log('Datos actualizados del usuario para edición:', updatedUser);
+      
+      setSelectedUser(updatedUser);
+      setShowUserModal(true);
+    } catch (error) {
+      console.error('Error al obtener datos del usuario:', error);
+      // Fallback: usar los datos del estado local
     setSelectedUser(user);
     setShowUserModal(true);
+    }
   };
 
   const handleSaveUser = async (userData) => {
-    try {
       const headers = getAuthHeaders();
       const url = selectedUser 
-        ? `http://localhost:8000/users/${selectedUser.user_id}`
-        : 'http://localhost:8000/users';
+        ? `http://localhost:8001/users/${selectedUser.user_id}`
+        : 'http://localhost:8001/users';
       const method = selectedUser ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -404,13 +257,15 @@ export default function Users() {
         throw new Error(errorData.detail || 'Error al guardar el usuario');
       }
 
+    const savedUser = await response.json();
+    console.log('Usuario guardado exitosamente:', savedUser);
+
       setShowUserModal(false);
       setSelectedUser(null);
+    
+    // Recargar la lista de usuarios para aplicar el filtrado correcto
       await fetchUsers();
       await fetchAllData(); // Refrescar datos de capacidad
-    } catch (error) {
-      throw error; // Re-throw para que el modal pueda manejarlo
-    }
   };
 
   const handleDeleteUser = async (userId) => {
@@ -420,7 +275,7 @@ export default function Users() {
 
     try {
       const headers = getAuthHeaders();
-      const response = await fetch(`http://localhost:8000/users/${userId}`, {
+      const response = await fetch(`http://localhost:8001/users/${userId}`, {
         method: 'DELETE',
         headers
       });
@@ -441,9 +296,10 @@ export default function Users() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
+      if (activeView === 'capacidad') {
       await fetchStats();
       await fetchCapacityData();
-      if (activeView === 'tabla') {
+      } else if (activeView === 'usuarios') {
         await fetchUsers();
       }
     } catch (error) {
@@ -454,17 +310,12 @@ export default function Users() {
   };
 
   useEffect(() => {
-    if (activeView === 'resumen') {
       fetchAllData();
-    } else if (activeView === 'usuarios') {
-      fetchUsers();
-    }
   }, [activeView]);
 
   useEffect(() => {
     if (capacityData) {
       fetchTeamInsights();
-      fetchPerformanceMetrics();
     }
   }, [capacityData]);
 
@@ -506,226 +357,6 @@ export default function Users() {
     return 'red';
   };
 
-  const getPriorityColor = (priority) => {
-    const colors = {
-      high: 'bg-red-100 text-red-800 border-red-200',
-      medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      low: 'bg-green-100 text-green-800 border-green-200'
-    };
-    return colors[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
-
-  const getRecommendationIcon = (type) => {
-    const icons = {
-      warning: '⚠️',
-      improvement: '📈',
-      strategic: '🎯',
-      success: '✅'
-    };
-    return icons[type] || '💡';
-  };
-
-  const renderIntelligentSummary = () => (
-    <div className="space-y-8">
-      {/* Header Ejecutivo Mejorado */}
-      <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-700 rounded-2xl p-8 text-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-black bg-opacity-10"></div>
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold mb-3">Centro de Inteligencia de Recursos Humanos</h1>
-              <p className="text-indigo-100 text-lg">Análisis predictivo y optimización del capital humano</p>
-            </div>
-            <div className="text-right">
-              <div className="text-5xl font-bold mb-2">{capacityData?.summary?.avg_efficiency || 0}%</div>
-              <div className="text-indigo-200 font-medium">Eficiencia Global del Equipo</div>
-              <div className="text-sm text-indigo-300 mt-1">
-                {capacityData?.summary?.avg_efficiency > 85 ? '🚀 Rendimiento Excepcional' : 
-                 capacityData?.summary?.avg_efficiency > 70 ? '📈 Buen Rendimiento' : '⚠️ Necesita Atención'}
-              </div>
-            </div>
-          </div>
-          
-          {/* Indicadores Clave de Rendimiento */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-            <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-2xl font-bold">{capacityData?.summary?.total_resolved_tickets || 0}</div>
-                  <div className="text-indigo-200 text-sm">Tickets Resueltos</div>
-                </div>
-                <div className="text-3xl">🎯</div>
-              </div>
-              <div className="text-xs text-indigo-300 mt-2">
-                Tasa: {capacityData?.summary?.global_ticket_resolution || 0}%
-              </div>
-            </div>
-            
-            <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-2xl font-bold">{capacityData?.summary?.overloaded_users || 0}</div>
-                  <div className="text-indigo-200 text-sm">Usuarios Sobrecargados</div>
-                </div>
-                <div className="text-3xl">⚡</div>
-              </div>
-              <div className="text-xs text-indigo-300 mt-2">
-                {capacityData?.summary?.overloaded_users === 0 ? 'Carga equilibrada' : 'Requiere atención'}
-              </div>
-            </div>
-            
-            <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-2xl font-bold">{capacityData?.workload_summary?.length || 0}</div>
-                  <div className="text-indigo-200 text-sm">Especializaciones</div>
-                </div>
-                <div className="text-3xl">🎨</div>
-              </div>
-              <div className="text-xs text-indigo-300 mt-2">
-                Diversidad de habilidades
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Métricas Clave Mejoradas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {statsData.map((stat, index) => (
-          <motion.div
-            key={stat.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100 hover:shadow-2xl transition-all duration-300"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-4 rounded-xl bg-gradient-to-br from-${stat.color}-100 to-${stat.color}-200`}>
-                <span className={`material-icons-outlined text-2xl text-${stat.color}-600`}>{stat.icon}</span>
-              </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-gray-900">{stat.value}</div>
-                <div className={`text-sm font-medium mt-1 ${
-                  stat.change.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {stat.change}
-                </div>
-              </div>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-1">{stat.title}</h3>
-              <p className="text-sm text-gray-600">{stat.description}</p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Análisis de Capacidad por Especialización */}
-      <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución de Carga por Especialización</h3>
-        <div className="space-y-4">
-          {capacityData?.workload_summary?.map((spec, index) => (
-            <div key={spec.specialization} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full bg-${getSpecializationColor(spec.specialization)}-500`}></div>
-                <div>
-                  <div className="font-medium text-gray-900">{getSpecializationLabel(spec.specialization)}</div>
-                  <div className="text-sm text-gray-500">{spec.user_count} miembros</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-semibold text-gray-900">{spec.total_hours}h</div>
-                <div className="text-sm text-gray-500">Eficiencia: {spec.avg_efficiency}%</div>
-                <div className="text-xs text-gray-400">Tickets: {spec.ticket_resolution_rate}%</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recomendaciones Estratégicas (Reemplaza Métricas de Calidad) */}
-      <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recomendaciones Estratégicas Inteligentes</h3>
-        <div className="space-y-4">
-          {recommendations.map((rec, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className={`p-4 rounded-lg border-l-4 ${
-                rec.type === 'warning' ? 'border-red-500 bg-red-50' :
-                rec.type === 'improvement' ? 'border-yellow-500 bg-yellow-50' :
-                rec.type === 'strategic' ? 'border-blue-500 bg-blue-50' :
-                'border-green-500 bg-green-50'
-              }`}
-            >
-              <div className="flex items-start space-x-3">
-                <span className="text-2xl">{getRecommendationIcon(rec.type)}</span>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-gray-900">{rec.title}</h4>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(rec.priority)}`}>
-                      {rec.priority === 'high' ? 'Alta' : rec.priority === 'medium' ? 'Media' : 'Baja'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">{rec.description}</p>
-                  <div className="mt-2">
-                    <p className="text-sm font-medium text-gray-700">Acción recomendada:</p>
-                    <p className="text-sm text-gray-600">{rec.action}</p>
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500">💡 Impacto esperado: {rec.impact}</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Métricas de Rendimiento */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Predictibilidad de Entrega</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">A Tiempo</span>
-              <span className="font-semibold text-green-600">{performanceMetrics?.deliveryPredictability?.onTime || 0}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Temprano</span>
-              <span className="font-semibold text-blue-600">{performanceMetrics?.deliveryPredictability?.early || 0}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Retrasado</span>
-              <span className="font-semibold text-red-600">{performanceMetrics?.deliveryPredictability?.delayed || 0}%</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Resolución de Tickets</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Tasa de Resolución</span>
-              <span className="font-semibold text-green-600">{performanceMetrics?.ticketResolution?.rate || 0}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Tickets Resueltos</span>
-              <span className="font-semibold text-blue-600">{performanceMetrics?.ticketResolution?.totalResolved || 0}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total Asignados</span>
-              <span className="font-semibold text-gray-600">{performanceMetrics?.ticketResolution?.totalAssigned || 0}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   // Consolidar las vistas de capacidad y eficiencia en una sola
   const renderCapacityAndEfficiencyView = () => (
     <CapacityEfficiencyView
@@ -743,10 +374,7 @@ export default function Users() {
     <div className="space-y-6">
       {/* Header con botón de crear usuario */}
       <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h2>
-          <p className="text-gray-600">Administra los miembros del equipo y sus especializaciones</p>
-        </div>
+        <div></div>
         <button
           onClick={handleCreateUser}
           className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 flex items-center gap-2 shadow-lg"
@@ -889,18 +517,12 @@ export default function Users() {
   );
 
   const tabs = [
-    { id: 'resumen', label: 'Resumen Inteligente', icon: 'analytics' },
-    { id: 'capacidad', label: 'Capacidad y Eficiencia', icon: 'speed' },
-    { id: 'usuarios', label: 'Gestión de Usuarios', icon: 'group' }
+    { id: 'usuarios', label: 'Gestión de Usuarios', icon: 'group' },
+    { id: 'capacidad', label: 'Capacidad y Eficiencia', icon: 'speed' }
   ];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Recursos Humanos</h1>
-        <p className="text-gray-600 mt-2">Centro de inteligencia para optimización del talento y productividad</p>
-      </div>
-
+    <div className="p-6 w-full">
       {/* Navegación por pestañas */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
@@ -933,7 +555,9 @@ export default function Users() {
           >
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-600 mt-4">Cargando análisis inteligente...</p>
+              <p className="text-gray-600 mt-4">
+                {activeView === 'usuarios' ? 'Cargando usuarios...' : 'Cargando análisis inteligente...'}
+              </p>
             </div>
           </motion.div>
         ) : (
@@ -944,7 +568,6 @@ export default function Users() {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            {activeView === 'resumen' && renderIntelligentSummary()}
             {activeView === 'capacidad' && renderCapacityAndEfficiencyView()}
             {activeView === 'usuarios' && renderUsersTable()}
           </motion.div>

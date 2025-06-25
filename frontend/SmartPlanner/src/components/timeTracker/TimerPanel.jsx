@@ -7,6 +7,115 @@ import debounce from 'lodash.debounce';
 
 const MinimunTime = 5; // segundos mínimos para guardar la entrada
 
+// Mapa completo de colores de Tailwind
+const TAILWIND_COLORS = {
+  blue: {
+    300: '#93c5fd',
+    400: '#60a5fa',
+    500: '#3b82f6',
+    600: '#2563eb',
+    700: '#1d4ed8'
+  },
+  indigo: {
+    300: '#a5b4fc',
+    400: '#818cf8',
+    500: '#6366f1',
+    600: '#4f46e5',
+    700: '#4338ca'
+  },
+  red: {
+    300: '#fca5a5',
+    400: '#f87171',
+    500: '#ef4444',
+    600: '#dc2626',
+    700: '#b91c1c'
+  },
+  green: {
+    300: '#86efac',
+    400: '#4ade80',
+    500: '#22c55e',
+    600: '#16a34a',
+    700: '#15803d'
+  },
+  yellow: {
+    300: '#fde047',
+    400: '#facc15',
+    500: '#eab308',
+    600: '#ca8a04',
+    700: '#a16207'
+  },
+  orange: {
+    300: '#fdba74',
+    400: '#fb923c',
+    500: '#f97316',
+    600: '#ea580c',
+    700: '#c2410c'
+  },
+  pink: {
+    300: '#f9a8d4',
+    400: '#f472b6',
+    500: '#ec4899',
+    600: '#db2777',
+    700: '#be185d'
+  },
+  purple: {
+    300: '#c4b5fd',
+    400: '#a78bfa',
+    500: '#a855f7',
+    600: '#9333ea',
+    700: '#7e22ce'
+  },
+  gray: {
+    300: '#d1d5db',
+    400: '#9ca3af',
+    500: '#6b7280',
+    600: '#4b5563',
+    700: '#374151'
+  },
+  cyan: {
+    300: '#67e8f9',
+    400: '#22d3ee',
+    500: '#06b6d4',
+    600: '#0891b2',
+    700: '#0e7490'
+  },
+  teal: {
+    300: '#5eead4',
+    400: '#2dd4bf',
+    500: '#14b8a6',
+    600: '#0d9488',
+    700: '#0f766e'
+  },
+  lime: {
+    300: '#bef264',
+    400: '#a3e635',
+    500: '#84cc16',
+    600: '#65a30d',
+    700: '#4d7c0f'
+  },
+  stone: {
+    300: '#d6d3d1',
+    400: '#a8a29e',
+    500: '#78716c',
+    600: '#57534e',
+    700: '#44403c'
+  },
+  zinc: {
+    300: '#d4d4d8',
+    400: '#a1a1aa',
+    500: '#71717a',
+    600: '#52525b',
+    700: '#3f3f46'
+  },
+  neutral: {
+    300: '#d4d4d4',
+    400: '#a3a3a3',
+    500: '#737373',
+    600: '#525252',
+    700: '#404040'
+  }
+};
+
 const TimerPanel = ({
   userId = 1, // Debería venir de auth context
   onNuevaEntrada,
@@ -175,7 +284,7 @@ const TimerPanel = ({
 
       console.log('Datos a enviar:', entryData);
 
-      const response = await fetch('http://localhost:8000/time-entries/', {
+      const response = await fetch('http://localhost:8001/time-entries/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -389,6 +498,39 @@ const TimerPanel = ({
 
         {/* Controles de proyecto, cliente y etiquetas */}
         <div className="flex flex-wrap items-center gap-3 mt-4">
+
+          {/* Selector de etiquetas */}
+          <div className="relative min-w-[120px] flex flex-col">
+            <label htmlFor="timer-tag" className="sr-only">
+              Categoría
+            </label>
+            <div className="relative flex items-center">
+              <FiTag
+                className="absolute text-gray-400 pointer-events-none"
+                style={{ left: 12, top: '50%', transform: 'translateY(-50%)' }}
+              />
+              <select
+                id="timer-tag"
+                className="appearance-none bg-gray-100 border rounded-md pl-8 pr-8 py-2 focus:outline-none focus:ring-2 transition text-sm border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                value={selectedTag}
+                onChange={(e) => {
+                  console.log('Categoría seleccionada:', e.target.value); // Debug log
+                  setSelectedTag(e.target.value);
+                }}
+              >
+                {activityTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+              <FiChevronDown
+                className="absolute text-gray-400 pointer-events-none"
+                style={{ right: 12, top: '50%', transform: 'translateY(-50%)' }}
+              />
+            </div>
+          </div>
+
           {/* Selector de proyecto */}
           <div className="relative min-w-[150px] flex flex-col">
             <label htmlFor="timer-project" className="sr-only">
@@ -402,7 +544,6 @@ const TimerPanel = ({
                 const project = projectOptions.find(p => p.project_id === e.target.value);
                 setSelectedClient(project?.client_id || '');
               }}
-              required
             >
               <option value="" disabled>Selecciona un proyecto</option>
               {projectOptions.map((project) => (
@@ -441,38 +582,6 @@ const TimerPanel = ({
               ))}
             </select>
             <FiChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" />
-          </div>
-
-          {/* Selector de etiquetas */}
-          <div className="relative min-w-[120px] flex flex-col">
-            <label htmlFor="timer-tag" className="sr-only">
-              Categoría
-            </label>
-            <div className="relative flex items-center">
-              <FiTag
-                className="absolute text-gray-400 pointer-events-none"
-                style={{ left: 12, top: '50%', transform: 'translateY(-50%)' }}
-              />
-              <select
-                id="timer-tag"
-                className="appearance-none bg-gray-100 border rounded-md pl-8 pr-8 py-2 focus:outline-none focus:ring-2 transition text-sm border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                value={selectedTag}
-                onChange={(e) => {
-                  console.log('Categoría seleccionada:', e.target.value); // Debug log
-                  setSelectedTag(e.target.value);
-                }}
-              >
-                {activityTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-              <FiChevronDown
-                className="absolute text-gray-400 pointer-events-none"
-                style={{ right: 12, top: '50%', transform: 'translateY(-50%)' }}
-              />
-            </div>
           </div>
 
           {/* Toggle Facturable */}
@@ -554,11 +663,24 @@ const TimerPanel = ({
         {/* Botón de guardar */}
         <button
           onClick={handleSave}
-          className={`flex items-center justify-center w-full py-2 px-4 rounded-md transition ${
-            saving
-              ? `${theme.PRIMARY_BG_MEDIUM} opacity-70 cursor-not-allowed`
-              : `${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`
-          } text-white font-medium`}
+          className={`flex items-center justify-center w-full py-2 px-4 rounded-md transition text-white font-medium ${
+            saving ? 'opacity-70 cursor-not-allowed' : ''
+          }`}
+          style={{
+            background: saving 
+              ? `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[400] || TAILWIND_COLORS.blue[400]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[300] || TAILWIND_COLORS.blue[300]})`
+              : `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`
+          }}
+          onMouseEnter={(e) => {
+            if (!saving && !running) {
+              e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[700] || TAILWIND_COLORS.blue[700]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]})`;
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving) {
+              e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`;
+            }
+          }}
           disabled={saving || running}
           aria-label="Guardar entrada"
         >

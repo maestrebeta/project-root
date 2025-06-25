@@ -3,6 +3,29 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 
+class TicketCategory(Base):
+    __tablename__ = "ticket_categories"
+    
+    category_id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.organization_id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    icon = Column(String(50), nullable=True)  # Emoji o nombre de icono
+    color = Column(String(20), nullable=True)  # Color en formato hex o nombre
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    
+    # Campos para prellenado automático
+    default_title_template = Column(Text, nullable=True)
+    default_description_template = Column(Text, nullable=True)
+    default_priority = Column(String(20), nullable=True)
+    default_estimated_hours = Column(Integer, nullable=True)
+    
+    # Relaciones
+    organization = relationship("Organization", back_populates="ticket_categories")
+    tickets = relationship("Ticket", back_populates="category_rel")
+
 class Ticket(Base):
     __tablename__ = "tickets"
     
@@ -13,11 +36,13 @@ class Ticket(Base):
     organization_id = Column(Integer, ForeignKey("organizations.organization_id"), nullable=False)
     reported_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     assigned_to_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    external_user_id = Column(Integer, ForeignKey("external_users.external_user_id"), nullable=True)  # Usuario externo que creó el ticket
     title = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     priority = Column(String(20), nullable=False)
     status = Column(String(20), nullable=False)
-    category = Column(String(50), nullable=True)
+    category = Column(String(50), nullable=True)  # Campo legacy para compatibilidad
+    category_id = Column(Integer, ForeignKey("ticket_categories.category_id"), nullable=True)  # Nueva relación
     due_date = Column(DateTime(timezone=True), nullable=True)
     resolution_description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -29,9 +54,15 @@ class Ticket(Base):
     tags = Column(JSON, nullable=True)
     estimated_hours = Column(Integer, nullable=True)
     
+    # Campos para archivos adjuntos
+    attachments = Column(JSON, nullable=True)  # Lista de archivos adjuntos
+    contact_email = Column(String(255), nullable=True)
+    contact_phone = Column(String(50), nullable=True)
+    contact_name = Column(String(255), nullable=True)
+    
     # Restricciones de estado y prioridad
     __table_args__ = (
-        CheckConstraint("status IN ('nuevo', 'en_progreso', 'listo_pruebas', 'cerrado')", name='valid_ticket_status'),
+        CheckConstraint("status IN ('nuevo', 'en_progreso', 'cerrado')", name='valid_ticket_status'),
         CheckConstraint("priority IN ('baja', 'media', 'alta', 'critica')", name='valid_ticket_priority')
     )
     
@@ -39,6 +70,7 @@ class Ticket(Base):
     project = relationship("Project", back_populates="tickets")
     client = relationship("Client", back_populates="tickets")
     organization = relationship("Organization", back_populates="tickets")
+    category_rel = relationship("TicketCategory", back_populates="tickets")
     reported_by_user = relationship(
         "User", 
         foreign_keys=[reported_by_user_id], 
@@ -49,6 +81,7 @@ class Ticket(Base):
         foreign_keys=[assigned_to_user_id], 
         back_populates="tickets_assigned"
     )
+    external_user = relationship("ExternalUser", back_populates="tickets")
     time_entries = relationship("TimeEntry", back_populates="ticket")
     comments = relationship("TicketComment", back_populates="ticket")
     history = relationship("TicketHistory", back_populates="ticket")

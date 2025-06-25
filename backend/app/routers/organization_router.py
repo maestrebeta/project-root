@@ -3,15 +3,17 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_user_organization
-from app.models.user_models import User
+from app.models.user_models import User, ExternalUser
 from app.models.organization_models import Organization
 from app.schemas.organization_schema import (
     OrganizationCreate, 
     OrganizationUpdate, 
     OrganizationOut, 
-    OrganizationWithDetails
+    OrganizationWithDetails,
+    OrganizationRatingCreate, OrganizationRatingUpdate, OrganizationRatingOut,
+    OrganizationRatingStats
 )
-from app.crud import organization_crud
+from app.crud import organization_crud, user_crud
 
 router = APIRouter(
     prefix="/organizations",
@@ -43,6 +45,16 @@ DEFAULT_TASK_STATES = {
     "default_state": "pendiente",
     "final_states": ["completada"]
 }
+
+# Función para obtener usuario externo actual
+def get_current_external_user(token: str, db: Session):
+    external_user = user_crud.verify_external_user_token(db, token)
+    if not external_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    return external_user
 
 @router.post("", response_model=OrganizationOut)
 def create_organization(
@@ -111,8 +123,10 @@ def get_organizations_stats(
             Organization.is_active == True
         ).scalar()
         
-        # Organizaciones inactivas
-        inactive_orgs = total_orgs - active_orgs
+        # Organizaciones inactivas (calcular directamente en lugar de restar)
+        inactive_orgs = db.query(func.count(Organization.organization_id)).filter(
+            Organization.is_active == False
+        ).scalar()
         
         # Organizaciones creadas este mes
         current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -125,6 +139,19 @@ def get_organizations_stats(
         new_last_month = db.query(func.count(Organization.organization_id)).filter(
             Organization.created_at >= last_month,
             Organization.created_at < current_month
+        ).scalar()
+        
+        # Estadísticas por plan de suscripción
+        free_orgs = db.query(func.count(Organization.organization_id)).filter(
+            Organization.subscription_plan == 'free'
+        ).scalar()
+        
+        premium_orgs = db.query(func.count(Organization.organization_id)).filter(
+            Organization.subscription_plan == 'premium'
+        ).scalar()
+        
+        corporate_orgs = db.query(func.count(Organization.organization_id)).filter(
+            Organization.subscription_plan == 'corporate'
         ).scalar()
         
         # Calcular cambios
@@ -149,6 +176,18 @@ def get_organizations_stats(
             "new_this_month": {
                 "value": str(new_this_month),
                 "change": new_change
+            },
+            "free_organizations": {
+                "value": str(free_orgs),
+                "change": "+0"
+            },
+            "premium_organizations": {
+                "value": str(premium_orgs),
+                "change": "+0"
+            },
+            "corporate_organizations": {
+                "value": str(corporate_orgs),
+                "change": "+0"
             }
         }
     except Exception as e:
@@ -157,71 +196,7 @@ def get_organizations_stats(
             detail=f"Error al obtener estadísticas: {str(e)}"
         )
 
-@router.get("/{organization_id}", response_model=OrganizationWithDetails)
-def read_organization(
-    organization_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Solo super usuarios pueden ver los detalles de organizaciones
-    if current_user.role != 'super_user':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo los super usuarios pueden ver detalles de organizaciones"
-        )
-    
-    organization = organization_crud.get_organization_details(db, organization_id)
-    if not organization:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organización no encontrada"
-        )
-    
-    return organization
-
-@router.put("/{organization_id}", response_model=OrganizationOut)
-def update_organization(
-    organization_id: int,
-    organization: OrganizationUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Solo super usuarios pueden actualizar organizaciones
-    if current_user.role != 'super_user':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo los super usuarios pueden actualizar organizaciones"
-        )
-    
-    updated_org = organization_crud.update_organization(db, organization_id, organization)
-    if not updated_org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organización no encontrada"
-        )
-    
-    return updated_org
-
-@router.delete("/{organization_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_organization(
-    organization_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Solo super usuarios pueden eliminar organizaciones
-    if current_user.role != 'super_user':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo los super usuarios pueden eliminar organizaciones"
-        )
-    
-    success = organization_crud.delete_organization(db, organization_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organización no encontrada"
-        )
-
+# Rutas específicas de organización (deben ir antes de la ruta general)
 @router.get("/{organization_id}/task-states", response_model=Dict[str, Any])
 async def get_task_states(
     organization_id: int,
@@ -416,70 +391,229 @@ async def update_work_hours_config(
         if not re.match(time_pattern, work_hours_config['start_time']):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Formato de hora de inicio inválido (use HH:MM)"
+                detail="Formato de hora de inicio inválido. Use HH:MM"
             )
-        
         if not re.match(time_pattern, work_hours_config['end_time']):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Formato de hora de fin inválido (use HH:MM)"
+                detail="Formato de hora de fin inválido. Use HH:MM"
             )
         
-        # Validar días laborables
-        if not isinstance(work_hours_config['working_days'], list):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Los días laborables deben ser una lista"
-            )
-        
-        for day in work_hours_config['working_days']:
-            if not isinstance(day, int) or day < 1 or day > 7:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Los días laborables deben ser números del 1 al 7"
-                )
-        
-        # Calcular horas efectivas automáticamente
-        from datetime import datetime, time
-        start_time = datetime.strptime(work_hours_config['start_time'], '%H:%M').time()
-        end_time = datetime.strptime(work_hours_config['end_time'], '%H:%M').time()
-        
-        # Calcular horas totales del día
-        start_minutes = start_time.hour * 60 + start_time.minute
-        end_minutes = end_time.hour * 60 + end_time.minute
-        total_minutes = end_minutes - start_minutes
-        daily_hours = total_minutes / 60
-        
-        # Descontar almuerzo si está configurado
-        lunch_minutes = 0
-        if 'lunch_break_start' in work_hours_config and 'lunch_break_end' in work_hours_config:
-            lunch_start = datetime.strptime(work_hours_config['lunch_break_start'], '%H:%M').time()
-            lunch_end = datetime.strptime(work_hours_config['lunch_break_end'], '%H:%M').time()
-            lunch_start_minutes = lunch_start.hour * 60 + lunch_start.minute
-            lunch_end_minutes = lunch_end.hour * 60 + lunch_end.minute
-            lunch_minutes = lunch_end_minutes - lunch_start_minutes
-        
-        effective_daily_hours = (total_minutes - lunch_minutes) / 60
-        
-        # Actualizar configuración con valores calculados
-        work_hours_config['daily_hours'] = round(daily_hours, 2)
-        work_hours_config['effective_daily_hours'] = round(effective_daily_hours, 2)
-        
-        # Actualizar la organización
+        # Actualizar configuración
         organization.work_hours_config = work_hours_config
         db.commit()
+        db.refresh(organization)
         
         return {
-            "message": "Configuración de horas de trabajo actualizada exitosamente",
             "organization_id": organization_id,
-            "work_hours_config": work_hours_config
+            "work_hours_config": organization.work_hours_config
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al actualizar configuración: {str(e)}"
+        )
+
+# Rutas de calificaciones para usuarios externos (sin autenticación de usuario interno)
+@router.post("/{organization_id}/ratings/external", response_model=OrganizationRatingOut)
+def create_organization_rating_external(
+    organization_id: int,
+    rating: OrganizationRatingCreate,
+    db: Session = Depends(get_db)
+):
+    """Crear o actualizar una calificación para una organización (ruta pública para usuarios externos)"""
+    return organization_crud.create_or_update_organization_rating(db, organization_id, rating)
+
+@router.get("/{organization_id}/ratings/external", response_model=List[OrganizationRatingOut])
+def read_organization_ratings_external(
+    organization_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    client_id: int = None,
+    db: Session = Depends(get_db)
+):
+    """Obtener calificaciones de una organización (ruta pública)"""
+    return organization_crud.get_organization_ratings(db, organization_id, skip, limit, client_id)
+
+@router.get("/{organization_id}/ratings/external/stats", response_model=OrganizationRatingStats)
+def get_organization_rating_stats_external(
+    organization_id: int,
+    client_id: int = None,
+    db: Session = Depends(get_db)
+):
+    """Obtener estadísticas de calificaciones de una organización (ruta pública)"""
+    return organization_crud.get_organization_rating_stats(db, organization_id, client_id)
+
+@router.get("/{organization_id}/ratings/external/user/{external_user_id}/client/{client_id}", response_model=OrganizationRatingOut)
+def get_user_rating_external(
+    organization_id: int,
+    external_user_id: int,
+    client_id: int,
+    db: Session = Depends(get_db)
+):
+    """Obtener la calificación específica de un usuario para un cliente (ruta pública)"""
+    rating = organization_crud.get_user_rating(db, organization_id, external_user_id, client_id)
+    if not rating:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Calificación no encontrada"
+        )
+    return rating
+
+# Rutas de calificaciones para usuarios internos (con autenticación)
+@router.post("/{organization_id}/ratings", response_model=OrganizationRatingOut)
+def create_organization_rating(
+    organization_id: int,
+    rating: OrganizationRatingCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Crear una calificación para una organización"""
+    # Verificar que el usuario pertenezca a la organización
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para calificar esta organización"
+        )
+    
+    return organization_crud.create_organization_rating(db, organization_id, rating)
+
+@router.get("/{organization_id}/ratings", response_model=List[OrganizationRatingOut])
+def read_organization_ratings(
+    organization_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    client_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Obtener calificaciones de una organización"""
+    # Verificar que el usuario pertenezca a la organización
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para ver las calificaciones de esta organización"
+        )
+    
+    return organization_crud.get_organization_ratings(db, organization_id, skip, limit, client_id)
+
+@router.get("/{organization_id}/ratings/stats", response_model=OrganizationRatingStats)
+def get_organization_rating_stats(
+    organization_id: int,
+    client_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Obtener estadísticas de calificaciones de una organización"""
+    # Verificar que el usuario pertenezca a la organización
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para ver las estadísticas de esta organización"
+        )
+    
+    return organization_crud.get_organization_rating_stats(db, organization_id, client_id)
+
+@router.put("/{organization_id}/ratings/{rating_id}", response_model=OrganizationRatingOut)
+def update_organization_rating(
+    organization_id: int,
+    rating_id: int,
+    rating: OrganizationRatingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Actualizar una calificación de organización"""
+    # Verificar que el usuario pertenezca a la organización
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para actualizar calificaciones de esta organización"
+        )
+    
+    return organization_crud.update_organization_rating(db, rating_id, rating)
+
+@router.delete("/{organization_id}/ratings/{rating_id}", response_model=OrganizationRatingOut)
+def delete_organization_rating(
+    organization_id: int,
+    rating_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Eliminar una calificación de organización"""
+    # Verificar que el usuario pertenezca a la organización
+    if current_user.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para eliminar calificaciones de esta organización"
+        )
+    
+    return organization_crud.delete_organization_rating(db, rating_id)
+
+# Ruta general de organización (debe ir al final)
+@router.get("/{organization_id}", response_model=OrganizationWithDetails)
+def read_organization(
+    organization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Solo super usuarios pueden ver los detalles de organizaciones
+    if current_user.role != 'super_user':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los super usuarios pueden ver detalles de organizaciones"
+        )
+    
+    organization = organization_crud.get_organization_details(db, organization_id)
+    if not organization:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organización no encontrada"
+        )
+    
+    return organization
+
+@router.put("/{organization_id}", response_model=OrganizationOut)
+def update_organization(
+    organization_id: int,
+    organization: OrganizationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Solo super usuarios pueden actualizar organizaciones
+    if current_user.role != 'super_user':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los super usuarios pueden actualizar organizaciones"
+        )
+    
+    updated_organization = organization_crud.update_organization(db, organization_id, organization)
+    if not updated_organization:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organización no encontrada"
+        )
+    
+    return updated_organization
+
+@router.delete("/{organization_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_organization(
+    organization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Solo super usuarios pueden eliminar organizaciones
+    if current_user.role != 'super_user':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los super usuarios pueden eliminar organizaciones"
+        )
+    
+    success = organization_crud.delete_organization(db, organization_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organización no encontrada"
         ) 

@@ -74,7 +74,7 @@ psql --version
 ```bash
 # Clonar repositorio
 git clone <repository-url>
-cd project-root/backend
+cd Docs BIL/backend
 
 # Crear entorno virtual
 python -m venv venv
@@ -95,7 +95,7 @@ alembic upgrade head
 python -m app.core.init_data
 
 # Ejecutar servidor
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 ### **Frontend Setup**
@@ -116,7 +116,7 @@ npm run build
 ## 📁 Estructura del Proyecto
 
 ```
-project-root/
+Docs BIL/
 ├── backend/
 │   ├── app/
 │   │   ├── core/           # Configuración y seguridad
@@ -179,7 +179,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 **Frontend (.env)**
 ```env
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8001
 VITE_APP_NAME=SmartPlanner
 ```
 
@@ -283,7 +283,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
 
 # Frontend Dockerfile
 FROM node:18-alpine
@@ -302,7 +302,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/smartplanner
     depends_on:

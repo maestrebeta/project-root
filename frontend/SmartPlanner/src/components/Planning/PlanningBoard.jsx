@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import KanbanBoard from './KanbanBoardNative';
 import EpicsSidebar from './EpicsSidebar';
 import StoryDetailsModal from './StoryDetailsModal';
+import { useFocusMode } from '../../context/FocusModeContext';
 import { 
-  FiFilter, FiSearch, FiSettings, FiMaximize2, FiMinimize2, 
-  FiPlus, FiZap, FiTrendingUp, FiUsers, FiClock, FiTarget,
-  FiChevronLeft, FiChevronRight, FiGrid, FiList, FiEye,
-  FiStar, FiActivity, FiBarChart2, FiLayers, FiFolder
+  FiFilter, FiSearch, 
+  FiPlus, FiZap, FiChevronLeft, FiChevronRight, FiLayers, FiFolder, FiTarget
 } from 'react-icons/fi';
 
 export default function PlanningBoard({
@@ -23,20 +22,18 @@ export default function PlanningBoard({
   onEpicSelect,
   onEditEpic,
   onNewEpic,
+  onProjectChange,
   kanbanStates,
-  onEditKanbanStates,
   filters = {},
   onFilterChange,
   viewMode = 'kanban',
   sidebarCollapsed = false,
   onToggleSidebar
 }) {
+  const { isFocusMode } = useFocusMode();
+  
   // Estados locales
   const [selectedStory, setSelectedStory] = useState(null);
-  const [showStoryModal, setShowStoryModal] = useState(false);
-  
-  // Estados de UI
-  const [expandedColumn, setExpandedColumn] = useState(null);
   
   // Debug: Log cuando cambia selectedStory
   useEffect(() => {
@@ -44,8 +41,6 @@ export default function PlanningBoard({
   }, [selectedStory]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeView, setActiveView] = useState('board'); // board, analytics, timeline
   const [quickCreateMode, setQuickCreateMode] = useState(false);
 
   // Filtrar historias basado en búsqueda y filtros
@@ -79,11 +74,11 @@ export default function PlanningBoard({
   // Calcular estadísticas dinámicas
   const stats = useMemo(() => {
     const totalStories = filteredStories.length;
-    const totalHours = filteredStories.reduce((sum, s) => sum + (s.estimated_hours || 0), 0);
+    const totalHours = filteredStories.reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0);
     const completedStories = filteredStories.filter(s => s.status === 'done').length;
     const completedHours = filteredStories
       .filter(s => s.status === 'done')
-      .reduce((sum, s) => sum + (s.estimated_hours || 0), 0);
+      .reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0);
     const inProgressStories = filteredStories.filter(s => s.status === 'in_progress').length;
     const blockedStories = filteredStories.filter(s => s.status === 'blocked').length;
     
@@ -244,8 +239,8 @@ export default function PlanningBoard({
   }
 
   return (
-    <div className={`flex h-full transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
-      {/* SIDEBAR ÉPICO DE ÉPICAS */}
+    <div className={`flex h-full transition-all duration-300 ${isFocusMode ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+      {/* SIDEBAR ÉPICO DE ÉPICAS - SE CONTRAE EN MODO ENFOQUE */}
       <AnimatePresence>
         {!sidebarCollapsed && (
           <motion.div
@@ -253,7 +248,9 @@ export default function PlanningBoard({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -400, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="w-80 bg-white/90 backdrop-blur-xl border-r border-gray-200/50 shadow-xl"
+            className={`bg-white/90 backdrop-blur-xl border-r border-gray-200/50 shadow-xl transition-all duration-300 ${
+              sidebarCollapsed ? 'w-20' : 'w-80'
+            }`}
           >
             <EpicsSidebar
               epics={epics}
@@ -266,6 +263,8 @@ export default function PlanningBoard({
               onSearchChange={setSearchTerm}
               projects={projects}
               selectedProject={selectedProject}
+              isFocusMode={isFocusMode}
+              onProjectChange={onProjectChange}
             />
           </motion.div>
         )}
@@ -273,7 +272,7 @@ export default function PlanningBoard({
 
       {/* ÁREA PRINCIPAL */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* BARRA DE HERRAMIENTAS ÉPICA */}
+        {/* BARRA DE HERRAMIENTAS ÉPICA - SIEMPRE VISIBLE EN PLANIFICACIÓN */}
         <motion.div 
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -380,16 +379,6 @@ export default function PlanningBoard({
                 }`}
               >
                 <FiFilter className="w-5 h-5" />
-              </motion.button>
-
-              {/* Botón fullscreen */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
-              >
-                {isFullscreen ? <FiMinimize2 className="w-5 h-5" /> : <FiMaximize2 className="w-5 h-5" />}
               </motion.button>
             </div>
           </div>
@@ -572,50 +561,52 @@ export default function PlanningBoard({
           )}
         </div>
 
-        {/* Botones de acción flotantes */}
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="fixed bottom-6 right-6 flex flex-col gap-3 z-40"
-        >
-          {/* Creación rápida */}
-          <AnimatePresence>
-            {quickCreateMode && (
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                className="flex flex-col gap-2 mb-2"
-              >
-                {kanbanStates.slice(0, 3).map(state => (
-                  <motion.button
-                    key={state.key || state.id || state.label}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      handleQuickCreate(state.key || state.id);
-                      setQuickCreateMode(false);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-lg border border-gray-200 text-sm font-medium hover:shadow-xl transition-all duration-200"
-                    style={{ color: state.color }}
-                  >
-                    <span>{state.icon}</span>
-                    <span>+ {state.label}</span>
-                  </motion.button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setQuickCreateMode(!quickCreateMode)}
-            className="w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
+        {/* Botones de acción flotantes - OCULTOS EN MODO ENFOQUE */}
+        {!isFocusMode && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="fixed bottom-6 right-6 flex flex-col gap-3 z-40"
           >
-            <FiPlus className={`w-6 h-6 transition-transform duration-200 ${quickCreateMode ? 'rotate-45' : ''}`} />
-          </motion.button>
-        </motion.div>
+            {/* Creación rápida */}
+            <AnimatePresence>
+              {quickCreateMode && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  className="flex flex-col gap-2 mb-2"
+                >
+                  {kanbanStates.slice(0, 3).map(state => (
+                    <motion.button
+                      key={state.key || state.id || state.label}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        handleQuickCreate(state.key || state.id);
+                        setQuickCreateMode(false);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-lg border border-gray-200 text-sm font-medium hover:shadow-xl transition-all duration-200"
+                      style={{ color: state.color }}
+                    >
+                      <span>{state.icon}</span>
+                      <span>+ {state.label}</span>
+                    </motion.button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setQuickCreateMode(!quickCreateMode)}
+              className="w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center"
+            >
+              <FiPlus className={`w-6 h-6 transition-transform duration-200 ${quickCreateMode ? 'rotate-45' : ''}`} />
+            </motion.button>
+          </motion.div>
+        )}
       </div>
 
       {/* Modal de detalles de historia ÉPICO */}

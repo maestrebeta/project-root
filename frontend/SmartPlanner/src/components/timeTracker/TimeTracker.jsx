@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FiClock, FiCalendar, FiPlus, FiChevronRight, FiX, FiCheck, FiSettings, FiPlay, FiPause, FiSquare, FiEdit2, FiTrash2, FiUser, FiTag, FiChevronDown, FiChevronUp, FiRefreshCw } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { isSameDay, isThisWeek, parseISO, format, startOfToday, isToday, addHours, addMinutes, differenceInMinutes } from 'date-fns';
 import { es } from 'date-fns/locale';
 import TimerPanel from './TimerPanel';
 import EstadisticasPanel from './EstadisticasPanel';
@@ -16,7 +15,7 @@ import { useProjectsAndTags, useTaskStates } from "./useProjectsAndTags.jsx";
 import TaskStatesManager from './TaskStatesManager';
 import TasksTable from './TasksTable';
 
-const calculateStats = (entries, projects) => {
+const calculateStats = (entries, projects, currentFilter = 'today') => {
   const totalHours = entries.reduce((sum, entry) => {
     // Calcular duración en horas
     const start = new Date(entry.start_time);
@@ -25,8 +24,50 @@ const calculateStats = (entries, projects) => {
     return sum + (isNaN(duration) ? 0 : duration);
   }, 0);
 
-  // Filtrar entradas de hoy y esta semana
+  // Filtrar entradas según el filtro actual
   const now = new Date();
+  let filteredEntries = entries;
+  
+  switch (currentFilter) {
+    case 'today': {
+      filteredEntries = entries.filter(entry => {
+        const entryDate = new Date(entry.start_time);
+        return entryDate.toDateString() === now.toDateString();
+      });
+      break;
+    }
+    case 'this_week': {
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+      filteredEntries = entries.filter(entry => {
+        const entryDate = new Date(entry.start_time);
+        return entryDate >= startOfWeek;
+      });
+      break;
+    }
+    case 'this_month': {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      filteredEntries = entries.filter(entry => {
+        const entryDate = new Date(entry.start_time);
+        return entryDate >= startOfMonth;
+      });
+      break;
+    }
+    case 'all':
+    default:
+      // No filtrar, usar todas las entradas
+      filteredEntries = entries;
+      break;
+  }
+
+  // Calcular horas totales del período filtrado
+  const filteredHours = filteredEntries.reduce((sum, entry) => {
+    const start = new Date(entry.start_time);
+    const end = entry.end_time ? new Date(entry.end_time) : new Date();
+    const duration = (end - start) / (1000 * 60 * 60);
+    return sum + (isNaN(duration) ? 0 : duration);
+  }, 0);
+
+  // Filtrar entradas de hoy y esta semana para estadísticas específicas
   const todayEntries = entries.filter(entry => {
     const entryDate = new Date(entry.start_time);
     return entryDate.toDateString() === now.toDateString();
@@ -52,8 +93,8 @@ const calculateStats = (entries, projects) => {
     return sum + (isNaN(duration) ? 0 : duration);
   }, 0);
 
-  // Agrupar por proyecto
-  const projectStats = entries.reduce((stats, entry) => {
+  // Agrupar por proyecto usando las entradas filtradas
+  const projectStats = filteredEntries.reduce((stats, entry) => {
     const project = projects.find(p => p.project_id === entry.project_id);
     if (project) {
       const projectName = project.name;
@@ -64,13 +105,14 @@ const calculateStats = (entries, projects) => {
   }, {});
 
   return {
-    totalHours: Number(totalHours.toFixed(2)) || 0,
+    totalHours: Number(filteredHours.toFixed(2)) || 0,
     projectStats,
     todayHours: Number(todayHours.toFixed(2)) || 0,
     todayEntries: todayEntries.length,
     weekHours: Number(weekHours.toFixed(2)) || 0,
     weekEntries: weekEntries.length,
-    productivityPoints: Math.round(totalHours * 10)
+    productivityPoints: Math.round(filteredHours * 10),
+    filteredEntriesCount: filteredEntries.length
   };
 };
 
@@ -154,7 +196,7 @@ const TimeTracker = () => {
         throw new Error('Información de sesión incompleta');
       }
 
-      const response = await fetch(`http://localhost:8000/time-entries/?skip=0&limit=100&filter=${filter}`, {
+      const response = await fetch(`http://localhost:8001/time-entries/?skip=0&limit=100&filter=${filter}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -177,8 +219,8 @@ const TimeTracker = () => {
       const data = await response.json();
       setTimeEntries(data);
       
-      // Calcular estadísticas
-      const calculatedStats = calculateStats(data, projects);
+      // Calcular estadísticas con el filtro actual
+      const calculatedStats = calculateStats(data, projects, filter);
       setStats(calculatedStats);
     } catch (error) {
       console.error('Error al cargar entradas de tiempo:', error);
@@ -232,7 +274,35 @@ const TimeTracker = () => {
   }, []);
 
   // Estadísticas en tiempo real
-  const timeStats = useMemo(() => calculateStats(timeEntries, projects), [timeEntries, projects]);
+  const timeStats = useMemo(() => calculateStats(timeEntries, projects, filter), [timeEntries, projects, filter]);
+
+  // Filtrar entradas según el filtro actual para mostrar en EntradasTiempo
+  const filteredTimeEntries = useMemo(() => {
+    const now = new Date();
+    
+    switch (filter) {
+      case 'today':
+        return timeEntries.filter(entry => {
+          const entryDate = new Date(entry.start_time);
+          return entryDate.toDateString() === now.toDateString();
+        });
+      case 'this_week':
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+        return timeEntries.filter(entry => {
+          const entryDate = new Date(entry.start_time);
+          return entryDate >= startOfWeek;
+        });
+      case 'this_month':
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return timeEntries.filter(entry => {
+          const entryDate = new Date(entry.start_time);
+          return entryDate >= startOfMonth;
+        });
+      case 'all':
+      default:
+        return timeEntries;
+    }
+  }, [timeEntries, filter]);
 
   // Animaciones
   const fadeIn = {
@@ -367,9 +437,9 @@ const TimeTracker = () => {
         throw new Error('No hay sesión activa');
       }
 
-      console.log('TimeTracker - Enviando petición DELETE a:', `http://localhost:8000/time-entries/${taskId}`);
+      console.log('TimeTracker - Enviando petición DELETE a:', `http://localhost:8001/time-entries/${taskId}`);
       
-      const response = await fetch(`http://localhost:8000/time-entries/${taskId}`, {
+      const response = await fetch(`http://localhost:8001/time-entries/${taskId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -408,8 +478,8 @@ const TimeTracker = () => {
 
       const isEdit = !!data.entry_id;
       const url = isEdit 
-        ? `http://localhost:8000/time-entries/${data.entry_id}`
-        : 'http://localhost:8000/time-entries/';
+        ? `http://localhost:8001/time-entries/${data.entry_id}`
+        : 'http://localhost:8001/time-entries/';
       
       console.log('Enviando datos:', normalizedData);
       
@@ -446,7 +516,7 @@ const TimeTracker = () => {
       <header className={`bg-white shadow-sm sticky top-0 z-20 transition-all duration-300 ${
         isScrolled ? 'py-2 shadow-md' : 'py-4'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+        <div className="w-full px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div className="flex items-center space-x-6">
             <motion.h1 
               className="text-xl md:text-2xl font-bold text-gray-900 flex items-center"
@@ -498,7 +568,16 @@ const TimeTracker = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex items-center text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium focus:outline-none ${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`}
+              className="flex items-center text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium focus:outline-none transition-all duration-200"
+              style={{
+                background: `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[700] || TAILWIND_COLORS.blue[700]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]})`;
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`;
+              }}
               onClick={() => setEditingEntry({})}
             >
               <FiPlus className="mr-2" />
@@ -514,7 +593,7 @@ const TimeTracker = () => {
         className="flex-1 overflow-y-auto focus:outline-none"
         tabIndex="0"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
           {/* Manejo de errores */}
           {(projectsError || error) && (
             <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
@@ -570,7 +649,7 @@ const TimeTracker = () => {
             transition={{ delay: 0.2 }}
           >
             <EntradasTiempo
-              entradas={timeEntries}
+              entradas={filteredTimeEntries}
               loading={loadingEntries}
               onEditar={handleEditar}
               onEliminar={handleDelete}

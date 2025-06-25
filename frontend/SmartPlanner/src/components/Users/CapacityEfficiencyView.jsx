@@ -75,47 +75,7 @@ export default function CapacityEfficiencyView({
 
   const filteredUsers = getFilteredAndSortedUsers();
 
-  // Métricas destacadas
-  const keyMetrics = [
-    {
-      title: 'Eficiencia Promedio',
-      value: `${Math.round(data.summary?.avg_efficiency || 0)}%`,
-      change: data.summary?.avg_efficiency > 75 ? '+5.2%' : '-2.1%',
-      trend: data.summary?.avg_efficiency > 75 ? 'up' : 'down',
-      icon: FiTrendingUp,
-      color: data.summary?.avg_efficiency > 75 ? 'green' : 'red',
-      description: 'Rendimiento general del equipo'
-    },
-    {
-      title: 'Capacidad Utilizada',
-      value: `${Math.round(data.summary?.avg_capacity || 0)}%`,
-      change: '+3.8%',
-      trend: 'up',
-      icon: FiBarChart2,
-      color: 'blue',
-      description: 'Porcentaje de capacidad en uso'
-    },
-    {
-      title: 'Tickets Resueltos',
-      value: data.summary?.total_resolved_tickets || 0,
-      change: `${Math.round(data.summary?.global_ticket_resolution || 0)}%`,
-      trend: 'up',
-      icon: FiCheckCircle,
-      color: 'emerald',
-      description: 'Tasa de resolución global'
-    },
-    {
-      title: 'Usuarios Sobrecargados',
-      value: data.summary?.overloaded_users || 0,
-      change: data.summary?.overloaded_users === 0 ? '0%' : '+12%',
-      trend: data.summary?.overloaded_users === 0 ? 'neutral' : 'down',
-      icon: FiAlertTriangle,
-      color: data.summary?.overloaded_users === 0 ? 'green' : 'red',
-      description: 'Usuarios con >90% capacidad'
-    }
-  ];
-
-  // Componente de tarjeta de usuario mejorada
+  // Componente de tarjeta de usuario simplificado
   const UserCard = ({ user }) => (
     <motion.div
       layout
@@ -153,7 +113,7 @@ export default function CapacityEfficiencyView({
         </div>
       </div>
 
-      {/* Métricas principales */}
+      {/* Métricas principales simplificadas */}
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="text-center p-3 bg-gray-50 rounded-lg">
           <div className="text-lg font-bold text-gray-900">{user.assigned_hours || 0}h</div>
@@ -185,36 +145,6 @@ export default function CapacityEfficiencyView({
           />
         </div>
       </div>
-
-      {/* Estadísticas adicionales */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-sm font-bold text-gray-900">{user.completed_tasks || 0}</div>
-          <div className="text-xs text-gray-600">Tareas</div>
-        </div>
-        <div>
-          <div className="text-sm font-bold text-gray-900">{user.resolved_tickets || 0}</div>
-          <div className="text-xs text-gray-600">Tickets</div>
-        </div>
-        <div>
-          <div className="text-sm font-bold text-gray-900">{user.avg_completion_time || 'N/A'}</div>
-          <div className="text-xs text-gray-600">Tiempo Prom.</div>
-        </div>
-      </div>
-
-      {/* Tareas preferidas */}
-      {user.preferred_tasks && user.preferred_tasks.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="text-xs text-gray-600 mb-2">Especialidades:</div>
-          <div className="flex flex-wrap gap-1">
-            {user.preferred_tasks.slice(0, 3).map((task, index) => (
-              <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
-                {task}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 
@@ -231,147 +161,169 @@ export default function CapacityEfficiencyView({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header con controles */}
+    <div className="space-y-8">
+      {/* Header Ejecutivo Mejorado */}
+      <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-700 rounded-2xl p-8 text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-black bg-opacity-10"></div>
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex-1">
+              <h1 className="text-4xl font-bold mb-3">Centro de Análisis de Capacidad</h1>
+              <p className="text-indigo-100 text-xl mb-6">Optimización inteligente del rendimiento del equipo</p>
+              
+              {/* Métricas principales integradas en el header */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold mb-1">{data.summary?.total_users || 0}</div>
+                  <div className="text-indigo-200 text-sm">Total de Usuarios</div>
+                  <div className="text-2xl mt-2">👥</div>
+                </div>
+                
+                <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold mb-1">{data.summary?.overloaded_users || 0}</div>
+                  <div className="text-indigo-200 text-sm">Sobrecargados</div>
+                  <div className="text-2xl mt-2">⚡</div>
+                </div>
+                
+                <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold mb-1">{Math.round(data.summary?.avg_capacity || 0)}%</div>
+                  <div className="text-indigo-200 text-sm">Capacidad Promedio</div>
+                  <div className="text-2xl mt-2">📊</div>
+                </div>
+                
+                <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold mb-1">{Math.round(data.summary?.avg_efficiency || 0)}%</div>
+                  <div className="text-indigo-200 text-sm">Eficiencia Global</div>
+                  <div className="text-2xl mt-2">🚀</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-right ml-8">
+              <div className="text-6xl font-bold mb-3">{Math.round(data.summary?.avg_efficiency || 0)}%</div>
+              <div className="text-indigo-200 font-medium text-lg">Eficiencia Global</div>
+              <div className="text-sm text-indigo-300 mt-2">
+                {data.summary?.avg_efficiency > 85 ? '🚀 Rendimiento Excepcional' : 
+                 data.summary?.avg_efficiency > 70 ? '📈 Buen Rendimiento' : '⚠️ Necesita Atención'}
+              </div>
+              <div className="mt-4 text-xs text-indigo-300">
+                Última actualización: {new Date().toLocaleTimeString()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Controles Mejorados */}
+      <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Capacidad y Eficiencia del Equipo</h2>
-          <p className="text-gray-600">Análisis detallado del rendimiento y carga de trabajo</p>
+            <h2 className="text-2xl font-bold text-gray-900">Análisis Detallado del Equipo</h2>
+            <p className="text-gray-600">Explora y optimiza el rendimiento de cada miembro</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          {/* Filtros */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Filtros Mejorados */}
+            <div className="relative">
           <select
             value={selectedFilter}
             onChange={(e) => setSelectedFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">Todos los usuarios</option>
-            <option value="overloaded">Sobrecargados</option>
-            <option value="underutilized">Subutilizados</option>
-            <option value="development">Desarrollo</option>
-            <option value="ui_ux">UI/UX</option>
-            <option value="testing">Testing</option>
-            <option value="management">Gestión</option>
+                className="appearance-none px-4 py-2 pr-10 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                <option value="all">👥 Todos los usuarios</option>
+                <option value="overloaded">⚡ Sobrecargados</option>
+                <option value="underutilized">📉 Subutilizados</option>
+                <option value="development">💻 Desarrollo</option>
+                <option value="ui_ux">🎨 UI/UX</option>
+                <option value="testing">🧪 Testing</option>
+                <option value="management">👔 Gestión</option>
           </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <span className="material-icons-outlined text-gray-400 text-sm">expand_more</span>
+              </div>
+            </div>
 
-          {/* Ordenamiento */}
+            {/* Ordenamiento Mejorado */}
+            <div className="relative">
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="efficiency">Por Eficiencia</option>
-            <option value="capacity">Por Capacidad</option>
-            <option value="tickets">Por Tickets</option>
-            <option value="name">Por Nombre</option>
+                className="appearance-none px-4 py-2 pr-10 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                <option value="efficiency">📈 Por Eficiencia</option>
+                <option value="capacity">⚡ Por Capacidad</option>
+                <option value="tickets">🎯 Por Tickets</option>
+                <option value="name">👤 Por Nombre</option>
           </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <span className="material-icons-outlined text-gray-400 text-sm">expand_more</span>
+              </div>
+            </div>
 
-          {/* Modo de vista */}
-          <div className="flex bg-gray-100 rounded-lg p-1">
+            {/* Modo de vista Mejorado */}
+            <div className="flex bg-gray-100 rounded-xl p-1">
             <button
               onClick={() => setViewMode('cards')}
-              className={`p-2 rounded-md ${viewMode === 'cards' ? 'bg-white shadow-sm' : ''}`}
-            >
-              <FiUsers className="w-4 h-4" />
+                className={`p-3 rounded-lg transition-all duration-300 ${
+                  viewMode === 'cards' 
+                    ? 'bg-white shadow-lg text-blue-600' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Vista de tarjetas"
+              >
+                <FiUsers className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`p-2 rounded-md ${viewMode === 'table' ? 'bg-white shadow-sm' : ''}`}
-            >
-              <FiBarChart className="w-4 h-4" />
+                className={`p-3 rounded-lg transition-all duration-300 ${
+                  viewMode === 'table' 
+                    ? 'bg-white shadow-lg text-blue-600' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Vista de tabla"
+              >
+                <FiBarChart className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Botón de actualizar */}
+            {/* Botón de actualizar Mejorado */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onRefresh}
-            className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
+              title="Actualizar datos"
           >
-            <FiRefreshCw className="w-4 h-4" />
+              <FiRefreshCw className="w-5 h-5" />
           </motion.button>
-        </div>
-      </div>
-
-      {/* Métricas clave */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {keyMetrics.map((metric, index) => (
-          <motion.div
-            key={metric.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white rounded-xl p-6 shadow-lg border border-gray-100"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-xl bg-${metric.color}-100`}>
-                <metric.icon className={`w-6 h-6 text-${metric.color}-600`} />
-              </div>
-              <div className={`text-sm font-medium ${
-                metric.trend === 'up' ? 'text-green-600' : 
-                metric.trend === 'down' ? 'text-red-600' : 'text-gray-600'
-              }`}>
-                {metric.change}
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-900 mb-1">{metric.value}</div>
-              <div className="text-sm font-medium text-gray-900 mb-1">{metric.title}</div>
-              <div className="text-xs text-gray-600">{metric.description}</div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Resumen por especialización */}
-      {data.workload_summary && data.workload_summary.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen por Especialización</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.workload_summary.map((spec, index) => (
-              <motion.div
-                key={spec.specialization}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="p-4 bg-gray-50 rounded-lg"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSpecializationColor(spec.specialization)}`}>
-                    {getSpecializationLabel(spec.specialization)}
-                  </span>
-                  <span className="text-sm font-bold text-gray-900">{spec.user_count} usuarios</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <div className="text-gray-600">Horas totales</div>
-                    <div className="font-semibold">{spec.total_hours}h</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-600">Eficiencia prom.</div>
-                    <div className="font-semibold">{spec.avg_efficiency}%</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Lista de usuarios */}
+      {/* Lista de usuarios Mejorada */}
       <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">
             Equipo ({filteredUsers.length} usuarios)
           </h3>
-          {filteredUsers.length === 0 && (
-            <span className="text-sm text-gray-500">No hay datos disponibles</span>
+            <p className="text-gray-600 mt-1">
+              {filteredUsers.length === 0 
+                ? 'No hay usuarios que coincidan con los filtros'
+                : `Mostrando ${filteredUsers.length} de ${data.users?.length || 0} usuarios`
+              }
+            </p>
+          </div>
+          {filteredUsers.length > 0 && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="material-icons-outlined text-base">info</span>
+              Haz clic en una tarjeta para ver más detalles
+            </div>
           )}
         </div>
 
         {filteredUsers.length > 0 ? (
+          viewMode === 'cards' ? (
           <motion.div
             layout
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
@@ -383,23 +335,166 @@ export default function CapacityEfficiencyView({
             </AnimatePresence>
           </motion.div>
         ) : (
-          <div className="text-center py-12">
-            <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No hay datos de capacidad</h3>
-            <p className="text-gray-500 mb-4">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Usuario
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Especialización
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Eficiencia
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Capacidad
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Horas Asignadas
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Horas Trabajadas
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Estado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredUsers.map((user, index) => (
+                    <motion.tr
+                      key={user.user_id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm mr-3">
+                            {(user.full_name || user.username || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {user.full_name || user.username}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {user.email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSpecializationColor(user.specialization)}`}>
+                            {getSpecializationLabel(user.specialization)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {Math.round(user.efficiency_score || 0)}%
+                        </div>
+                        <div className={`text-xs ${
+                          (user.efficiency_score || 0) >= 90 ? 'text-green-600' :
+                          (user.efficiency_score || 0) >= 75 ? 'text-blue-600' :
+                          (user.efficiency_score || 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {(user.efficiency_score || 0) >= 90 ? 'Excelente' :
+                           (user.efficiency_score || 0) >= 75 ? 'Bueno' :
+                           (user.efficiency_score || 0) >= 60 ? 'Regular' : 'Necesita mejora'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                (user.capacity_percentage || 0) > 90 ? 'bg-red-500' :
+                                (user.capacity_percentage || 0) > 70 ? 'bg-yellow-500' : 'bg-green-500'
+                              }`}
+                              style={{ width: `${Math.min(user.capacity_percentage || 0, 100)}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-medium text-gray-900">
+                            {Math.round(user.capacity_percentage || 0)}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {user.assigned_hours || 0}h
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {user.worked_hours || 0}h
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          user.is_overloaded 
+                            ? 'bg-red-100 text-red-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {user.is_overloaded ? '⚠️ Sobrecargado' : '✅ Equilibrado'}
+                        </span>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          <div className="text-center py-16">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-8xl mb-6"
+            >
+              {data.users?.length === 0 ? '👥' : '🔍'}
+            </motion.div>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">
               {data.users?.length === 0 
-                ? 'No se encontraron usuarios en la organización'
-                : 'No hay usuarios que coincidan con los filtros seleccionados'
+                ? 'No hay usuarios en el equipo'
+                : 'No se encontraron resultados'
+              }
+            </h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              {data.users?.length === 0 
+                ? 'Comienza agregando el primer miembro del equipo para ver análisis de capacidad'
+                : 'Intenta ajustar los filtros o criterios de búsqueda'
               }
             </p>
+            <div className="flex gap-3 justify-center">
+              {data.users?.length === 0 ? (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-300 font-semibold"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="material-icons-outlined">person_add</span>
+                    Agregar Primer Usuario
+                  </span>
+                </motion.button>
+              ) : (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={onRefresh}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Actualizar datos
+                  onClick={() => {
+                    setSelectedFilter('all');
+                    setSortBy('efficiency');
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-300 font-semibold"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="material-icons-outlined">refresh</span>
+                    Limpiar Filtros
+                  </span>
             </motion.button>
+              )}
+            </div>
           </div>
         )}
       </div>

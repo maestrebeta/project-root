@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useAppTheme } from "../../context/ThemeContext.jsx";
@@ -70,7 +71,7 @@ const TaskStatesManager = ({ onClose }) => {
         throw new Error('No hay sesión activa');
       }
 
-      const response = await fetch(`http://localhost:8000/organizations/${user.organization_id}/task-states`, {
+      const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -158,7 +159,7 @@ const TaskStatesManager = ({ onClose }) => {
     }
   };
 
-  return (
+  return ReactDOM.createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -406,7 +407,8 @@ const TaskStatesManager = ({ onClose }) => {
           )}
         </AnimatePresence>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.getElementById('root')
   );
 };
 

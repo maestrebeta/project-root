@@ -1,8 +1,88 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useProjectsAndTags } from './useProjectsAndTags';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import { FiX, FiClock, FiCalendar, FiTag, FiDollarSign, FiCheckCircle, FiFolder, FiUser } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Mapa completo de colores de Tailwind
+const TAILWIND_COLORS = {
+  blue: {
+    500: '#3b82f6',
+    600: '#2563eb',
+    700: '#1d4ed8'
+  },
+  indigo: {
+    500: '#6366f1',
+    600: '#4f46e5',
+    700: '#4338ca'
+  },
+  red: {
+    500: '#ef4444',
+    600: '#dc2626',
+    700: '#b91c1c'
+  },
+  green: {
+    500: '#22c55e',
+    600: '#16a34a',
+    700: '#15803d'
+  },
+  yellow: {
+    500: '#eab308',
+    600: '#ca8a04',
+    700: '#a16207'
+  },
+  orange: {
+    500: '#f97316',
+    600: '#ea580c',
+    700: '#c2410c'
+  },
+  pink: {
+    500: '#ec4899',
+    600: '#db2777',
+    700: '#be185d'
+  },
+  purple: {
+    500: '#a855f7',
+    600: '#9333ea',
+    700: '#7e22ce'
+  },
+  gray: {
+    500: '#6b7280',
+    600: '#4b5563',
+    700: '#374151'
+  },
+  cyan: {
+    500: '#06b6d4',
+    600: '#0891b2',
+    700: '#0e7490'
+  },
+  teal: {
+    500: '#14b8a6',
+    600: '#0d9488',
+    700: '#0f766e'
+  },
+  lime: {
+    500: '#84cc16',
+    600: '#65a30d',
+    700: '#4d7c0f'
+  },
+  stone: {
+    500: '#78716c',
+    600: '#57534e',
+    700: '#44403c'
+  },
+  zinc: {
+    500: '#71717a',
+    600: '#52525b',
+    700: '#3f3f46'
+  },
+  neutral: {
+    500: '#737373',
+    600: '#525252',
+    700: '#404040'
+  }
+};
 
 // Categorías predeterminadas
 const DEFAULT_CATEGORIES = [
@@ -326,8 +406,8 @@ const FormularioEntrada = ({
       console.log('Datos a enviar:', payload);
 
       const url = editId 
-        ? `http://localhost:8000/time-entries/${editId}`
-        : 'http://localhost:8000/time-entries/';
+        ? `http://localhost:8001/time-entries/${editId}`
+        : 'http://localhost:8001/time-entries/';
 
       const response = await fetch(url, {
         method: editId ? 'PUT' : 'POST',
@@ -365,7 +445,7 @@ const FormularioEntrada = ({
     }
   };
 
-  return (
+  return ReactDOM.createPortal(
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -407,49 +487,6 @@ const FormularioEntrada = ({
                 placeholder="Describe la tarea realizada"
                 required
               />
-            </div>
-
-            {/* Proyecto y Cliente */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiFolder className="text-gray-400" />
-                Proyecto
-              </label>
-              <select
-                name="project_id"
-                value={form.project_id}
-                onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                required
-              >
-                  <option value="">Selecciona un proyecto</option>
-                {projectOptions.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>
-                      {project.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiUser className="text-gray-400" />
-                Cliente
-              </label>
-              <select
-                name="client_id"
-                value={form.client_id}
-                  className="w-full px-4 py-3 rounded-lg border bg-gray-50 text-gray-500 cursor-not-allowed"
-                disabled
-              >
-                <option value="">
-                    {loading ? 'Cargando...' : form.client_id ? 
-                      clientOptions.find(c => String(c.client_id) === form.client_id)?.name || 'Cliente no encontrado' 
-                      : 'Sin cliente'}
-                  </option>
-                </select>
-              </div>
             </div>
 
             {/* Fecha y Categoría */}
@@ -522,6 +559,49 @@ const FormularioEntrada = ({
             </div>
           </div>
 
+            {/* Proyecto y Cliente */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <FiFolder className="text-gray-400" />
+                Proyecto
+              </label>
+              <select
+                name="project_id"
+                value={form.project_id}
+                onChange={handleChange}
+                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
+                required
+              >
+                  <option value="">Selecciona un proyecto</option>
+                {projectOptions.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>
+                      {project.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <FiUser className="text-gray-400" />
+                Cliente
+              </label>
+              <select
+                name="client_id"
+                value={form.client_id}
+                  className="w-full px-4 py-3 rounded-lg border bg-gray-50 text-gray-500 cursor-not-allowed"
+                disabled
+              >
+                <option value="">
+                    {loading ? 'Cargando...' : form.client_id ? 
+                      clientOptions.find(c => String(c.client_id) === form.client_id)?.name || 'Cliente no encontrado' 
+                      : 'Sin cliente'}
+                  </option>
+                </select>
+            </div>
+          </div>
+
             {/* Estado y Facturación */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -572,7 +652,20 @@ const FormularioEntrada = ({
             </button>
             <button
               type="submit"
-                className={`px-4 py-2 text-white rounded-lg flex items-center gap-2 ${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`}
+                className="px-4 py-2 text-white rounded-lg flex items-center gap-2 transition-all duration-200"
+                style={{
+                  background: `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`
+                }}
+                onMouseEnter={(e) => {
+                  if (!saving) {
+                    e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[700] || TAILWIND_COLORS.blue[700]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]})`;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!saving) {
+                    e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`;
+                  }
+                }}
               disabled={saving}
             >
                 {saving ? (
@@ -591,7 +684,8 @@ const FormularioEntrada = ({
         </form>
       </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.getElementById('root')
   );
 };
 

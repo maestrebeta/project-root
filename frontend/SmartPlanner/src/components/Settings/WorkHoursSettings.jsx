@@ -54,7 +54,7 @@ export default function WorkHoursSettings() {
     try {
       const headers = getAuthHeaders();
       const response = await fetch(
-        `http://localhost:8000/organizations/${user.organization_id}/work-hours`,
+        `http://localhost:8001/organizations/${user.organization_id}/work-hours`,
         {
           method: 'GET',
           headers,
@@ -87,7 +87,7 @@ export default function WorkHoursSettings() {
     try {
       const headers = getAuthHeaders();
       const response = await fetch(
-        `http://localhost:8000/organizations/${user.organization_id}/work-hours`,
+        `http://localhost:8001/organizations/${user.organization_id}/work-hours`,
         {
           method: 'PUT',
           headers,

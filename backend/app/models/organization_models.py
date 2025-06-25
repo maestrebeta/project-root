@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, ForeignKey, Float, CheckConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -24,30 +24,13 @@ class Organization(Base):
     # Estados predeterminados del sistema
     DEFAULT_TASK_STATES = {
         "states": [
-            {
-                "id": "pendiente",
-                "label": "Pendiente",
-                "icon": "🔴",
-                "color": "red",
-                "isDefault": True
-            },
-            {
-                "id": "en_progreso",
-                "label": "En Progreso",
-                "icon": "🔵",
-                "color": "blue",
-                "isDefault": True
-            },
-            {
-                "id": "completada",
-                "label": "Completada",
-                "icon": "🟢",
-                "color": "green",
-                "isDefault": True
-            }
+            {"id": "pending", "label": "Pendiente", "icon": "🔴", "color": "red", "isDefault": True},
+            {"id": "in_progress", "label": "En Progreso", "icon": "🔵", "color": "blue", "isDefault": True},
+            {"id": "completed", "label": "Completada", "icon": "🟢", "color": "green", "isDefault": True},
+            {"id": "blocked", "label": "Bloqueada", "icon": "🟠", "color": "orange", "isDefault": False}
         ],
-        "default_state": "pendiente",
-        "final_states": ["completada"]
+        "default_state": "pending",
+        "final_states": ["completed"]
     }
 
     # Configuración de estados
@@ -68,7 +51,35 @@ class Organization(Base):
 
     # Relaciones
     users = relationship("User", back_populates="organization")
+    external_users = relationship("ExternalUser", back_populates="organization")
     clients = relationship("Client", back_populates="organization")
-    projects = relationship("Project", secondary="project_organizations", back_populates="organizations")
+    projects = relationship("Project", back_populates="organization")
     time_entries = relationship("TimeEntry", back_populates="organization")
     tickets = relationship("Ticket", back_populates="organization") 
+    ticket_categories = relationship("TicketCategory", back_populates="organization")
+    tasks = relationship("Task", back_populates="organization")
+    external_forms = relationship("ExternalForm", back_populates="organization")
+    ratings = relationship("OrganizationRating", back_populates="organization")
+
+class OrganizationRating(Base):
+    __tablename__ = "organization_ratings"
+    
+    rating_id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.organization_id"), nullable=False)
+    external_user_id = Column(Integer, ForeignKey("external_users.external_user_id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.client_id"), nullable=False)
+    rating = Column(Float, nullable=False)  # Calificación de 1 a 5
+    comment = Column(Text, nullable=True)
+    is_anonymous = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    
+    # Restricciones
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name='valid_rating_range'),
+    )
+    
+    # Relaciones
+    organization = relationship("Organization", back_populates="ratings")
+    external_user = relationship("ExternalUser", back_populates="ratings")
+    client = relationship("Client", back_populates="ratings") 

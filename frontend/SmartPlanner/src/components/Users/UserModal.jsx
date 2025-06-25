@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const SPECIALIZATIONS = {
@@ -82,7 +83,6 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
-  const [showSubSpecializations, setShowSubSpecializations] = useState(false);
   
   const [formData, setFormData] = useState({
     username: '',
@@ -161,7 +161,9 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
+      if (currentStep < 2) {
       setCurrentStep(currentStep + 1);
+      }
     }
   };
 
@@ -191,7 +193,6 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
       specialization,
       sub_specializations: [] // Reset sub-especializations cuando cambia la especialización
     }));
-    setShowSubSpecializations(true);
   };
 
   const handleSubSpecializationToggle = (subSpec) => {
@@ -200,16 +201,6 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
       sub_specializations: prev.sub_specializations.includes(subSpec)
         ? prev.sub_specializations.filter(s => s !== subSpec)
         : [...prev.sub_specializations, subSpec]
-    }));
-  };
-
-  const handleSkillChange = (skill, level) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: {
-        ...prev.skills,
-        [skill]: level
-      }
     }));
   };
 
@@ -223,7 +214,8 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
       const userData = {
         ...formData,
         hourly_rate: formData.hourly_rate ? parseInt(formData.hourly_rate) : null,
-        weekly_capacity: parseInt(formData.weekly_capacity)
+        weekly_capacity: parseInt(formData.weekly_capacity),
+        is_active: true // Siempre activo por defecto
       };
 
       if (user) {
@@ -455,70 +447,10 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
     </div>
   );
 
-  const renderStep3 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <div className="text-6xl mb-4">⚙️</div>
-        <h3 className="text-2xl font-bold text-gray-900">Configuración</h3>
-        <p className="text-gray-600">Capacidad y configuraciones adicionales</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Tarifa por Hora (USD)
-          </label>
-          <input
-            type="number"
-            name="hourly_rate"
-            value={formData.hourly_rate}
-            onChange={handleChange}
-            min="0"
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            placeholder="50"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Capacidad Semanal (horas)
-          </label>
-          <input
-            type="number"
-            name="weekly_capacity"
-            value={formData.weekly_capacity}
-            onChange={handleChange}
-            min="1"
-            max="60"
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            placeholder="40"
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-        <div>
-          <h4 className="font-medium text-gray-900">Usuario Activo</h4>
-          <p className="text-sm text-gray-600">El usuario puede acceder al sistema</p>
-        </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            name="is_active"
-            checked={formData.is_active}
-            onChange={handleChange}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-        </label>
-      </div>
-    </div>
-  );
-
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -544,9 +476,9 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
             </button>
           </div>
 
-          {/* Progress Steps */}
+          {/* Progress Steps - Solo 2 pasos */}
           <div className="flex items-center justify-center mt-6 space-x-8">
-            {[1, 2, 3].map((step) => (
+            {[1, 2].map((step) => (
               <div key={step} className="flex items-center">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
                   step <= currentStep 
@@ -555,7 +487,7 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
                 }`}>
                   {getStepIcon(step)}
                 </div>
-                {step < 3 && (
+                {step < 2 && (
                   <div className={`w-16 h-1 mx-2 ${
                     step < currentStep ? 'bg-white' : 'bg-blue-500'
                   }`} />
@@ -586,7 +518,6 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
             >
               {currentStep === 1 && renderStep1()}
               {currentStep === 2 && renderStep2()}
-              {currentStep === 3 && renderStep3()}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -602,7 +533,7 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
           </button>
 
           <div className="flex gap-3">
-            {currentStep < 3 ? (
+            {currentStep < 2 ? (
               <button
                 onClick={handleNext}
                 disabled={loading}
@@ -623,6 +554,7 @@ export default function UserModal({ user, onClose, onSave, isOpen }) {
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.getElementById('root')
   );
 } 

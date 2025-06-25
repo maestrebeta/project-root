@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PlanningBoard from "./PlanningBoard";
 import EpicModal from "./EpicModal";
 import KanbanStatesManager from "./KanbanStatesManager";
-import { useAppTheme } from "../../context/ThemeContext";
-import { v4 as uuidv4 } from 'uuid';
+import { useFocusMode } from "../../context/FocusModeContext";
 import { Routes, Route } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import { 
-  planningService, 
   epicService, 
   userStoryService, 
   projectService, 
@@ -21,12 +18,12 @@ import { createPortal } from 'react-dom';
 // Estados iniciales del kanban mejorados
 function getInitialKanbanStates() {
   return [
-    { id: 'backlog', label: 'Backlog', color: '#6B7280', icon: '📋', gradient: 'from-gray-400 to-gray-600' },
-    { id: 'todo', label: 'Por Hacer', color: '#3B82F6', icon: '📝', gradient: 'from-blue-400 to-blue-600' },
-    { id: 'in_progress', label: 'En Progreso', color: '#F59E0B', icon: '⚡', gradient: 'from-amber-400 to-orange-500' },
-    { id: 'in_review', label: 'En Revisión', color: '#8B5CF6', icon: '👀', gradient: 'from-purple-400 to-purple-600' },
-    { id: 'testing', label: 'Pruebas', color: '#EC4899', icon: '🧪', gradient: 'from-pink-400 to-pink-600' },
-    { id: 'done', label: 'Completado', color: '#10B981', icon: '✅', gradient: 'from-emerald-400 to-green-600' }
+    { id: 'backlog', label: 'Backlog', color: '#6B7280', icon: '📋', gradient: 'from-gray-400 to-gray-600', headerBg: 'bg-blue-100/80' },
+    { id: 'todo', label: 'Por Hacer', color: '#3B82F6', icon: '📝', gradient: 'from-blue-400 to-blue-600', headerBg: 'bg-yellow-100/80' },
+    { id: 'in_progress', label: 'En Progreso', color: '#F59E0B', icon: '⚡', gradient: 'from-amber-400 to-orange-500', headerBg: 'bg-emerald-100/80' },
+    { id: 'in_review', label: 'En Revisión', color: '#8B5CF6', icon: '👀', gradient: 'from-purple-400 to-purple-600', headerBg: 'bg-violet-100/80' },
+    { id: 'testing', label: 'Pruebas', color: '#EC4899', icon: '🧪', gradient: 'from-pink-400 to-pink-600', headerBg: 'bg-pink-100/80' },
+    { id: 'done', label: 'Completado', color: '#10B981', icon: '✅', gradient: 'from-emerald-400 to-green-600', headerBg: 'bg-gray-100/80' }
   ];
 }
 
@@ -193,7 +190,6 @@ export default function PlanningContainer() {
   const [users, setUsers] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedEpic, setSelectedEpic] = useState(null);
-  const [planningStats, setPlanningStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -212,8 +208,15 @@ export default function PlanningContainer() {
   const projectButtonRef = useRef(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 120, left: 24 });
 
-  const theme = useAppTheme();
-  const navigate = useNavigate();
+  const focusMode = useFocusMode();
+
+  // Efecto para contraer automáticamente el sidebar en modo enfoque
+  useEffect(() => {
+    if (focusMode.isFocusMode) {
+      console.log('🎯 Modo enfoque detectado: Contrayendo sidebar automáticamente');
+      setSidebarCollapsed(true);
+    }
+  }, [focusMode.isFocusMode]);
 
   // Calcular posición del dropdown
   const calculateDropdownPosition = () => {
@@ -296,7 +299,6 @@ export default function PlanningContainer() {
       // Cargar estadísticas de planificación
       const statsData = await planningStatsService.getPlanningStats();
       console.log('✅ Estadísticas cargadas:', statsData);
-      setPlanningStats(statsData);
       
       // Seleccionar el primer proyecto por defecto
       if (projectsData && projectsData.length > 0) {
@@ -652,7 +654,7 @@ export default function PlanningContainer() {
       totalStories: projectStories.length,
       completedStories: projectStories.filter(s => s.status === 'done').length,
       inProgressStories: projectStories.filter(s => s.status === 'in_progress').length,
-      totalHours: projectStories.reduce((sum, s) => sum + (s.development_hours || 0) + (s.ui_hours || 0) + (s.testing_hours || 0), 0),
+      totalHours: projectStories.reduce((sum, s) => sum + (Number(s.development_hours) || 0) + (Number(s.ui_hours) || 0) + (Number(s.testing_hours) || 0), 0),
       avgProgress: projectEpics.length > 0 ? projectEpics.reduce((sum, e) => sum + (e.progress_percentage || 0), 0) / projectEpics.length : 0
     };
   };
@@ -695,115 +697,115 @@ export default function PlanningContainer() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 overflow-hidden">
-      {/* HEADER ÉPICO Y DINÁMICO - OPTIMIZADO */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white border-b border-gray-200 shadow-sm"
-      >
-        <div className="w-full px-6 py-4">
-          <div className="flex items-center justify-between w-full gap-4">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <motion.div 
-                className="relative project-selector-container"
-                whileHover={{ scale: 1.02 }}
-              >
-                <button
-                  ref={projectButtonRef}
-                  onClick={() => {
-                    calculateDropdownPosition();
-                    setShowProjectSelector(!showProjectSelector);
-                  }}
-                  className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 group min-w-[280px]"
+      {/* HEADER ÉPICO Y DINÁMICO - SOLO VISIBLE CUANDO NO HAY ÉPICAS */}
+      {selectedProject && getFilteredEpics().length === 0 && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white border-b border-gray-200 shadow-sm"
+        >
+          <div className="w-full px-6 py-4">
+            <div className="flex items-center justify-between w-full gap-4">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <motion.div 
+                  className="relative project-selector-container"
+                  whileHover={{ scale: 1.02 }}
                 >
-                  <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FiTarget className="w-3 h-3" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <div className="font-semibold text-sm truncate">{selectedProject?.name || 'Seleccionar Proyecto'}</div>
-                  </div>
-                  <FiChevronDown className={`w-4 h-4 transition-transform duration-300 flex-shrink-0 ${showProjectSelector ? 'rotate-180' : ''}`} />
-                </button>
+                  <button
+                    ref={projectButtonRef}
+                    onClick={() => {
+                      calculateDropdownPosition();
+                      setShowProjectSelector(!showProjectSelector);
+                    }}
+                    className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 group min-w-[280px]"
+                  >
+                    <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FiTarget className="w-3 h-3" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <div className="font-semibold text-sm truncate">{selectedProject?.name || 'Seleccionar Proyecto'}</div>
+                    </div>
+                    <FiChevronDown className={`w-4 h-4 transition-transform duration-300 flex-shrink-0 ${showProjectSelector ? 'rotate-180' : ''}`} />
+                  </button>
 
-                {/* Dropdown de proyectos como Portal */}
-                {showProjectSelector && createPortal(
-                  <AnimatePresence key="project-selector-dropdown">
-                    {/* Backdrop que cierra el dropdown */}
-                    <motion.div
-                      key="backdrop"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-[999998] bg-black/10"
-                      onClick={() => setShowProjectSelector(false)}
-                    />
-                    
-                    {/* Dropdown */}
-                    <motion.div
-                      key="dropdown"
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="fixed z-[999999] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
-                      data-dropdown="project-selector"
-                      onClick={(e) => e.stopPropagation()} // Evitar que el click se propague al backdrop
-                      style={{
-                        top: `${dropdownPosition.top}px`,
-                        left: `${dropdownPosition.left}px`,
-                        width: '320px',
-                        maxHeight: '400px',
-                        zIndex: 999999
-                      }}
-                    >
-                      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b">
-                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                          <FiZap className="w-4 h-4 text-blue-600" />
-                          Cambiar Proyecto
-                        </h3>
-                      </div>
-                      <div className="max-h-64 overflow-y-auto">
-                        {projects.map(project => (
-                          <motion.button
-                            key={`project-${project.project_id}`}
-                            whileHover={{ backgroundColor: '#f8fafc' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              console.log('🖱️ Click en proyecto:', project.name);
-                              handleProjectChange(project);
-                              setShowProjectSelector(false);
-                            }}
-                            className="w-full p-4 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="font-medium text-gray-900">{project.name}</div>
-                                <div className="text-sm text-gray-500 mt-1">{project.description}</div>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    project.priority === 'high' ? 'bg-red-100 text-red-700' :
-                                    project.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                    'bg-green-100 text-green-700'
-                                  }`}>
-                                    {project.priority === 'high' ? 'Alta' : project.priority === 'medium' ? 'Media' : 'Baja'}
-                                  </span>
-                                  <span className="text-xs text-gray-500">{project.progress || 0}% completado</span>
+                  {/* Dropdown de proyectos como Portal */}
+                  {showProjectSelector && createPortal(
+                    <AnimatePresence key="project-selector-dropdown">
+                      {/* Backdrop que cierra el dropdown */}
+                      <motion.div
+                        key="backdrop"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[999998] bg-black/10"
+                        onClick={() => setShowProjectSelector(false)}
+                      />
+                      
+                      {/* Dropdown */}
+                      <motion.div
+                        key="dropdown"
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="fixed z-[999999] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
+                        data-dropdown="project-selector"
+                        onClick={(e) => e.stopPropagation()} // Evitar que el click se propague al backdrop
+                        style={{
+                          top: `${dropdownPosition.top}px`,
+                          left: `${dropdownPosition.left}px`,
+                          width: '320px',
+                          maxHeight: '400px',
+                          zIndex: 999999
+                        }}
+                      >
+                        <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b">
+                          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                            <FiZap className="w-4 h-4 text-blue-600" />
+                            Cambiar Proyecto
+                          </h3>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {projects.map(project => (
+                            <motion.button
+                              key={`project-${project.project_id}`}
+                              whileHover={{ backgroundColor: '#f8fafc' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                console.log('🖱️ Click en proyecto:', project.name);
+                                handleProjectChange(project);
+                                setShowProjectSelector(false);
+                              }}
+                              className="w-full p-4 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="font-medium text-gray-900">{project.name}</div>
+                                  <div className="text-sm text-gray-500 mt-1">{project.description}</div>
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      project.priority === 'high' ? 'bg-red-100 text-red-700' :
+                                      project.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-green-100 text-green-700'
+                                    }`}>
+                                      {project.priority === 'high' ? 'Alta' : project.priority === 'medium' ? 'Media' : 'Baja'}
+                                    </span>
+                                    <span className="text-xs text-gray-500">{project.progress || 0}% completado</span>
+                                  </div>
                                 </div>
+                                {selectedProject?.project_id === project.project_id && (
+                                  <FiStar className="w-5 h-5 text-yellow-500 fill-current" />
+                                )}
                               </div>
-                              {selectedProject?.project_id === project.project_id && (
-                                <FiStar className="w-5 h-5 text-yellow-500 fill-current" />
-                              )}
-                            </div>
-                          </motion.button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </AnimatePresence>,
-                  document.body
-                )}
-              </motion.div>
+                            </motion.button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>,
+                    document.body
+                  )}
+                </motion.div>
 
-              {/* Estadísticas rápidas compactas */}
-              {selectedProject && (
+                {/* Estadísticas rápidas compactas - Solo se muestran cuando no hay épicas */}
                 <motion.div 
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -827,52 +829,52 @@ export default function PlanningContainer() {
                     <span>progreso</span>
                   </div>
                 </motion.div>
-              )}
-            </div>
-
-            {/* Acciones principales */}
-            <div className="flex items-center gap-3 flex-shrink-0">
-              {/* Selector de vista */}
-              <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('kanban')}
-                  className={`p-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                    viewMode === 'kanban' 
-                      ? 'bg-white text-blue-600 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                  title="Vista Kanban"
-                >
-                  <FiGrid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                    viewMode === 'list' 
-                      ? 'bg-white text-blue-600 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                  title="Vista Lista"
-                >
-                  <FiList className="w-4 h-4" />
-                </button>
               </div>
 
-              {/* Botón nueva épica */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleNewEpic}
-                disabled={!selectedProject}
-                className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2.5 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                <FiPlus className="w-4 h-4" />
-                Nueva Épica
-              </motion.button>
+              {/* Acciones principales */}
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {/* Selector de vista */}
+                <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode('kanban')}
+                    className={`p-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      viewMode === 'kanban' 
+                        ? 'bg-white text-blue-600 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                    title="Vista Kanban"
+                  >
+                    <FiGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      viewMode === 'list' 
+                        ? 'bg-white text-blue-600 shadow-sm' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                    title="Vista Lista"
+                  >
+                    <FiList className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Botón nueva épica */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleNewEpic}
+                  disabled={!selectedProject}
+                  className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2.5 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  Nueva Épica
+                </motion.button>
+              </div>
             </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Contenido principal */}
       <div className="flex-1 overflow-hidden">
@@ -889,6 +891,7 @@ export default function PlanningContainer() {
           onEpicSelect={handleEpicSelect}
           onEditEpic={handleEditEpicModal}
           onNewEpic={handleNewEpic}
+          onProjectChange={handleProjectChange}
           kanbanStates={kanbanStates}
           onEditKanbanStates={handleUpdateKanbanStates}
           filters={filters}
