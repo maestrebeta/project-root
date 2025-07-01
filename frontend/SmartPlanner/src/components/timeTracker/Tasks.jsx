@@ -16,7 +16,7 @@ const TimeTracker = () => {
   const [editTask, setEditTask] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const theme = useAppTheme();
-  const { states: organizationStates, loading: statesLoading } = useOrganizationStates();
+  const { taskStates: organizationStates, loading: statesLoading } = useOrganizationStates();
   const { activityTypes, suggestedActivity } = useProjectsAndTags();
 
   // Cargar tareas
@@ -39,7 +39,6 @@ const TimeTracker = () => {
       }
 
       const data = await response.json();
-      console.log('Tareas cargadas:', data);
       setTasks(data);
       } catch (err) {
       console.error('Error al cargar tareas:', err);
@@ -69,7 +68,6 @@ const TimeTracker = () => {
 
   // Eliminar tarea
   const handleDelete = useCallback(async (taskId) => {
-    console.log('Intentando eliminar tarea con ID:', taskId);
     
     if (!taskId) {
       console.error('ID de tarea inválido:', taskId);
@@ -86,8 +84,6 @@ const TimeTracker = () => {
       if (!session?.token) {
         throw new Error('No hay sesión activa');
       }
-
-      console.log('Enviando petición DELETE a:', `http://localhost:8001/time-entries/${taskId}`);
       
       const response = await fetch(`http://localhost:8001/time-entries/${taskId}`, {
         method: 'DELETE',
@@ -103,7 +99,6 @@ const TimeTracker = () => {
       }
 
       setTasks(prev => prev.filter(task => task.entry_id !== taskId));
-      console.log('Tarea eliminada exitosamente:', taskId);
     } catch (err) {
       console.error('Error al eliminar tarea:', err);
       setError(err.message);
@@ -138,7 +133,6 @@ const TimeTracker = () => {
       }
 
       const savedTask = await response.json();
-      console.log('Tarea guardada:', savedTask);
 
       setTasks(prev => {
         if (editTask) {

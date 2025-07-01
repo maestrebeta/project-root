@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { motion } from 'framer-motion';
+import { FiCalendar, FiPlus } from 'react-icons/fi';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
+import { useActivityCategories } from "./useProjectsAndTags.jsx";
 
 // Estados predeterminados para las tareas
 const STATUS_ICONS = {
@@ -16,7 +19,14 @@ const STATUS_ORDER = [
   "completada"
 ];
 
-function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates }) {
+function TasksTable({ 
+  tasks: initialTasks, 
+  onEdit, 
+  onDelete, 
+  organizationStates,
+  onCalendarEntry,
+  onManualEntry
+}) {
   const theme = useAppTheme();
   const [tasks, setTasks] = useState(initialTasks || []);
   const [projects, setProjects] = useState([]);
@@ -26,6 +36,11 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState(null);
   const [collapsed, setCollapsed] = useState({});
+
+  const {
+    categories: activityCategories,
+    loading: categoriesLoading
+  } = useActivityCategories();
 
   // Actualizar tareas cuando cambien las props o los estados
   useEffect(() => {
@@ -223,7 +238,6 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
 
   // Eliminar tarea
   const handleDelete = (taskId, description) => {
-    console.log('TasksTable - Intentando eliminar tarea:', { taskId, description });
     
     if (!taskId || isNaN(taskId)) {
       console.error('TasksTable - ID de tarea inválido:', taskId);
@@ -390,6 +404,38 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
 
   return (
     <div className="overflow-x-auto">
+      {/* Header con título y botones */}
+      <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100 mb-8">
+        <div className="px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Registro de Tiempo</h2>
+              <p className="text-indigo-100">Gestiona tus horas trabajadas</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="hidden md:flex items-center bg-white/20 backdrop-blur-sm border border-white/30 text-white px-4 py-2 rounded-lg shadow-sm text-sm font-medium hover:bg-white/30 focus:outline-none transition-all duration-200"
+                onClick={onCalendarEntry}
+              >
+                <FiCalendar className="mr-2" />
+                Entrada Calendario
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="flex items-center bg-white text-indigo-600 px-4 py-2 rounded-lg shadow-sm text-sm font-medium hover:bg-gray-50 focus:outline-none transition-all duration-200"
+                onClick={onManualEntry}
+              >
+                <FiPlus className="mr-2" />
+                Entrada manual
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-4 gap-2">
         <h2 className="text-lg font-bold text-gray-700">Tareas Registradas</h2>
         <button
@@ -425,12 +471,11 @@ function TasksTable({ tasks: initialTasks, onEdit, onDelete, organizationStates 
             required
           >
             <option value="" disabled hidden>Tipo de actividad</option>
-            <option value="development">Desarrollo</option>
-            <option value="support">Soporte</option>
-            <option value="meeting">Reunión</option>
-            <option value="documentation">Documentación</option>
-            <option value="training">Capacitación</option>
-            <option value="other">Otra</option>
+            {activityCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
           </select>
           {/* project_id */}
           <select

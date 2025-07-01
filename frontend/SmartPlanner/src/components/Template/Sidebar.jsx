@@ -33,19 +33,18 @@ const Sidebar = ({ collapsed, onMenuClick }) => {
   }, [collapsed]);
 
   // Efecto para contraer automáticamente el sidebar cuando se active el modo enfoque
+  // NOTA: Esta lógica se maneja principalmente en App.jsx, aquí solo como respaldo
   useEffect(() => {
     if (isFocusMode && !collapsed) {
       // Solo contraer si el modo enfoque se acaba de activar y el sidebar no está colapsado
-      // Usar un ref para evitar contraer múltiples veces
+      // Usar sessionStorage para evitar contraer múltiples veces
       const hasContracted = sessionStorage.getItem('focusModeSidebarContracted');
       if (!hasContracted) {
         onMenuClick();
         sessionStorage.setItem('focusModeSidebarContracted', 'true');
       }
-    } else if (!isFocusMode) {
-      // Limpiar el flag cuando se desactiva el modo enfoque
-      sessionStorage.removeItem('focusModeSidebarContracted');
     }
+    // NOTA: No limpiamos el flag aquí, se maneja en App.jsx y FocusModeContext
   }, [isFocusMode, collapsed, onMenuClick]);
 
   const handleLogout = () => {

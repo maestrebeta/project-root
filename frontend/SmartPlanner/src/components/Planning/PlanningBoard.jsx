@@ -12,6 +12,7 @@ import {
 export default function PlanningBoard({
   epics,
   stories,
+  allProjectStories = [], // Todas las historias del proyecto para el sidebar
   users,
   projects,
   selectedProject,
@@ -35,9 +36,7 @@ export default function PlanningBoard({
   // Estados locales
   const [selectedStory, setSelectedStory] = useState(null);
   
-  // Debug: Log cuando cambia selectedStory
   useEffect(() => {
-    console.log('🔍 selectedStory cambió:', selectedStory);
   }, [selectedStory]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -97,29 +96,44 @@ export default function PlanningBoard({
 
   // Manejar creación rápida
   const handleQuickCreate = async (status) => {
-    console.log('🚀 handleQuickCreate llamado con status:', status);
-    console.log('🚀 onCreateStory función:', typeof onCreateStory);
+    
+    // Verificar que kanbanStates sea un array
+    if (!Array.isArray(kanbanStates)) {
+      console.warn('⚠️ kanbanStates no es un array en handleQuickCreate:', kanbanStates);
+      return;
+    }
     
     // Encontrar la configuración del estado para obtener el label correcto
     const statusConfig = kanbanStates.find(s => 
       s.id === status || s.key === status || s.label === status
     );
     
+    // Convertir el ID numérico a la clave del estado para el backend
+    let statusKey = status;
+    if (typeof status === 'number') {
+      // Si es un ID numérico, buscar la clave correspondiente
+      const stateConfig = kanbanStates.find(s => s.id === status);
+      if (stateConfig && stateConfig.key) {
+        statusKey = stateConfig.key;
+      } else {
+        console.warn('⚠️ No se encontró configuración para el ID:', status);
+        // Fallback: usar el ID como string
+        statusKey = status.toString();
+      }
+    }
+    
     const newStory = {
       title: `Nueva historia en ${statusConfig?.label || status}`,
       description: `Historia creada rápidamente en la columna ${statusConfig?.label || status}`,
-      status: status, // Usar el estado exacto de la columna
+      status: statusKey, // Usar la clave del estado, no el ID numérico
       priority: 'medium',
       estimated_hours: 1,
       specialization: 'development'
     };
     
-    console.log('🚀 Creando historia con estado:', status, newStory);
-    
     if (typeof onCreateStory === 'function') {
       try {
         await onCreateStory(newStory);
-        console.log('✅ Historia creada exitosamente desde creación rápida');
       } catch (error) {
         console.error('❌ Error en creación rápida:', error);
         // El error ya se maneja en PlanningContainer, no necesitamos hacer nada más aquí
@@ -131,7 +145,6 @@ export default function PlanningBoard({
 
   // Manejar click en historia
   const handleStoryClick = (story) => {
-    console.log('🔄 Historia seleccionada:', story);
     setSelectedStory(story);
   };
 
@@ -256,7 +269,7 @@ export default function PlanningBoard({
               epics={epics}
               selectedEpic={selectedEpic}
               onSelectEpic={onEpicSelect}
-              stories={filteredStories}
+              stories={allProjectStories}
               onNewEpic={onNewEpic}
               onEditEpic={onEditEpic}
               searchTerm={searchTerm}
@@ -440,8 +453,8 @@ export default function PlanningBoard({
                       onChange={(e) => onFilterChange({ ...filters, status: e.target.value || undefined })}
                     >
                       <option value="">Todos</option>
-                      {kanbanStates.map(state => (
-                        <option key={state.key || state.id || state.label} value={state.key || state.id}>
+                      {Array.isArray(kanbanStates) && kanbanStates.map(state => (
+                        <option key={state.id || state.label} value={state.id}>
                           {state.label}
                         </option>
                       ))}
@@ -478,6 +491,7 @@ export default function PlanningBoard({
                 users={users}
                 onStoryClick={handleStoryClick}
                 setStories={setStories}
+                onUpdateStory={onUpdateStory}
                 onQuickCreate={handleQuickCreate}
                 kanbanStates={kanbanStates}
               />
@@ -524,7 +538,7 @@ export default function PlanningBoard({
                               story.status === 'in_review' ? 'bg-purple-100 text-purple-800' :
                               'bg-gray-100 text-gray-800'
                             }`}>
-                              {kanbanStates.find(s => s.id === story.status)?.label || story.status}
+                              {Array.isArray(kanbanStates) ? kanbanStates.find(s => s.id === story.status)?.label || story.status : story.status}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -577,13 +591,13 @@ export default function PlanningBoard({
                   exit={{ scale: 0, opacity: 0 }}
                   className="flex flex-col gap-2 mb-2"
                 >
-                  {kanbanStates.slice(0, 3).map(state => (
+                  {Array.isArray(kanbanStates) && kanbanStates.slice(0, 3).map(state => (
                     <motion.button
-                      key={state.key || state.id || state.label}
+                      key={state.id || state.label}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => {
-                        handleQuickCreate(state.key || state.id);
+                        handleQuickCreate(state.id);
                         setQuickCreateMode(false);
                       }}
                       className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-lg border border-gray-200 text-sm font-medium hover:shadow-xl transition-all duration-200"
@@ -619,7 +633,6 @@ export default function PlanningBoard({
           onClose={() => setSelectedStory(null)}
           onSave={handleSaveStory}
           onDelete={(story) => {
-            console.log('🗑️ Eliminando historia:', story);
             // Actualizar el estado local
             setStories(prev => prev.filter(s => (s.story_id || s.id) !== (story.story_id || story.id)));
             setSelectedStory(null);

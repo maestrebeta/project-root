@@ -20,11 +20,6 @@ const QuickPaymentModal = ({ isOpen, onClose, installment, onPaymentUpdate }) =>
         payment_reference: paymentReference || null
       };
       
-      console.log('Sending payment update request:', {
-        installment_id: installment.installment_id,
-        body: requestBody
-      });
-      
       const response = await fetch(`http://localhost:8001/projects/quotations/installments/${installment.installment_id}/payment`, {
         method: 'PUT',
         headers: {
@@ -36,7 +31,6 @@ const QuickPaymentModal = ({ isOpen, onClose, installment, onPaymentUpdate }) =>
 
       if (response.ok) {
         const updatedInstallment = await response.json();
-        console.log('Payment update successful:', updatedInstallment);
         onPaymentUpdate(updatedInstallment);
         onClose();
       } else {
@@ -280,7 +274,6 @@ export default function Quotations({
       ]);
       
       // Cargar proyectos por separado para poder usarlos inmediatamente
-      console.log('📊 Loading projects...');
       const session = JSON.parse(localStorage.getItem('session'));
       const projectsResponse = await fetch('http://localhost:8001/projects/', {
         headers: {
@@ -291,7 +284,6 @@ export default function Quotations({
       
       if (projectsResponse.ok) {
         const projectsData = await projectsResponse.json();
-        console.log('📊 Projects loaded:', projectsData);
         
         // Cargar cotizaciones después de tener los proyectos
         await fetchAllProjectQuotations(projectsData);
@@ -696,10 +688,13 @@ export default function Quotations({
                                 <div className="flex items-center space-x-2">
                                   <button
                                     onClick={() => toggleQuotationExpansion(quotation.quotation_id)}
-                                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors flex items-center gap-1"
                                     title={expandedQuotations.has(quotation.quotation_id) ? 'Ocultar cuotas' : 'Ver cuotas'}
                                   >
                                     <FiEye className="w-4 h-4" />
+                                    <span className="text-sm">
+                                      {expandedQuotations.has(quotation.quotation_id) ? 'Ocultar cuotas' : 'Ver cuotas'}
+                                    </span>
                                   </button>
                   <button
                                   onClick={() => {

@@ -87,10 +87,6 @@ export default function TaskModal({
       newErrors.assigned_to = 'Debe asignar la tarea a un usuario';
     }
 
-    if (formData.due_date && new Date(formData.due_date) < new Date()) {
-      newErrors.due_date = 'La fecha de vencimiento no puede ser en el pasado';
-    }
-
     if (formData.estimated_hours && (isNaN(formData.estimated_hours) || formData.estimated_hours <= 0)) {
       newErrors.estimated_hours = 'Las horas estimadas deben ser un número positivo';
     }
@@ -109,15 +105,12 @@ export default function TaskModal({
       if (!formData.description.trim()) {
         stepErrors.description = 'La descripción es obligatoria';
       }
-      if (!formData.assigned_to) {
+      if (!formData.assigned_to || formData.assigned_to === '') {
         stepErrors.assigned_to = 'Debe asignar la tarea a un usuario';
       }
     }
 
     if (step === 2) {
-      if (formData.due_date && new Date(formData.due_date) < new Date()) {
-        stepErrors.due_date = 'La fecha de vencimiento no puede ser en el pasado';
-      }
       if (formData.estimated_hours && (isNaN(formData.estimated_hours) || formData.estimated_hours <= 0)) {
         stepErrors.estimated_hours = 'Las horas estimadas deben ser un número positivo';
       }
@@ -176,6 +169,52 @@ export default function TaskModal({
     }
   };
 
+  // Manejar el envío del formulario
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    
+    // Si estamos en el primer paso, ir al siguiente en lugar de guardar
+    if (currentStep === 1) {
+      handleNext();
+      return;
+    }
+    
+    // Si estamos en el segundo paso, guardar la tarea
+    handleSubmit(e);
+  };
+
+  // Manejar clic en botón Siguiente
+  const handleNextClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleNext();
+  };
+
+  // Manejar clic en el backdrop
+  const handleBackdropClick = (e) => {
+    onClose();
+  };
+
+  // Manejar clic en el botón X
+  const handleCloseClick = () => {
+    onClose();
+  };
+
+  // Manejar clic en el botón Cancelar
+  const handleCancelClick = () => {
+    onClose();
+  };
+
+  // Manejar clic en el botón Anterior
+  const handlePreviousClick = () => {
+    handlePrevious();
+  };
+
+  // Manejar clic en el botón Crear/Actualizar
+  const handleSaveClick = (e) => {
+    handleSubmit(e);
+  };
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -185,7 +224,7 @@ export default function TaskModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleBackdropClick}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -211,7 +250,7 @@ export default function TaskModal({
                 </div>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleCloseClick}
                 className="p-2 hover:bg-white/20 rounded-lg transition-colors duration-200"
               >
                 <FiX className="w-6 h-6" />
@@ -248,7 +287,9 @@ export default function TaskModal({
 
           {/* Contenido del modal */}
           <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={(e) => {
+              handleFormSubmit(e);
+            }} className="space-y-6">
               <AnimatePresence mode="wait">
                 {currentStep === 1 && (
                   <motion.div
@@ -493,7 +534,7 @@ export default function TaskModal({
                   {currentStep > 1 && (
                     <button
                       type="button"
-                      onClick={handlePrevious}
+                      onClick={handlePreviousClick}
                       className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium"
                     >
                       Anterior
@@ -504,7 +545,7 @@ export default function TaskModal({
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={handleCancelClick}
                     className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium"
                   >
                     Cancelar
@@ -513,7 +554,7 @@ export default function TaskModal({
                   {currentStep < 2 ? (
                     <button
                       type="button"
-                      onClick={handleNext}
+                      onClick={handleNextClick}
                       className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-200 font-medium flex items-center gap-2"
                     >
                       Siguiente
@@ -522,6 +563,9 @@ export default function TaskModal({
                   ) : (
                     <button
                       type="submit"
+                      onClick={(e) => {
+                        handleSaveClick(e);
+                      }}
                       className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-200 font-medium flex items-center gap-2 shadow-lg"
                     >
                       <FiCheck className="w-4 h-4" />

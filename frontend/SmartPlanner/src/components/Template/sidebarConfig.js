@@ -30,7 +30,7 @@ export const sidebarItems = [
       },
       {
         icon: FiBriefcase,
-        text: "Consola Admin",
+        text: "Administrador",
         children: [
           { icon: FiUsers, text: "Gestión Clientes", to: "/admin/customers" },
           { icon: FiUser, text: "Gestión Usuarios", to: "/admin/users" },

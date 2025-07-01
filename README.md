@@ -174,7 +174,7 @@ Docs BIL/
 DATABASE_URL=postgresql://user:password@localhost/smartplanner_db
 SECRET_KEY=your-secret-key-here
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ```
 
 **Frontend (.env)**

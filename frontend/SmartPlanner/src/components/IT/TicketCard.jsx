@@ -15,6 +15,7 @@ export default function TicketCard({
   getUserName, 
   getClientName,
   getProjectName,
+  getDaysOpen,
   ticketStatuses, 
   ticketPriorities 
 }) {
@@ -48,61 +49,89 @@ export default function TicketCard({
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'nuevo': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'en_progreso': return 'bg-orange-100 text-orange-700 border-orange-200';
-      case 'cerrado': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'nuevo': return 'bg-blue-100 text-blue-800';
+      case 'en_progreso': return 'bg-yellow-100 text-yellow-800';
+      case 'cerrado': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'baja': return 'bg-green-100 text-green-700 border-green-200';
-      case 'media': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'alta': return 'bg-red-100 text-red-700 border-red-200';
-      case 'critica': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'baja': return 'bg-green-100 text-green-800';
+      case 'media': return 'bg-yellow-100 text-yellow-800';
+      case 'alta': return 'bg-red-100 text-red-800';
+      case 'critica': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const isOverdue = () => {
-    if (!ticket.due_date || ticket.status === 'cerrado') return false;
-    const dueDate = new Date(ticket.due_date);
-    const today = new Date();
-    return dueDate < today;
+  // Obtener texto descriptivo para los días
+  const getDaysText = (days) => {
+    if (days === 0) return 'Hoy';
+    if (days === 1) return '1 día';
+    if (days < 7) return `${days} días`;
+    if (days < 30) return `${Math.floor(days / 7)} semana${Math.floor(days / 7) > 1 ? 's' : ''}`;
+    if (days < 365) return `${Math.floor(days / 30)} mes${Math.floor(days / 30) > 1 ? 'es' : ''}`;
+    return `${Math.floor(days / 365)} año${Math.floor(days / 365) > 1 ? 's' : ''}`;
   };
 
-  const getDaysUntilDue = () => {
-    if (!ticket.due_date) return null;
-    const dueDate = new Date(ticket.due_date);
-    const today = new Date();
-    const diffTime = dueDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+  // Obtener color para los días según el tiempo
+  const getDaysColor = (days, status) => {
+    if (status === 'cerrado') return 'text-green-600 bg-green-50';
+    if (days <= 1) return 'text-green-600 bg-green-50';
+    if (days <= 3) return 'text-blue-600 bg-blue-50';
+    if (days <= 7) return 'text-yellow-600 bg-yellow-50';
+    if (days <= 30) return 'text-orange-600 bg-orange-50';
+    return 'text-red-600 bg-red-50';
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 overflow-hidden h-full flex flex-col">
       {/* Header del ticket */}
-      <div className="p-6 border-b border-gray-100">
+      <div className="p-6 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-lg font-bold text-gray-900 line-clamp-2 flex-1 mr-3">
+                {ticket.title}
+              </h3>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Prioridad */}
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(ticket.priority)}`}>
+                  <span>{getPriorityInfo(ticket.priority).icon}</span>
+                  {getPriorityInfo(ticket.priority).label}
+                </span>
+                {/* Días abiertos */}
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getDaysColor(getDaysOpen(ticket), ticket.status)}`}>
+                  <FiClock className="w-3 h-3" />
+                  {ticket.status === 'cerrado' ? 'Resuelto en' : 'Abierto'} {getDaysText(getDaysOpen(ticket))}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 mb-3">
               <span className="text-sm font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
                 {ticket.ticket_number}
               </span>
-              {isOverdue() && (
-                <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
-                  Vencido
+            </div>
+            
+            <p className="text-sm text-gray-600 line-clamp-2 min-h-[2.5rem] mb-3">
+              {ticket.description}
+            </p>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(ticket.status)}`}>
+                <span>{getStatusInfo(ticket.status).icon}</span>
+                {getStatusInfo(ticket.status).label}
+              </span>
+              {ticket.category_rel && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-700 border-gray-200">
+                  <span>{ticket.category_rel.icon}</span>
+                  {ticket.category_rel.name}
                 </span>
               )}
             </div>
-            <h3 className="text-lg font-bold text-gray-900 line-clamp-2 mb-2">
-              {ticket.title}
-            </h3>
-            <p className="text-sm text-gray-600 line-clamp-2">
-              {ticket.description}
-            </p>
           </div>
           
           {/* Menú de acciones */}
@@ -157,30 +186,12 @@ export default function TicketCard({
           </div>
         </div>
 
-        {/* Estados y prioridades */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(ticket.status)}`}>
-            <span>{getStatusInfo(ticket.status).icon}</span>
-            {getStatusInfo(ticket.status).label}
-          </span>
-          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(ticket.priority)}`}>
-            <span>{getPriorityInfo(ticket.priority).icon}</span>
-            {getPriorityInfo(ticket.priority).label}
-          </span>
-          {ticket.category_rel && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-700 border-gray-200">
-              <span>{ticket.category_rel.icon}</span>
-              {ticket.category_rel.name}
-            </span>
-          )}
-        </div>
-
         {/* Información básica */}
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center gap-2 text-gray-600">
             <FiUser className="w-4 h-4" />
             <span className="truncate">
-              {ticket.assigned_to_user_id ? getUserName(ticket.assigned_to_user_id) : 'Sin asignar'}
+              {ticket.assigned_to_user_id ? getUserName(ticket.assigned_to_user_id, null, null) : 'Sin asignar'}
             </span>
           </div>
           <div className="flex items-center gap-2 text-gray-600">
@@ -214,31 +225,11 @@ export default function TicketCard({
               </div>
 
               {/* Fechas */}
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Creado</label>
                   <div className="flex items-center gap-2 text-sm text-gray-700">
                     <FiCalendar className="w-4 h-4" />
                     <span>{formatDate(ticket.created_at)}</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Vencimiento</label>
-                  <div className="flex items-center gap-2 text-sm">
-                    <FiClock className="w-4 h-4" />
-                    {ticket.due_date ? (
-                      <span className={isOverdue() ? 'text-red-600 font-medium' : 'text-gray-700'}>
-                        {formatDate(ticket.due_date)}
-                        {!isOverdue() && getDaysUntilDue() !== null && (
-                          <span className="ml-1 text-xs text-gray-500">
-                            ({getDaysUntilDue()} días)
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="text-gray-500">No definida</span>
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -247,7 +238,7 @@ export default function TicketCard({
                 <label className="block text-xs font-medium text-gray-500 mb-1">Reportado por</label>
                 <div className="flex items-center gap-2 text-sm text-gray-700">
                   <FiUser className="w-4 h-4" />
-                  <span>{getUserName(ticket.reported_by_user_id)}</span>
+                  <span>{getUserName(ticket.reported_by_user_id, ticket.external_user_id, ticket.contact_name)}</span>
                 </div>
               </div>
 
@@ -258,6 +249,49 @@ export default function TicketCard({
                   {ticket.description}
                 </p>
               </div>
+
+              {/* Archivos adjuntos */}
+              {ticket.attachments && ticket.attachments.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Archivos adjuntos</label>
+                  <div className="space-y-2">
+                    {ticket.attachments.map((attachment, index) => (
+                      <div key={attachment.id || index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-100 rounded-lg">
+                            <FiExternalLink className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{attachment.original_name}</p>
+                            <p className="text-xs text-gray-500">
+                              {attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : 'Tamaño desconocido'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => window.open(`http://localhost:8001/uploads/attachments/${attachment.filename}`, '_blank')}
+                            className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                          >
+                            Ver
+                          </button>
+                          <button
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = `http://localhost:8001/uploads/attachments/${attachment.filename}`;
+                              link.download = attachment.original_name;
+                              link.click();
+                            }}
+                            className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                          >
+                            Descargar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Botones de cambio de estado flexibles */}
               {canManage && (
@@ -302,7 +336,7 @@ export default function TicketCard({
       </AnimatePresence>
 
       {/* Footer con acciones rápidas */}
-      <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+      <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button

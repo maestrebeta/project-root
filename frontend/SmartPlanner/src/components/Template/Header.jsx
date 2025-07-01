@@ -255,8 +255,14 @@ export default function Header({ onMenuClick }) {
   // Cerrar menús al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (!event.target.closest('.user-menu') && !event.target.closest('.notifications-menu')) {
+      // Para el menú de usuario
+      if (!event.target.closest('.user-menu')) {
         setShowUserMenu(false);
+      }
+      
+      // Para el panel de notificaciones - solo cerrar si se hace clic fuera del panel completo
+      // No cerrar si se hace clic en botones dentro del panel
+      if (!event.target.closest('.notifications-menu') && !event.target.closest('.notifications-panel')) {
         setShowNotifications(false);
       }
     };

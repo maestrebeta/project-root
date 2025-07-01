@@ -79,17 +79,14 @@ export default function UsersTable() {
       }
       
       const data = await response.json();
-      console.log('Usuarios obtenidos del backend:', data);
-      console.log('Usuario actual es super_user:', isSuperUser);
       
-      // Filtrar usuarios según el rol del usuario actual
+      // Los usuarios ya vienen filtrados por organización desde el backend
+      // Solo aplicar filtros adicionales si es necesario
       let filteredUsers = data;
+      
+      // Si no es super_user, ocultar otros super_users de la misma organización
       if (!isSuperUser) {
-        // Si no es super_user, ocultar otros super_users
         filteredUsers = data.filter(user => user.role !== 'super_user');
-        console.log('Usuarios filtrados (no super_user):', filteredUsers);
-      } else {
-        console.log('Mostrando todos los usuarios (incluyendo super_users)');
       }
       
       setUsers(filteredUsers);
@@ -195,7 +192,6 @@ export default function UsersTable() {
       }
 
       const responseData = await response.json();
-      console.log('Respuesta exitosa:', responseData);
 
       // Si es una edición, actualizar el usuario en el estado local inmediatamente
       if (editId) {
@@ -237,7 +233,6 @@ export default function UsersTable() {
       }
       
       const updatedUserData = await response.json();
-      console.log('Datos actualizados del usuario:', updatedUserData);
       
       setForm({
         username: updatedUserData.username || '',

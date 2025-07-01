@@ -53,7 +53,6 @@ export default function ExternalUsers() {
   const fetchExternalUsers = async () => {
     try {
       const session = JSON.parse(localStorage.getItem('session'));
-      console.log('🔍 Fetching external users...');
       
       const response = await fetch('http://localhost:8001/external-users/', {
         headers: {
@@ -62,11 +61,8 @@ export default function ExternalUsers() {
         }
       });
 
-      console.log('Response status:', response.status);
-
       if (response.ok) {
         const usersData = await response.json();
-        console.log('📋 External users recibidos:', usersData);
         setExternalUsers(usersData);
       } else {
         const errorText = await response.text();
@@ -175,7 +171,6 @@ export default function ExternalUsers() {
   // Manejar cambio de estado de usuario
   const handleStatusChange = async (userId, newStatus) => {
     try {
-      console.log(`🔧 Intentando cambiar estado de usuario ${userId} a ${newStatus}`);
       
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
@@ -193,7 +188,6 @@ export default function ExternalUsers() {
 
       if (response.ok) {
         const updatedUser = await response.json();
-        console.log('✅ Usuario actualizado exitosamente:', updatedUser);
         await fetchExternalUsers();
       } else {
         const errorText = await response.text();
@@ -254,7 +248,6 @@ export default function ExternalUsers() {
 
       if (response.ok) {
         const updatedUser = await response.json();
-        console.log('✅ Usuario editado exitosamente:', updatedUser);
         setShowEditModal(false);
         setSelectedUser(null);
         await fetchExternalUsers();
@@ -321,7 +314,6 @@ export default function ExternalUsers() {
       });
 
       if (response.ok) {
-        console.log('✅ Usuario eliminado exitosamente');
         await fetchExternalUsers();
       } else {
         const errorData = await response.json();

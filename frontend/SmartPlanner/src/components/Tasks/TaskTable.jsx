@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiEdit2, FiTrash2, FiMoreVertical, FiUser, FiCalendar, 
   FiClock, FiTag, FiMessageSquare, FiCheckCircle, FiAlertCircle,
-  FiTarget, FiStar, FiEye, FiEyeOff, FiArrowUp, FiArrowDown, FiChevronDown, FiChevronRight
+  FiTarget, FiStar, FiEye, FiEyeOff, FiArrowUp, FiArrowDown, FiChevronDown, FiChevronRight, FiX
 } from 'react-icons/fi';
 
 export default function TaskTable({ 
@@ -302,6 +302,25 @@ export default function TaskTable({
                           title={task.status === 'completed' ? 'Marcar pendiente' : 'Marcar como completada'}
                         >
                           <FiCheckCircle className="w-4 h-4" />
+                        </button>
+
+                        {/* Botón de toggle blocked */}
+                        <button
+                          onClick={() => {
+                            if (task.status === 'blocked') {
+                              onStatusChange(task.task_id, 'pending');
+                            } else {
+                              onStatusChange(task.task_id, 'blocked');
+                            }
+                          }}
+                          className={`p-2 rounded-lg transition-all duration-200 ${
+                            task.status === 'blocked'
+                              ? 'bg-red-100 text-red-600'
+                              : 'bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600'
+                          }`}
+                          title={task.status === 'blocked' ? 'Desbloquear tarea' : 'Bloquear tarea'}
+                        >
+                          <FiX className="w-4 h-4" />
                         </button>
 
                         {/* Botón de ver detalles */}

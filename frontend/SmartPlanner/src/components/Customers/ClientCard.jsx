@@ -51,12 +51,17 @@ export default function ClientCard({
     });
   };
   const handleStatusChange = (newStatus) => {
-    console.log('ClientCard - Cambiando estado del cliente:', client.client_id, 'nuevo estado:', newStatus);
     onStatusChange(client.client_id, newStatus);
     setShowMenu(false);
   };
 
   const getProjectsProgress = () => {
+    // Usar el progreso promedio calculado automáticamente si está disponible
+    if (client.projects_progress_average !== undefined && client.projects_progress_average !== null) {
+      return client.projects_progress_average;
+    }
+    
+    // Fallback: calcular basado en proyectos y horas (método anterior)
     const projectsCount = client.projects_count || 0;
     const totalHours = client.total_hours_registered || 0;
     
@@ -78,11 +83,7 @@ export default function ClientCard({
   const StatusIcon = statusInfo.icon;
   const isHighActivity = (client.projects_count || 0) > 3 || (client.total_hours_registered || 0) > 100;
   
-  // Calcular nivel de severidad para priorización visual
-  const severityScore = (client.open_tickets_count || 0) * 2 + 
-                       ((client.delayed_projects_count || 0) + (client.risk_projects_count || 0)) * 1.5;
-  const isHighSeverity = severityScore >= 10;
-  const isMediumSeverity = severityScore >= 5 && severityScore < 10;  return (
+  return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 20 }}
@@ -90,13 +91,7 @@ export default function ClientCard({
       exit={{ opacity: 0, y: -20 }}
       whileHover={{ y: -4, scale: 1.02 }}
       className={`bg-white rounded-2xl shadow-lg border h-[420px] flex flex-col hover:shadow-xl transition-all duration-300 ${
-        isHighSeverity 
-          ? 'border-red-200 ring-2 ring-red-100' 
-          : isMediumSeverity 
-            ? 'border-amber-200 ring-1 ring-amber-100' 
-            : isHighActivity 
-              ? 'border-blue-200 ring-1 ring-blue-100' 
-              : 'border-gray-100'
+        isHighActivity ? 'border-blue-200 ring-1 ring-blue-100' : 'border-gray-100'
       }`}    >      {/* Header de la tarjeta */}
       <div className="p-6 pb-4 flex-shrink-0">
         <div className="flex items-start justify-between mb-4">
@@ -206,45 +201,21 @@ export default function ClientCard({
               </AnimatePresence>
             </div>
           )}        </div>
-
-        {/* Indicadores de prioridad */}
-        <div className="flex items-center gap-2 mb-4">
-          {isHighSeverity && (
-            <div className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
-              <FiAlertTriangle className="w-3 h-3" />
-              Alta prioridad
-            </div>
-          )}
-          {isMediumSeverity && !isHighSeverity && (
-            <div className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-              <FiAlertCircle className="w-3 h-3" />
-              Prioridad media
-            </div>
-          )}
-          {isHighActivity && !isHighSeverity && !isMediumSeverity && (
-            <div className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
-              <FiTrendingUp className="w-3 h-3" />
-              Alta actividad
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Contenido principal - scrollable */}
       <div className="px-6 flex-1 overflow-y-auto">
         {/* Información de contacto */}
         <div className="space-y-2 mb-4">
-          {client.contact_email && (
+          {(client.contact_email || client.contact_phone) && (
             <div className="flex items-center gap-3 text-sm text-gray-600">
               <FiMail className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              <span className="truncate">{client.contact_email}</span>
-            </div>
-          )}
-          
-          {client.contact_phone && (
-            <div className="flex items-center gap-3 text-sm text-gray-600">
-              <FiPhone className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              <span>{client.contact_phone}</span>
+              <span className="truncate">
+                {client.contact_email && client.contact_phone 
+                  ? `${client.contact_email} | ${client.contact_phone}`
+                  : client.contact_email || client.contact_phone
+                }
+              </span>
             </div>
           )}
         </div>
@@ -307,19 +278,6 @@ export default function ClientCard({
             </div>
           </div>
         )}
-
-        {/* Información adicional condicional */}
-        {client.country_code && (
-          <div className="mb-4">
-            <div className="flex items-center gap-3 text-sm text-gray-600">
-              <FiGlobe className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              <div className="flex items-center gap-2">
-                <span className={`fi fi-${client.country_code.toLowerCase()}`}></span>
-                <span>{getCountryName(client.country_code)}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Footer - siempre en la parte inferior */}
@@ -357,6 +315,19 @@ export default function ClientCard({
                   <div>
                     <div className="font-medium text-gray-700">ID Fiscal</div>
                     <div className="text-gray-600">{client.tax_id}</div>
+                  </div>
+                </div>
+              )}
+              
+              {client.country_code && (
+                <div className="flex items-start gap-3 text-sm">
+                  <FiGlobe className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium text-gray-700">País</div>
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <span className={`fi fi-${client.country_code.toLowerCase()}`}></span>
+                      <span>{getCountryName(client.country_code)}</span>
+                    </div>
                   </div>
                 </div>
               )}

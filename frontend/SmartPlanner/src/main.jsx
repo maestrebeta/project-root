@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from "./context/ThemeContext.jsx";
-import { NotificationsProvider } from "./context/NotificationsContext";
 import { FocusModeProvider } from "./context/FocusModeContext.jsx";
 import App from './App.jsx';
 import './styles/focusMode.css';
@@ -50,11 +49,9 @@ function renderApp() {
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
             <ThemeProvider>
-              <NotificationsProvider>
-                <FocusModeProvider>
-                  <App />
-                </FocusModeProvider>
-              </NotificationsProvider>
+              <FocusModeProvider>
+                <App />
+              </FocusModeProvider>
             </ThemeProvider>
           </BrowserRouter>
         </QueryClientProvider>

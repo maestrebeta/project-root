@@ -31,6 +31,27 @@ def create_task(
         )
     
     db_task = task_crud.create_task(db, task, current_user.user_id)
+    
+    # Crear notificación si la tarea se asigna a un usuario
+    if db_task.assigned_to and db_task.assigned_to != current_user.user_id:
+        
+        # Crear notificación de asignación
+        from app.crud import notification_crud
+        try:
+            notification = notification_crud.create_task_assignment_notification(
+                db=db,
+                task_id=db_task.task_id,
+                assigned_user_id=db_task.assigned_to,
+                assigned_by_user_id=current_user.user_id,
+                organization_id=current_user.organization_id,
+                task_title=db_task.title
+            )
+        except Exception as e:
+            print(f"❌ Error creating notification: {e}")
+            import traceback
+            traceback.print_exc()
+            # No fallar la creación de la tarea si falla la notificación
+    
     return db_task
 
 @router.get("/", response_model=List[TaskOut])
@@ -140,6 +161,9 @@ def update_task(
             detail="No tienes permisos para editar esta tarea"
         )
     
+    # GUARDAR EL VALOR ORIGINAL ANTES DE ACTUALIZAR
+    original_assigned_user_id = task.assigned_to
+    
     # Si no es admin/super_user, solo puede cambiar el estado
     if not can_edit:
         update_data = task_update.dict(exclude_unset=True)
@@ -154,6 +178,30 @@ def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tarea no encontrada"
         )
+    
+    # Verificar si se cambió la asignación de la tarea usando el valor ORIGINAL
+    
+    if (task_update.assigned_to and 
+        task_update.assigned_to != original_assigned_user_id):
+        
+        # Crear notificación de asignación
+        from app.crud import notification_crud
+        try:
+            notification = notification_crud.create_task_assignment_notification(
+                db=db,
+                task_id=task_id,
+                assigned_user_id=task_update.assigned_to,
+                assigned_by_user_id=current_user.user_id,
+                organization_id=current_user.organization_id,
+                task_title=updated_task.title
+            )
+        except Exception as e:
+            print(f"❌ Error creating notification: {e}")
+            import traceback
+            traceback.print_exc()
+            # No fallar la actualización de la tarea si falla la notificación
+    else:
+        pass
     
     return updated_task
 

@@ -101,14 +101,12 @@ export default function EpicModal({
     start_date: '',
     end_date: '',
     acceptance_criteria: '',
-    business_value: '',
-    tags: []
+    business_value: ''
   });
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [newTag, setNewTag] = useState('');
   const [focusedField, setFocusedField] = useState(null);
   const [validationStatus, setValidationStatus] = useState({});
   
@@ -127,8 +125,7 @@ export default function EpicModal({
         start_date: epic.start_date ? epic.start_date.split('T')[0] : '',
         end_date: epic.end_date ? epic.end_date.split('T')[0] : '',
         acceptance_criteria: epic.acceptance_criteria || '',
-        business_value: epic.business_value || '',
-        tags: epic.tags || []
+        business_value: epic.business_value || ''
       });
     } else {
       // Valores por defecto inteligentes
@@ -146,8 +143,7 @@ export default function EpicModal({
         start_date: today, // Fecha de hoy como predeterminada
         end_date: '', // Fecha fin no obligatoria
         acceptance_criteria: '',
-        business_value: '',
-        tags: []
+        business_value: ''
       });
     }
     setErrors({});
@@ -207,24 +203,6 @@ export default function EpicModal({
     validateField(name, value);
   };
 
-  // Manejar tags
-  const handleAddTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, newTag.trim()]
-      }));
-      setNewTag('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }));
-  };
-
   // Validar formulario completo
   const validateForm = () => {
     const newErrors = {};
@@ -254,24 +232,15 @@ export default function EpicModal({
     setLoading(true);
     
     try {
-      // Convertir tags array a formato diccionario para el backend
-      const tagsDict = formData.tags.length > 0 
-        ? formData.tags.reduce((acc, tag, index) => {
-            acc[tag] = { order: index, color: '#3B82F6' };
-            return acc;
-          }, {})
-        : null;
-
       const epicData = {
         ...formData,
         epic_id: isEditing ? epic.epic_id : undefined, // Incluir epic_id para edición
         project_id: selectedProject?.project_id || formData.project_id,
         start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
-        tags: tagsDict // Enviar como diccionario
+        end_date: formData.end_date || null
       };
 
-      console.log('💾 Guardando épica con datos:', epicData);
+      ('💾 Guardando épica con datos:', epicData);
       await onSave(epicData);
       onClose();
     } catch (error) {
@@ -632,52 +601,6 @@ export default function EpicModal({
                         className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none resize-none"
                         placeholder="Explica el valor que esta épica aporta al negocio..."
                       />
-                    </div>
-
-                    {/* Tags */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Etiquetas
-                      </label>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {formData.tags.map((tag, index) => (
-                          <motion.span
-                            key={`epic-tag-${index}-${tag}`}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                          >
-                            <FiTag className="w-3 h-3" />
-                            {tag}
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTag(tag)}
-                              className="ml-1 hover:text-blue-600"
-                            >
-                              <FiX className="w-3 h-3" />
-                            </button>
-                          </motion.span>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newTag}
-                          onChange={(e) => setNewTag(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                          className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                          placeholder="Agregar etiqueta..."
-                        />
-                        <motion.button
-                          type="button"
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={handleAddTag}
-                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                          <FiPlus className="w-4 h-4" />
-                        </motion.button>
-                      </div>
                     </div>
                   </motion.div>
                 )}

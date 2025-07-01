@@ -23,6 +23,15 @@
   transform: translateX(-100%) !important;
 }
 
+/* IMPORTANTE: El sidebar principal de la app NUNCA debe ocultarse completamente */
+/* Solo debe contraerse, no desaparecer */
+.focus-mode-active aside {
+  /* Asegurar que el sidebar principal siempre sea visible */
+  display: flex !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 /* Efectos visuales adicionales para el modo enfoque */
 .focus-mode-active .app-content {
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%) !important;
@@ -53,8 +62,8 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Transiciones suaves */
-.focus-mode-active * {
+/* Transiciones suaves - pero NO para el sidebar principal */
+.focus-mode-active *:not(aside) {
   transition: all 0.2s ease !important;
 }
 

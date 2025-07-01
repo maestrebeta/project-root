@@ -23,16 +23,15 @@ export default function TicketModal({
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    status: 'nuevo',
     priority: 'media',
-    category_id: '',
-    assigned_to_user_id: '',
+    status: 'nuevo',
     client_id: '',
     project_id: '',
-    due_date: '',
+    assigned_to_user_id: '',
+    category_id: '',
     contact_email: '',
-    notes: '',
-    estimated_hours: null
+    contact_name: '',
+    resolution_description: ''
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,23 +66,22 @@ export default function TicketModal({
 
   // Función para prellenar campos según la categoría seleccionada
   const handleCategoryChange = (categoryId) => {
-    const category = categories.find(cat => cat.category_id === parseInt(categoryId));
-    
-    if (category) {
-      // Prellenar campos con valores por defecto de la categoría
-      setFormData(prev => ({
-        ...prev,
-        category_id: categoryId,
-        priority: category.default_priority || prev.priority,
-        estimated_hours: category.default_estimated_hours || prev.estimated_hours,
-        title: category.default_title_template || prev.title,
-        description: category.default_description_template || prev.description
-      }));
-    } else {
       setFormData(prev => ({
         ...prev,
         category_id: categoryId
       }));
+    
+    // Solo aplicar valores por defecto si es un ticket nuevo (no existente)
+    if (categoryId && !ticket) {
+      const category = categories.find(c => c.category_id === parseInt(categoryId));
+      if (category) {
+        setFormData(prev => ({
+          ...prev,
+          title: category.default_title_template || prev.title,
+          description: category.default_description_template || prev.description,
+          priority: category.default_priority || prev.priority
+        }));
+      }
     }
   };
 
@@ -103,36 +101,31 @@ export default function TicketModal({
         setFormData({
           title: ticket.title || '',
           description: ticket.description || '',
-          status: ticket.status || 'nuevo',
           priority: ticket.priority || 'media',
-          category_id: ticket.category_id ? String(ticket.category_id) : '',
-          assigned_to_user_id: ticket.assigned_to_user_id ? String(ticket.assigned_to_user_id) : '',
-          client_id: clientId ? String(clientId) : '',
-          project_id: ticket.project_id ? String(ticket.project_id) : '',
-          due_date: ticket.due_date ? ticket.due_date.split('T')[0] : '',
+          status: ticket.status || 'nuevo',
+          client_id: ticket.client_id?.toString() || '',
+          project_id: ticket.project_id?.toString() || '',
+          assigned_to_user_id: ticket.assigned_to_user_id?.toString() || '',
+          category_id: ticket.category_id?.toString() || '',
           contact_email: ticket.contact_email || '',
-          notes: ticket.notes || '',
-          estimated_hours: ticket.estimated_hours || null
+          contact_name: ticket.contact_name || '',
+          resolution_description: ticket.resolution_description || ''
         });
         
-        // Establecer categoría seleccionada
-        if (ticket.category_id) {
-          handleCategoryChange(String(ticket.category_id));
-        }
+        // Para tickets existentes, NO llamar handleCategoryChange para evitar sobrescribir datos
       } else {
         setFormData({
           title: '',
           description: '',
-          status: 'nuevo',
           priority: 'media',
-          category_id: '',
-          assigned_to_user_id: '',
+          status: 'nuevo',
           client_id: '',
           project_id: '',
-          due_date: '',
+          assigned_to_user_id: '',
+          category_id: '',
           contact_email: '',
-          notes: '',
-          estimated_hours: null
+          contact_name: '',
+          resolution_description: ''
         });
       }
       setCurrentStep(1);
@@ -205,10 +198,6 @@ export default function TicketModal({
       newErrors.project_id = 'Debe seleccionar un proyecto';
     }
 
-    if (formData.due_date && new Date(formData.due_date) < new Date()) {
-      newErrors.due_date = 'La fecha de vencimiento no puede ser en el pasado';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -228,12 +217,6 @@ export default function TicketModal({
       }
       if (!formData.project_id) {
         stepErrors.project_id = 'Debe seleccionar un proyecto';
-      }
-    }
-
-    if (step === 2) {
-      if (formData.due_date && new Date(formData.due_date) < new Date()) {
-        stepErrors.due_date = 'La fecha de vencimiento no puede ser en el pasado';
       }
     }
 
@@ -452,20 +435,6 @@ export default function TicketModal({
                             </select>
                           </div>
                         </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Horas estimadas
-                          </label>
-                          <input
-                            type="number"
-                            value={formData.estimated_hours || ''}
-                            onChange={(e) => handleChange('estimated_hours', e.target.value ? parseInt(e.target.value) : null)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                            placeholder="Horas estimadas para resolver"
-                            min="0"
-                          />
-                        </div>
                       </div>
                     </div>
 
@@ -561,30 +530,12 @@ export default function TicketModal({
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <FiCalendar className="w-5 h-5 text-purple-600" />
-                        Fechas y Contacto
+                        Información de Contacto
                       </h3>
                       
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Fecha de vencimiento
-                          </label>
-                          <input
-                            type="date"
-                            value={formData.due_date}
-                            onChange={(e) => handleChange('due_date', e.target.value)}
-                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
-                              errors.due_date ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                          />
-                          {errors.due_date && (
-                            <p className="mt-1 text-sm text-red-600">{errors.due_date}</p>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
                               Email de contacto
                             </label>
                             <input
@@ -595,28 +546,18 @@ export default function TicketModal({
                               placeholder="contacto@cliente.com"
                             />
                           </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre de contacto
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.contact_name}
+                            onChange={(e) => handleChange('contact_name', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                            placeholder="Nombre completo del contacto"
+                          />
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Notas adicionales */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <FiInfo className="w-5 h-5 text-orange-600" />
-                        Notas Adicionales
-                      </h3>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Notas internas
-                        </label>
-                        <textarea
-                          value={formData.notes}
-                          onChange={(e) => handleChange('notes', e.target.value)}
-                          rows={3}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                          placeholder="Notas adicionales para el equipo interno..."
-                        />
                       </div>
                     </div>
 

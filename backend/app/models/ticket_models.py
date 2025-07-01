@@ -20,7 +20,6 @@ class TicketCategory(Base):
     default_title_template = Column(Text, nullable=True)
     default_description_template = Column(Text, nullable=True)
     default_priority = Column(String(20), nullable=True)
-    default_estimated_hours = Column(Integer, nullable=True)
     
     # Relaciones
     organization = relationship("Organization", back_populates="ticket_categories")
@@ -43,7 +42,6 @@ class Ticket(Base):
     status = Column(String(20), nullable=False)
     category = Column(String(50), nullable=True)  # Campo legacy para compatibilidad
     category_id = Column(Integer, ForeignKey("ticket_categories.category_id"), nullable=True)  # Nueva relación
-    due_date = Column(DateTime(timezone=True), nullable=True)
     resolution_description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
@@ -52,12 +50,10 @@ class Ticket(Base):
     
     # Nuevos campos
     tags = Column(JSON, nullable=True)
-    estimated_hours = Column(Integer, nullable=True)
     
     # Campos para archivos adjuntos
     attachments = Column(JSON, nullable=True)  # Lista de archivos adjuntos
     contact_email = Column(String(255), nullable=True)
-    contact_phone = Column(String(50), nullable=True)
     contact_name = Column(String(255), nullable=True)
     
     # Restricciones de estado y prioridad
@@ -85,6 +81,7 @@ class Ticket(Base):
     time_entries = relationship("TimeEntry", back_populates="ticket")
     comments = relationship("TicketComment", back_populates="ticket")
     history = relationship("TicketHistory", back_populates="ticket")
+    notifications = relationship("Notification", back_populates="ticket")
 
 class TicketComment(Base):
     __tablename__ = "ticket_comments"

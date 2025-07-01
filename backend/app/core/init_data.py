@@ -131,7 +131,7 @@ def init_projects(db: Session):
         return
     
     # Crear algunos proyectos con datos variados
-    project_types = ['development', 'support', 'meeting', 'training', 'other']
+    project_types = ['web_development', 'mobile_development', 'desktop_development', 'api_development', 'database_design', 'cloud_migration', 'devops_infrastructure', 'security_audit', 'ui_ux_design', 'testing_qa', 'maintenance_support', 'consulting', 'training', 'research_development', 'other']
     project_statuses = [
         'registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 
         'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support'

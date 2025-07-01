@@ -52,7 +52,6 @@ export default function ExternalTicketForm() {
     project_name: '',
     contact_name: '',
     contact_email: '',
-    due_date: '',
     additional_info: ''
   });
   
@@ -83,28 +82,16 @@ export default function ExternalTicketForm() {
 
   // Efecto para prellenar campos cuando el usuario externo inicia sesión
   useEffect(() => {
-    console.log('🔍 Debug prellenado:', {
-      isAuthenticated: isAuthenticated(),
-      externalUser: externalUser,
-      clientsLength: clients.length,
-      externalUserClientId: externalUser?.client_id,
-      currentSelectedClient: selectedClient,
-      currentContactName: formData.contact_name,
-      currentContactEmail: formData.contact_email
-    });
     
     if (isAuthenticated() && externalUser && clients.length > 0) {
       // Buscar el cliente asociado al usuario externo
       const userClient = clients.find(client => client.client_id === externalUser.client_id);
       
-      console.log('🔍 Cliente encontrado:', userClient);
-      console.log('🔍 Todos los clientes disponibles:', clients.map(c => ({ id: c.client_id, name: c.name })));
       
       if (userClient) {
         // Prellenar cliente solo si no está ya seleccionado
         if (!selectedClient || selectedClient !== String(userClient.client_id)) {
           setSelectedClient(String(userClient.client_id));
-          console.log('✅ Cliente prellenado:', userClient.client_id);
         }
         
         // Prellenar información de contacto solo si no está ya prellenada
@@ -117,13 +104,6 @@ export default function ExternalTicketForm() {
             client_name: userClient.name
           }));
           
-          console.log('✅ Campos de contacto prellenados:', {
-            contact_name: externalUser.full_name,
-            contact_email: externalUser.email,
-            client_name: userClient.name
-          });
-        } else {
-          console.log('ℹ️ Campos de contacto ya estaban prellenados');
         }
       } else {
         console.log('❌ No se encontró cliente para el usuario:', {
@@ -459,13 +439,11 @@ export default function ExternalTicketForm() {
 
       // Agregar archivos adjuntos
       attachments.forEach(attachment => {
-        formDataToSend.append('attachments', attachment.file);
+        formDataToSend.append('files', attachment.file);
       });
 
-      // Agregar token del formulario
-      formDataToSend.append('form_token', token);
-
-      const response = await fetch('http://localhost:8001/tickets/external', {
+      // Usar la ruta correcta con el token en la URL
+      const response = await fetch(`http://localhost:8001/tickets/external/${token}`, {
         method: 'POST',
         body: formDataToSend
       });
@@ -483,7 +461,6 @@ export default function ExternalTicketForm() {
           project_name: '',
           contact_name: '',
           contact_email: '',
-          due_date: '',
           additional_info: ''
         });
         setSelectedClient('');
@@ -675,40 +652,79 @@ export default function ExternalTicketForm() {
             )}
 
             {/* Información básica - PRIMERA SECCIÓN */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <FiStar className="w-5 h-5 text-purple-600" />
+            {!isAuthenticated() && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <FiStar className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Información Básica</h3>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900">Información Básica</h3>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cliente *
-                  </label>
-                  <select
-                    value={selectedClient}
-                    onChange={(e) => {
-                      setSelectedClient(e.target.value);
-                      setFormData(prev => ({ ...prev, project_name: '' }));
-                    }}
-                    disabled={isAuthenticated()}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
-                      errors.client ? 'border-red-300' : 'border-gray-300'
-                    } ${isAuthenticated() ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  >
-                    <option value="">Seleccionar cliente</option>
-                    {clients.map(client => (
-                      <option key={client.client_id} value={client.client_id}>
-                        {client.name}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cliente *
+                    </label>
+                    <select
+                      value={selectedClient}
+                      onChange={(e) => {
+                        setSelectedClient(e.target.value);
+                        setFormData(prev => ({ ...prev, project_name: '' }));
+                      }}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                        errors.client ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Seleccionar cliente</option>
+                      {clients.map(client => (
+                        <option key={client.client_id} value={client.client_id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.client && (
+                      <p className="mt-1 text-sm text-red-600">{errors.client}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Proyecto
+                    </label>
+                    <select
+                      value={formData.project_name}
+                      onChange={(e) => {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          project_name: e.target.value 
+                        }));
+                      }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      disabled={!selectedClient}
+                    >
+                      <option value="">
+                        {selectedClient ? 'Seleccionar proyecto' : 'Primero seleccione un cliente'}
                       </option>
-                    ))}
-                  </select>
-                  {errors.client && (
-                    <p className="mt-1 text-sm text-red-600">{errors.client}</p>
-                  )}
+                      {filteredProjects.map(project => (
+                        <option key={project.project_id} value={project.name}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Selector de proyecto para usuarios autenticados */}
+            {isAuthenticated() && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <FiStar className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Proyecto</h3>
                 </div>
 
                 <div>
@@ -724,11 +740,8 @@ export default function ExternalTicketForm() {
                       }));
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                    disabled={!selectedClient}
                   >
-                    <option value="">
-                      {selectedClient ? 'Seleccionar proyecto' : 'Primero seleccione un cliente'}
-                    </option>
+                    <option value="">Seleccionar proyecto</option>
                     {filteredProjects.map(project => (
                       <option key={project.project_id} value={project.name}>
                         {project.name}
@@ -737,7 +750,7 @@ export default function ExternalTicketForm() {
                   </select>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Información del ticket */}
             <div className="space-y-4">
@@ -824,57 +837,57 @@ export default function ExternalTicketForm() {
               </div>
             </div>
 
-            {/* Información de contacto */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <FiUser className="w-5 h-5 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">Información de Contacto</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre completo *
-                  </label>
-                  <input
-                    type="text"
-                    name="contact_name"
-                    value={formData.contact_name}
-                    onChange={handleInputChange}
-                    disabled={isAuthenticated()}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
-                      errors.contact_name ? 'border-red-300' : 'border-gray-300'
-                    } ${isAuthenticated() ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                    placeholder="Tu nombre completo"
-                  />
-                  {errors.contact_name && (
-                    <p className="mt-1 text-sm text-red-600">{errors.contact_name}</p>
-                  )}
+            {/* Información de contacto - SOLO PARA USUARIOS NO AUTENTICADOS */}
+            {!isAuthenticated() && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <FiUser className="w-5 h-5 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Información de Contacto</h3>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    name="contact_email"
-                    value={formData.contact_email}
-                    onChange={handleInputChange}
-                    disabled={isAuthenticated()}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
-                      errors.contact_email ? 'border-red-300' : 'border-gray-300'
-                    } ${isAuthenticated() ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                    placeholder="tu@email.com"
-                  />
-                  {errors.contact_email && (
-                    <p className="mt-1 text-sm text-red-600">{errors.contact_email}</p>
-                  )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nombre completo *
+                    </label>
+                    <input
+                      type="text"
+                      name="contact_name"
+                      value={formData.contact_name}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                        errors.contact_name ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Tu nombre completo"
+                    />
+                    {errors.contact_name && (
+                      <p className="mt-1 text-sm text-red-600">{errors.contact_name}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email *
+                    </label>
+                    <input
+                      type="email"
+                      name="contact_email"
+                      value={formData.contact_email}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                        errors.contact_email ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="tu@email.com"
+                    />
+                    {errors.contact_email && (
+                      <p className="mt-1 text-sm text-red-600">{errors.contact_email}</p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Archivos adjuntos */}
             <div className="space-y-4">

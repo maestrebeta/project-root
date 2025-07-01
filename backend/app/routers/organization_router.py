@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+import logging
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_user_organization
 from app.models.user_models import User, ExternalUser
@@ -14,6 +15,11 @@ from app.schemas.organization_schema import (
     OrganizationRatingStats
 )
 from app.crud import organization_crud, user_crud
+from app.crud.organization_crud import get_organization
+from datetime import datetime, timedelta
+
+# Configurar logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/organizations",
@@ -24,26 +30,26 @@ router = APIRouter(
 DEFAULT_TASK_STATES = {
     "states": [
         {
-            "id": "pendiente",
+            "id": 1,
             "label": "Pendiente",
             "icon": "🔴",
             "color": "red"
         },
         {
-            "id": "en_progreso",
+            "id": 2,
             "label": "En Progreso",
             "icon": "🔵",
             "color": "blue"
         },
         {
-            "id": "completada",
+            "id": 3,
             "label": "Completada",
             "icon": "🟢",
             "color": "green"
         }
     ],
-    "default_state": "pendiente",
-    "final_states": ["completada"]
+    "default_state": 1,
+    "final_states": [3]
 }
 
 # Función para obtener usuario externo actual
@@ -77,7 +83,30 @@ def create_organization(
             detail="Ya existe una organización con este nombre"
         )
     
-    return organization_crud.create_organization(db, organization)
+    # Crear la organización (esto también creará los usuarios por defecto)
+    created_organization = organization_crud.create_organization(db, organization)
+    
+    # Preparar respuesta con información de usuarios creados
+    response_data = {
+        "organization_id": created_organization.organization_id,
+        "name": created_organization.name,
+        "description": created_organization.description,
+        "country_code": created_organization.country_code,
+        "timezone": created_organization.timezone,
+        "subscription_plan": created_organization.subscription_plan,
+        "max_users": created_organization.max_users,
+        "logo_url": created_organization.logo_url,
+        "primary_contact_email": created_organization.primary_contact_email,
+        "primary_contact_name": created_organization.primary_contact_name,
+        "primary_contact_phone": created_organization.primary_contact_phone,
+        "is_active": created_organization.is_active,
+        "created_at": created_organization.created_at,
+        "updated_at": created_organization.updated_at,
+        "current_users_count": 3,  # Los 3 usuarios por defecto
+        "default_users": created_organization.default_users
+    }
+    
+    return response_data
 
 @router.get("", response_model=List[OrganizationOut])
 def read_organizations(
@@ -241,24 +270,24 @@ async def get_task_states(
             if isinstance(state, dict) and 'id' in state:
                 normalized_state = {
                     'id': state['id'],
-                    'label': state.get('label', state['id'].capitalize()),
+                    'label': state.get('label', f'Estado {state["id"]}'),
                     'icon': state.get('icon', '🔴'),
                     'color': state.get('color', 'red'),
-                    'isDefault': state.get('isDefault', False)
+                    'isDefault': state.get('isDefault', False),
+                    'isProtected': state.get('isProtected', False)
                 }
                 normalized_states.append(normalized_state)
 
-        # Devolver estados normalizados
-        return {
+        result = {
             'states': normalized_states,
-            'default_state': task_states.get('default_state', 'pendiente'),
-            'final_states': task_states.get('final_states', ['completada'])
+            'default_state': task_states.get('default_state', 1),
+            'final_states': task_states.get('final_states', [3])
         }
+        return result
 
     except HTTPException as he:
         raise he
     except Exception as e:
-        print(f"Error al obtener estados: {str(e)}")
         return DEFAULT_TASK_STATES
 
 @router.put("/{organization_id}/task-states", response_model=Dict[str, Any])
@@ -271,40 +300,87 @@ async def update_task_states(
     """
     Actualizar los estados de tareas de una organización
     """
-    # Verificar que el usuario pertenezca a la organización
-    if current_user.organization_id != organization_id:
+    try:
+        # Verificar que el usuario pertenezca a la organización
+        if current_user.organization_id != organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para modificar los estados de esta organización"
+            )
+
+        # Obtener la organización
+        organization = db.query(Organization).filter(
+            Organization.organization_id == organization_id
+        ).first()
+
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
+            )
+
+        # Validar estructura de datos
+        if not isinstance(task_states, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Los datos deben ser un objeto válido"
+            )
+
+        if "states" not in task_states or not isinstance(task_states["states"], list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El campo 'states' es obligatorio y debe ser una lista"
+            )
+
+        # Validar que los estados básicos estén presentes
+        required_states = {1, 2, 3}  # IDs numéricos de los estados básicos
+        provided_states = {state.get("id", 0) for state in task_states["states"]}
+        
+        missing_states = required_states - provided_states
+        if missing_states:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Los estados básicos son obligatorios. Faltan IDs: {', '.join(map(str, missing_states))}"
+            )
+
+        # Validar que no se eliminen estados protegidos
+        protected_states = {1, 3}  # Estados que no se pueden eliminar (Pendiente y Completada)
+        for protected_id in protected_states:
+            if protected_id not in provided_states:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"No se puede eliminar el estado protegido con ID: {protected_id}"
+                )
+
+        # Validar estructura de cada estado
+        for i, state in enumerate(task_states["states"]):
+            if not isinstance(state, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El estado en la posición {i} debe ser un objeto válido"
+                )
+            
+            if "id" not in state or not state["id"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El estado en la posición {i} debe tener un ID válido"
+                )
+
+        # Actualizar los estados
+        organization.task_states = task_states
+        db.commit()
+        db.refresh(organization)
+
+        # Devolver los datos actualizados directamente
+        return task_states
+
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permiso para modificar los estados de esta organización"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}"
         )
-
-    # Obtener la organización
-    organization = db.query(Organization).filter(
-        Organization.organization_id == organization_id
-    ).first()
-
-    if not organization:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organización no encontrada"
-        )
-
-    # Validar que los estados básicos estén presentes
-    required_states = {"pendiente", "en_progreso", "completada"}
-    provided_states = {state["id"] for state in task_states["states"]}
-    
-    if not required_states.issubset(provided_states):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Los estados básicos (pendiente, en_progreso, completada) son obligatorios"
-        )
-
-    # Actualizar los estados
-    organization.task_states = task_states
-    db.commit()
-    db.refresh(organization)
-
-    return organization.task_states
 
 @router.get("/{organization_id}/work-hours", response_model=Dict[str, Any])
 async def get_work_hours_config(
@@ -354,15 +430,13 @@ async def update_work_hours_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_organization)
 ):
-    """
-    Actualizar la configuración de horas de trabajo de una organización
-    """
+    """Actualizar configuración de horas de trabajo de la organización"""
     try:
-        # Verificar permisos
-        if current_user.role != 'super_user' and current_user.organization_id != organization_id:
+        # Verificar que el usuario pertenece a la organización
+        if current_user.organization_id != organization_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para actualizar esta organización"
+                detail="No tienes permisos para modificar esta organización"
             )
         
         # Obtener la organización
@@ -376,27 +450,51 @@ async def update_work_hours_config(
                 detail="Organización no encontrada"
             )
         
-        # Validar estructura de configuración
+        # Validar configuración de horas de trabajo
         required_fields = ['start_time', 'end_time', 'working_days']
         for field in required_fields:
             if field not in work_hours_config:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Campo requerido faltante: {field}"
+                    detail=f"Campo requerido: {field}"
                 )
         
-        # Validar formato de horas
-        import re
-        time_pattern = r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
-        if not re.match(time_pattern, work_hours_config['start_time']):
+        # Calcular horas diarias
+        try:
+            start_time = datetime.strptime(work_hours_config['start_time'], '%H:%M').time()
+            end_time = datetime.strptime(work_hours_config['end_time'], '%H:%M').time()
+            
+            # Calcular diferencia en horas
+            start_dt = datetime.combine(datetime.today(), start_time)
+            end_dt = datetime.combine(datetime.today(), end_time)
+            
+            if end_dt <= start_dt:
+                end_dt += timedelta(days=1)
+            
+            daily_hours = (end_dt - start_dt).total_seconds() / 3600
+            
+            # Aplicar descuento de almuerzo si está configurado
+            effective_daily_hours = daily_hours
+            if 'lunch_break_start' in work_hours_config and 'lunch_break_end' in work_hours_config:
+                lunch_start = datetime.strptime(work_hours_config['lunch_break_start'], '%H:%M').time()
+                lunch_end = datetime.strptime(work_hours_config['lunch_break_end'], '%H:%M').time()
+                
+                lunch_start_dt = datetime.combine(datetime.today(), lunch_start)
+                lunch_end_dt = datetime.combine(datetime.today(), lunch_end)
+                
+                if lunch_end_dt <= lunch_start_dt:
+                    lunch_end_dt += timedelta(days=1)
+                
+                lunch_hours = (lunch_end_dt - lunch_start_dt).total_seconds() / 3600
+                effective_daily_hours = daily_hours - lunch_hours
+            
+            work_hours_config['daily_hours'] = round(daily_hours, 2)
+            work_hours_config['effective_daily_hours'] = round(effective_daily_hours, 2)
+            
+        except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Formato de hora de inicio inválido. Use HH:MM"
-            )
-        if not re.match(time_pattern, work_hours_config['end_time']):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Formato de hora de fin inválido. Use HH:MM"
+                detail=f"Formato de hora inválido: {str(e)}"
             )
         
         # Actualizar configuración
@@ -405,19 +503,170 @@ async def update_work_hours_config(
         db.refresh(organization)
         
         return {
-            "organization_id": organization_id,
+            "message": "Configuración de horas de trabajo actualizada exitosamente",
             "work_hours_config": organization.work_hours_config
         }
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error actualizando configuración de horas de trabajo: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al actualizar configuración: {str(e)}"
+            detail="Error interno del servidor"
+        )
+
+@router.get("/{organization_id}/activity-categories", response_model=Dict[str, Any])
+async def get_activity_categories(
+    organization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Obtener categorías de actividad de la organización"""
+    try:
+        # Verificar que el usuario pertenece a la organización
+        if current_user.organization_id != organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para acceder a esta organización"
+            )
+        
+        # Obtener la organización
+        organization = db.query(Organization).filter(
+            Organization.organization_id == organization_id
+        ).first()
+        
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
+            )
+        
+        return {
+            "message": "Categorías de actividad obtenidas exitosamente",
+            "activity_categories": organization.activity_categories
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo categorías de actividad: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor"
+        )
+
+@router.put("/{organization_id}/activity-categories", response_model=Dict[str, Any])
+async def update_activity_categories(
+    organization_id: int,
+    activity_categories: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Actualizar categorías de actividad de la organización"""
+    try:
+        # Verificar que el usuario pertenece a la organización
+        if current_user.organization_id != organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para modificar esta organización"
+            )
+        
+        # Obtener la organización
+        organization = db.query(Organization).filter(
+            Organization.organization_id == organization_id
+        ).first()
+        
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
+            )
+        
+        # Validar estructura de categorías
+        if 'categories' not in activity_categories:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Campo requerido: categories"
+            )
+        
+        categories = activity_categories['categories']
+        if not isinstance(categories, list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="categories debe ser una lista"
+            )
+        
+        # Validar cada categoría
+        for i, category in enumerate(categories):
+            if not isinstance(category, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Categoría {i} debe ser un objeto"
+                )
+            
+            required_fields = ['id', 'name']
+            for field in required_fields:
+                if field not in category:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Campo requerido en categoría {i}: {field}"
+                    )
+            
+            # Validar que el ID sea un entero
+            try:
+                category['id'] = int(category['id'])
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"ID de categoría {i} debe ser un número entero"
+                )
+        
+        # Verificar que no haya IDs duplicados
+        ids = [cat['id'] for cat in categories]
+        if len(ids) != len(set(ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se permiten IDs duplicados en las categorías"
+            )
+        
+        # Actualizar categorías
+        organization.activity_categories = categories
+        db.commit()
+        db.refresh(organization)
+        
+        return {
+            "message": "Categorías de actividad actualizadas exitosamente",
+            "activity_categories": organization.activity_categories
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error actualizando categorías de actividad: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor"
         )
 
 # Rutas de calificaciones para usuarios externos (sin autenticación de usuario interno)
+@router.get("/{organization_id}/super-users", response_model=List[Dict[str, Any]])
+def get_organization_super_users(
+    organization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtener los super usuarios de una organización (solo para super usuarios del sistema)"""
+    # Solo super usuarios del sistema pueden ver esta información
+    if current_user.role != 'super_user':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los super usuarios pueden ver esta información"
+        )
+    
+    super_users = organization_crud.get_organization_super_users(db, organization_id)
+    return super_users
+
 @router.post("/{organization_id}/ratings/external", response_model=OrganizationRatingOut)
 def create_organization_rating_external(
     organization_id: int,
@@ -616,4 +865,145 @@ def delete_organization(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organización no encontrada"
+        )
+
+@router.get("/{organization_id}/kanban-states", response_model=Dict[str, Any])
+async def get_kanban_states(
+    organization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Obtener los estados kanban de una organización
+    """
+    try:
+        # Verificar que el usuario pertenezca a la organización
+        if not current_user or current_user.organization_id != organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para ver los estados de esta organización"
+            )
+
+        # Obtener la organización
+        organization = db.query(Organization).filter(
+            Organization.organization_id == organization_id,
+            Organization.is_active == True
+        ).first()
+
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada o inactiva"
+            )
+
+        # Si no hay estados definidos, devolver los predeterminados
+        if not organization.kanban_states:
+            return Organization.DEFAULT_KANBAN_STATES
+
+        # Asegurar que los estados tengan la estructura correcta
+        kanban_states = organization.kanban_states
+        if not isinstance(kanban_states, dict) or 'states' not in kanban_states:
+            return Organization.DEFAULT_KANBAN_STATES
+
+        # Validar y normalizar cada estado
+        normalized_states = []
+        for state in kanban_states['states']:
+            if isinstance(state, dict) and 'id' in state:
+                normalized_state = {
+                    'id': state['id'],
+                    'key': state.get('key', f"state_{state['id']}"),  # Preservar la clave del estado
+                    'label': state.get('label', 'Estado'),
+                    'color': state.get('color', 'bg-gray-100'),
+                    'textColor': state.get('textColor', 'text-gray-700'),
+                    'isDefault': state.get('isDefault', False),
+                    'isProtected': state.get('isProtected', False)
+                }
+                normalized_states.append(normalized_state)
+
+        # Devolver estados normalizados
+        return {
+            'states': normalized_states,
+            'default_state': kanban_states.get('default_state', 2),
+            'final_states': kanban_states.get('final_states', [5])
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error al obtener estados kanban: {str(e)}")
+        return Organization.DEFAULT_KANBAN_STATES
+
+@router.put("/{organization_id}/kanban-states", response_model=OrganizationOut)
+def update_kanban_states(
+    organization_id: int,
+    kanban_states_update: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """Actualiza los estados kanban de la organización."""
+    try:
+        # Verificar que el usuario pertenezca a la organización
+        if not current_user or current_user.organization_id != organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para actualizar los estados de esta organización"
+            )
+
+        # Obtener la organización directamente por ID
+        organization = get_organization(db, organization_id)
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
+            )
+
+        # Validar que los estados obligatorios estén presentes
+        if 'kanban_states' not in kanban_states_update:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Datos de estados kanban requeridos"
+            )
+
+        kanban_states_data = kanban_states_update['kanban_states']
+        
+        # Validar estructura de estados
+        if 'states' not in kanban_states_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Lista de estados requerida"
+            )
+
+        states = kanban_states_data['states']
+        
+        # Validar que existan los estados obligatorios
+        required_states = [1, 5]  # IDs de los estados obligatorios (backlog y done)
+        existing_ids = [state.get('id') for state in states if state.get('id') is not None]
+        
+        # Verificar que los estados obligatorios estén presentes
+        missing_states = []
+        for required_state in required_states:
+            if required_state not in existing_ids:
+                missing_states.append(required_state)
+        
+        if missing_states:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Los estados con IDs {', '.join(map(str, missing_states))} son obligatorios y no pueden eliminarse"
+            )
+
+        # Actualizar los estados kanban en la organización
+        organization.kanban_states = kanban_states_data
+        db.commit()
+        db.refresh(organization)
+
+        return organization
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error actualizando estados kanban: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}"
         ) 

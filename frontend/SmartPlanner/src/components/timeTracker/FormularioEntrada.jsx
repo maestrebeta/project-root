@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
-import { useProjectsAndTags } from './useProjectsAndTags';
+import { createPortal } from 'react-dom';
+import { useProjectsAndTags } from "./useProjectsAndTags.jsx";
 import { useAppTheme } from "../../context/ThemeContext.jsx";
-import { FiX, FiClock, FiCalendar, FiTag, FiDollarSign, FiCheckCircle, FiFolder, FiUser } from 'react-icons/fi';
+import { 
+  FiX, FiClock, FiCalendar, FiTag, FiDollarSign, FiCheckCircle, 
+  FiFolder, FiUser, FiAlertCircle, FiCheck, FiArrowRight, FiSave,
+  FiInfo, FiZap, FiEdit3
+} from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
 
 // Mapa completo de colores de Tailwind
 const TAILWIND_COLORS = {
@@ -215,10 +221,11 @@ const FormularioEntrada = ({
   onClose,
   initialData = {},
   onSubmit = () => {},
-  organizationStates,
-  activityTypes = []
+  organizationStates
 }) => {
   const theme = useAppTheme();
+  const { user } = useAuth();
+  const { showNotification } = useNotifications();
   const {
     projects: projectOptions,
     clients: clientOptions,
@@ -227,17 +234,9 @@ const FormularioEntrada = ({
     suggestedActivity,
     defaultClient,
     userHasEntries,
-    refresh
+    refresh,
+    activityTypes
   } = useProjectsAndTags();
-
-  console.log('FormularioEntrada - Valores recibidos:', {
-    suggestedProject,
-    suggestedActivity,
-    defaultClient,
-    userHasEntries,
-    loading,
-    projectOptionsLength: projectOptions.length
-  });
 
   // Estado inicial del formulario
   const [form, setForm] = useState({
@@ -252,6 +251,9 @@ const FormularioEntrada = ({
     billable: true
   });
 
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+
   // Efecto para inicializar el formulario cuando se cargan los datos
   useEffect(() => {
     if (editId && initialData) {
@@ -259,52 +261,73 @@ const FormularioEntrada = ({
       const projectId = initialData.project_id?.toString();
       const selectedProject = projectOptions.find(p => p.project_id === projectId);
       
-      console.log('Inicializando formulario en modo edición:', {
-        projectId,
-        selectedProject,
-        initialData
-      });
+      // Convertir ID de categoría a nombre si es necesario
+      let activityType = initialData.activity_type || 'desarrollo';
+      if (typeof activityType === 'number' && activityTypes.length > 0) {
+        const category = activityTypes.find(cat => cat.id === activityType);
+        activityType = category ? category.name : 'desarrollo';
+      }
+      
+      // Manejar el estado correctamente: si es un ID numérico, mantenerlo; si es string, convertirlo
+      let status = organizationStates?.default_state || 'pendiente';
+      if (initialData.status !== undefined) {
+        if (typeof initialData.status === 'number') {
+          status = initialData.status; // Mantener el ID numérico
+        } else if (typeof initialData.status === 'string') {
+          status = initialData.status; // Mantener el string
+        }
+      }
       
       setForm({
         description: initialData.description || '',
         project_id: projectId || '',
         client_id: selectedProject?.client_id || '',
-        activity_type: initialData.activity_type || 'desarrollo',
+        activity_type: activityType,
         entry_date: formatDateForInput(initialData.entry_date) || formatDateForInput(new Date()),
         start_time: formatTimeForInput(initialData.start_time) || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         end_time: formatTimeForInput(initialData.end_time) || '',
-        status: initialData.status || organizationStates?.default_state || 'pendiente',
+        status: status,
         billable: initialData.billable ?? true
       });
     } else if (!loading && projectOptions.length > 0) {
-      // Modo creación: usar valores sugeridos
-      console.log('Inicializando formulario en modo creación con valores sugeridos:', {
-        suggestedProject,
-        suggestedActivity,
-        defaultClient
-      });
+      // Modo creación: usar valores sugeridos o datos del calendario
+      const hasInitialData = initialData && Object.keys(initialData).length > 0;
+      
+      // Determinar el estado inicial: si hay hora de fin en los datos del calendario, es "Completada"
+      let initialStatus = organizationStates?.default_state || 'pendiente';
+      if (hasInitialData && initialData.end_time) {
+        initialStatus = 3; // "Completada" (ID 3) cuando hay hora de fin
+      }
       
       setForm(prev => ({
         ...prev,
-        project_id: suggestedProject || projectOptions[0]?.project_id || '',
-        client_id: defaultClient || projectOptions[0]?.client_id || '',
-        activity_type: suggestedActivity || 'desarrollo'
+        // Si hay datos del calendario, usarlos; sino usar valores sugeridos
+        entry_date: hasInitialData && initialData.entry_date ? initialData.entry_date : formatDateForInput(new Date()),
+        start_time: hasInitialData && initialData.start_time ? initialData.start_time : new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        end_time: hasInitialData && initialData.end_time ? initialData.end_time : '',
+        project_id: hasInitialData && initialData.project_id ? initialData.project_id : (suggestedProject || projectOptions[0]?.project_id || ''),
+        client_id: hasInitialData && initialData.client_id ? initialData.client_id : (defaultClient || projectOptions[0]?.client_id || ''),
+        // Usar la categoría sugerida automáticamente (como en TimerPanel)
+        activity_type: hasInitialData && initialData.activity_type ? initialData.activity_type : (suggestedActivity || 'desarrollo'),
+        description: hasInitialData && initialData.description ? initialData.description : '',
+        status: initialStatus,
+        billable: hasInitialData && typeof initialData.billable === 'boolean' ? initialData.billable : true
       }));
     }
-  }, [editId, initialData, loading, projectOptions, suggestedProject, suggestedActivity, defaultClient, organizationStates]);
-
-  const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState({ message: '', error: false });
+  }, [editId, initialData, loading, projectOptions, suggestedProject, suggestedActivity, defaultClient, organizationStates, activityTypes]);
 
   // Manejador de cambios en el formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    console.log(`Cambio en formulario: ${name} = ${value}`);
+    
+    // Limpiar error del campo cuando el usuario empiece a escribir
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
     
     if (name === 'project_id') {
       const selectedProject = projectOptions.find(p => p.project_id === value);
-      console.log('Proyecto seleccionado:', selectedProject);
       
       setForm(prev => ({
         ...prev,
@@ -317,6 +340,38 @@ const FormularioEntrada = ({
         [name]: value
       }));
     }
+  };
+
+  // Validar formulario
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!form.description.trim()) {
+      newErrors.description = 'La descripción es obligatoria';
+    }
+
+    if (!form.project_id) {
+      newErrors.project_id = 'Debe seleccionar un proyecto';
+    }
+
+    if (!form.entry_date) {
+      newErrors.entry_date = 'La fecha es obligatoria';
+    }
+
+    if (!form.start_time) {
+      newErrors.start_time = 'La hora de inicio es obligatoria';
+    }
+
+    if (form.end_time && form.start_time) {
+      const startTime = new Date(`2000-01-01T${form.start_time}`);
+      const endTime = new Date(`2000-01-01T${form.end_time}`);
+      if (endTime <= startTime) {
+        newErrors.end_time = 'La hora de fin debe ser posterior a la hora de inicio';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   // Construir datos para enviar
@@ -361,15 +416,18 @@ const FormularioEntrada = ({
       entryData.entry_id = editId;
     }
 
-    console.log('Data to be sent:', entryData); // Debug log
     return entryData;
   };
 
   // Enviar formulario a la API
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setSaving(true);
-    setSaveStatus({ message: '', error: false });
 
     try {
       const session = JSON.parse(localStorage.getItem('session'));
@@ -377,33 +435,49 @@ const FormularioEntrada = ({
         throw new Error('No hay sesión activa');
       }
 
-      // Validaciones
-      if (!form.project_id) {
-        throw new Error('Debe seleccionar un proyecto');
-      }
-
-      if (!form.description.trim()) {
-        throw new Error('La descripción es requerida');
-      }
-
       // Convertir fechas y horas locales a UTC
       const startTimeUTC = formatDateTimeToUTC(form.entry_date, form.start_time);
       const endTimeUTC = form.end_time ? formatDateTimeToUTC(form.entry_date, form.end_time) : null;
+
+      // Convertir nombre de categoría a ID
+      let activityTypeId = form.activity_type;
+      if (typeof form.activity_type === 'string' && activityTypes.length > 0) {
+        const category = activityTypes.find(cat => cat.name === form.activity_type);
+        activityTypeId = category ? category.id : 1; // Fallback a ID 1 si no se encuentra
+      }
+
+      // Determinar el estado: si hay hora de fin, es "Completada" (ID 3), sino usar el estado seleccionado
+      let statusId = 1; // Por defecto "Pendiente" (ID 1)
+      if (form.end_time) {
+        statusId = 3; // "Completada" (ID 3) cuando hay hora de fin
+      } else if (form.status) {
+        // Si hay un estado seleccionado, convertirlo a ID
+        if (typeof form.status === 'number') {
+          statusId = form.status;
+        } else if (typeof form.status === 'string') {
+          // Convertir string a ID si es necesario
+          const statusMap = {
+            'pendiente': 1,
+            'en_progreso': 2,
+            'completada': 3,
+            'completado': 3
+          };
+          statusId = statusMap[form.status.toLowerCase()] || 1;
+        }
+      }
 
       const payload = {
         description: form.description.trim(),
         entry_date: startTimeUTC, // Usar la fecha del start_time como entry_date
         start_time: startTimeUTC,
         end_time: endTimeUTC,
-        activity_type: form.activity_type,
-        status: form.status || (form.end_time ? "completada" : "pendiente"),
+        activity_type: activityTypeId,
+        status: statusId, // Usar el ID numérico del estado
         billable: form.billable,
         project_id: parseInt(form.project_id),
         user_id: parseInt(session.user.user_id),
         organization_id: parseInt(session.user.organization_id)
       };
-
-      console.log('Datos a enviar:', payload);
 
       const url = editId 
         ? `http://localhost:8001/time-entries/${editId}`
@@ -425,267 +499,352 @@ const FormularioEntrada = ({
       }
 
       const savedEntry = await response.json();
-      console.log('Respuesta del servidor:', savedEntry);
       
       if (onSubmit) {
         onSubmit(savedEntry);
       }
 
-        onClose();
-      setSaveStatus({ message: 'Entrada guardada con éxito', error: false });
+      // Mostrar notificación de éxito
+      showNotification(
+        editId ? 'Entrada actualizada con éxito' : 'Entrada creada con éxito', 
+        'success'
+      );
+
+      onClose();
 
     } catch (error) {
       console.error('Error:', error);
-      setSaveStatus({ 
-        message: error.message || 'Error al guardar la entrada', 
-        error: true 
-      });
+      
+      // Mostrar notificación de error
+      showNotification(
+        error.message || 'Error al guardar la entrada', 
+        'error'
+      );
+      
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
   };
 
-  return ReactDOM.createPortal(
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 pt-4 pb-20 overflow-hidden sm:p-0"
-    >
-      <div className="fixed inset-0 transition-opacity bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
-      
+  const handleBackdropClick = (e) => {
+    onClose();
+  };
+
+  const handleCloseClick = () => {
+    onClose();
+  };
+
+  const handleCancelClick = () => {
+    onClose();
+  };
+
+  return createPortal(
+    <AnimatePresence>
       <motion.div
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        className="relative w-full max-w-2xl mx-auto bg-white rounded-xl shadow-xl"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm"
+        onClick={handleBackdropClick}
       >
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {editId ? 'Editar Entrada' : 'Nueva Entrada'}
-          </h3>
-          <button
-            onClick={onClose}
-              className="text-gray-400 hover:text-gray-500 transition-colors"
-          >
-              <FiX size={24} />
-          </button>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header del modal */}
+          <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-4 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <FiClock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">
+                    {editId ? 'Editar Entrada de Tiempo' : 'Nueva Entrada de Tiempo'}
+                  </h2>
+                  <p className="text-blue-100 text-sm">
+                    {editId ? 'Modifica los detalles de la entrada' : 'Registra el tiempo dedicado a una tarea'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseClick}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors duration-200"
+              >
+                <FiX className="w-6 h-6" />
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Descripción */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Descripción
-              </label>
-              <input
-                type="text"
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                placeholder="Describe la tarea realizada"
-                required
-              />
-            </div>
-
-            {/* Fecha y Categoría */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Contenido del modal */}
+          <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Descripción */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiCalendar className="text-gray-400" />
-                  Fecha
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Descripción de la tarea *
                 </label>
                 <input
-                  type="date"
-                  name="entry_date"
-                  value={form.entry_date}
+                  type="text"
+                  name="description"
+                  value={form.description}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                    errors.description ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  placeholder="Describe detalladamente la tarea realizada..."
                   required
                 />
+                {errors.description && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <FiAlertCircle className="w-4 h-4" />
+                    {errors.description}
+                  </p>
+                )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiTag className="text-gray-400" />
-                  Categoría
-                </label>
-                <select
-                  name="activity_type"
-                  value={form.activity_type}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                  required
-                >
-                  {DEFAULT_CATEGORIES.map((category) => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+              {/* Fecha y Categoría */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiCalendar className="text-gray-400" />
+                    Fecha *
+                  </label>
+                  <input
+                    type="date"
+                    name="entry_date"
+                    value={form.entry_date}
+                    onChange={handleChange}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                      errors.entry_date ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    required
+                  />
+                  {errors.entry_date && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                      <FiAlertCircle className="w-4 h-4" />
+                      {errors.entry_date}
+                    </p>
+                  )}
+                </div>
 
-            {/* Hora inicio y fin */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiClock className="text-gray-400" />
-                Hora inicio
-              </label>
-              <input
-                  type="time"
-                name="start_time"
-                value={form.start_time}
-                onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                required
-              />
-            </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiTag className="text-gray-400" />
+                    Categoría
+                  </label>
+                  <select
+                    name="activity_type"
+                    value={form.activity_type}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 hover:border-gray-300"
+                    required
+                  >
+                    {loading ? (
+                      <option value="" disabled>Cargando categorías...</option>
+                    ) : (
+                      activityTypes.map((type) => (
+                        <option key={type.id || type.value} value={type.name || type.value}>
+                          {type.name || type.label}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
 
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiClock className="text-gray-400" />
-                Hora fin
-              </label>
-              <input
-                  type="time"
-                name="end_time"
-                value={form.end_time}
-                onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-              />
-            </div>
-          </div>
+              {/* Hora inicio y fin */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiClock className="text-gray-400" />
+                    Hora de inicio *
+                  </label>
+                  <input
+                    type="time"
+                    name="start_time"
+                    value={form.start_time}
+                    onChange={handleChange}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                      errors.start_time ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    required
+                  />
+                  {errors.start_time && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                      <FiAlertCircle className="w-4 h-4" />
+                      {errors.start_time}
+                    </p>
+                  )}
+                </div>
 
-            {/* Proyecto y Cliente */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiFolder className="text-gray-400" />
-                Proyecto
-              </label>
-              <select
-                name="project_id"
-                value={form.project_id}
-                onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                required
-              >
-                  <option value="">Selecciona un proyecto</option>
-                {projectOptions.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>
-                      {project.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiClock className="text-gray-400" />
+                    Hora de fin
+                  </label>
+                  <input
+                    type="time"
+                    name="end_time"
+                    value={form.end_time}
+                    onChange={handleChange}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                      errors.end_time ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  />
+                  {errors.end_time && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                      <FiAlertCircle className="w-4 h-4" />
+                      {errors.end_time}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiUser className="text-gray-400" />
-                Cliente
-              </label>
-              <select
-                name="client_id"
-                value={form.client_id}
-                  className="w-full px-4 py-3 rounded-lg border bg-gray-50 text-gray-500 cursor-not-allowed"
-                disabled
-              >
-                <option value="">
-                    {loading ? 'Cargando...' : form.client_id ? 
-                      clientOptions.find(c => String(c.client_id) === form.client_id)?.name || 'Cliente no encontrado' 
-                      : 'Sin cliente'}
-                  </option>
-                </select>
-            </div>
-          </div>
+              {/* Proyecto y Cliente */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiFolder className="text-gray-400" />
+                    Proyecto *
+                  </label>
+                  <select
+                    name="project_id"
+                    value={form.project_id}
+                    onChange={handleChange}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 ${
+                      errors.project_id ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    required
+                  >
+                    <option value="">Selecciona un proyecto</option>
+                    {projectOptions.map((project) => (
+                      <option key={project.project_id} value={project.project_id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.project_id && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                      <FiAlertCircle className="w-4 h-4" />
+                      {errors.project_id}
+                    </p>
+                  )}
+                </div>
 
-            {/* Estado y Facturación */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                  <FiCheckCircle className="text-gray-400" />
-                  Estado
-                </label>
-                <select
-                  name="status"
-                  value={form.status}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-lg border ${theme.INPUT_BORDER_CLASS} focus:ring-2 ${theme.INPUT_FOCUS_RING_CLASS} transition-all`}
-                  required
-                >
-                  {organizationStates?.states.map(state => (
-                    <option key={state.id} value={state.id}>
-                      {state.icon} {state.label}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiUser className="text-gray-400" />
+                    Cliente
+                  </label>
+                  <select
+                    name="client_id"
+                    value={form.client_id}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
+                    disabled
+                  >
+                    <option value="">
+                      {loading ? 'Cargando...' : form.client_id ? 
+                        clientOptions.find(c => String(c.client_id) === form.client_id)?.name || 'Cliente no encontrado' 
+                        : 'Sin cliente'}
                     </option>
-                  ))}
-                </select>
-            </div>
+                  </select>
+                </div>
+              </div>
 
-          <div className="flex items-center">
-                <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              name="billable"
-              checked={form.billable}
-                    onChange={(e) => setForm(prev => ({ ...prev, billable: e.target.checked }))}
-                    className={`h-5 w-5 rounded border-gray-300 text-${theme.PRIMARY_COLOR}-600 focus:ring-${theme.PRIMARY_COLOR}-500`}
-            />
-                  <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                    <FiDollarSign className="text-gray-400" />
-              Facturable
-                  </span>
-            </label>
+              {/* Estado y Facturación */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <FiCheckCircle className="text-gray-400" />
+                    Estado
+                  </label>
+                  <select
+                    name="status"
+                    value={form.status}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 hover:border-gray-300"
+                    required
+                  >
+                    {organizationStates?.states.map(state => (
+                      <option key={state.id} value={state.id}>
+                        {state.icon} {state.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="billable"
+                      checked={form.billable}
+                      onChange={(e) => setForm(prev => ({ ...prev, billable: e.target.checked }))}
+                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <FiDollarSign className="text-gray-400" />
+                      Facturable
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Información adicional */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <FiInfo className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-blue-800 mb-1">Información Importante</h4>
+                    <ul className="text-sm text-blue-700 space-y-1">
+                      <li>• Si no especificas hora de fin, la entrada se marcará como "pendiente"</li>
+                      <li>• Las entradas facturables se incluirán en los reportes de facturación</li>
+                      <li>• Puedes editar esta entrada más tarde si necesitas hacer cambios</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de navegación */}
+              <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+                <div></div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCancelClick}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 font-medium flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <FiCheck className="w-4 h-4" />
+                        {editId ? 'Actualizar Entrada' : 'Guardar Entrada'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
-            </div>
-
-            {/* Botones de acción */}
-            <div className="flex justify-end gap-3 pt-6">
-            <button
-              type="button"
-              onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-                className="px-4 py-2 text-white rounded-lg flex items-center gap-2 transition-all duration-200"
-                style={{
-                  background: `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`
-                }}
-                onMouseEnter={(e) => {
-                  if (!saving) {
-                    e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[700] || TAILWIND_COLORS.blue[700]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]})`;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!saving) {
-                    e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`;
-                  }
-                }}
-              disabled={saving}
-            >
-                {saving ? (
-                  <>
-                    <div className="w-5 h-5 border-t-2 border-b-2 border-white rounded-full animate-spin"></div>
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <FiCheckCircle />
-                    {editId ? 'Actualizar' : 'Guardar'}
-                  </>
-                )}
-            </button>
-            </div>
-        </form>
-      </div>
+        </motion.div>
       </motion.div>
-    </motion.div>,
-    document.getElementById('root')
+    </AnimatePresence>,
+    document.body
   );
 };
 

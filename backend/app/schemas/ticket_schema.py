@@ -11,7 +11,6 @@ class TicketCategoryBase(BaseModel):
     default_title_template: Optional[str] = None
     default_description_template: Optional[str] = None
     default_priority: Optional[str] = None
-    default_estimated_hours: Optional[int] = None
 
 class TicketCategoryCreate(TicketCategoryBase):
     organization_id: int
@@ -36,21 +35,19 @@ class TicketBase(BaseModel):
     status: str
     category: Optional[str] = None  # Campo legacy
     category_id: Optional[int] = None  # Nueva relación
-    due_date: Optional[date] = None
     resolution_description: Optional[str] = None
     contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
     contact_name: Optional[str] = None
     attachments: Optional[List[Dict[str, Any]]] = None
-    estimated_hours: Optional[int] = None
 
 class TicketCreate(TicketBase):
-    ticket_number: str
+    ticket_number: Optional[str] = None
     project_id: Optional[int] = None
     client_id: Optional[int] = None
     organization_id: int
     reported_by_user_id: Optional[int] = None
     assigned_to_user_id: Optional[int] = None
+    external_user_id: Optional[int] = None
 
 class TicketUpdate(TicketBase):
     title: Optional[str] = None
@@ -59,15 +56,13 @@ class TicketUpdate(TicketBase):
     status: Optional[str] = None
     category: Optional[str] = None
     category_id: Optional[int] = None
-    due_date: Optional[date] = None
     resolution_description: Optional[str] = None
     resolved_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
     contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
     contact_name: Optional[str] = None
     attachments: Optional[List[Dict[str, Any]]] = None
-    estimated_hours: Optional[int] = None
+    assigned_to_user_id: Optional[int] = None
 
 # Esquema específico para actualizaciones de estado
 class TicketStatusUpdate(BaseModel):
@@ -83,6 +78,7 @@ class TicketOut(TicketBase):
     organization_id: int
     reported_by_user_id: Optional[int] = None
     assigned_to_user_id: Optional[int] = None
+    external_user_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     resolved_at: Optional[datetime] = None

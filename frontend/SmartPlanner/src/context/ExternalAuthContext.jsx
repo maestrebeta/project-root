@@ -50,7 +50,6 @@ export const ExternalAuthProvider = ({ children }) => {
         return true;
       }
     } catch (error) {
-      console.error('Error validating session:', error);
       // En caso de error de conexión, mantener la sesión
       return true;
     }
@@ -141,7 +140,6 @@ export const ExternalAuthProvider = ({ children }) => {
         return { success: false, error: error.detail || 'Error al registrar' };
       }
     } catch (error) {
-      console.error('Error registering external user:', error);
       return { success: false, error: 'Error de conexión' };
     }
   };
@@ -166,7 +164,6 @@ export const ExternalAuthProvider = ({ children }) => {
         return { success: false, error: error.detail || 'Credenciales inválidas' };
       }
     } catch (error) {
-      console.error('Error logging in external user:', error);
       return { success: false, error: 'Error de conexión' };
     }
   };
@@ -206,7 +203,6 @@ export const ExternalAuthProvider = ({ children }) => {
         return { success: false, error: error.detail || 'Error al actualizar' };
       }
     } catch (error) {
-      console.error('Error updating external user:', error);
       return { success: false, error: 'Error de conexión' };
     }
   };

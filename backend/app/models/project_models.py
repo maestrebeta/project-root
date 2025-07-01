@@ -24,7 +24,7 @@ class Project(Base):
 
     __table_args__ = (
         # Restricciones de tipos de proyecto y estado según la definición SQL
-        CheckConstraint("project_type IN ('development', 'support', 'meeting', 'training', 'other')", name='projects_project_type_check'),
+        CheckConstraint("project_type IN ('web_development', 'mobile_development', 'desktop_development', 'api_development', 'database_design', 'cloud_migration', 'devops_infrastructure', 'security_audit', 'ui_ux_design', 'testing_qa', 'maintenance_support', 'consulting', 'training', 'research_development', 'other')", name='projects_project_type_check'),
         CheckConstraint("status IN ('registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support')", name='projects_status_check'),
         UniqueConstraint('name', 'client_id', name='unique_project_client')
     )
@@ -39,6 +39,7 @@ class Project(Base):
     epics = relationship("Epic", back_populates="project", cascade="all, delete-orphan")
     user_stories = relationship("UserStory", back_populates="project", cascade="all, delete-orphan")
     quotations = relationship("Quotation", back_populates="project", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="project")
 
 class ProjectBudget(Base):
     __tablename__ = "project_budgets"

@@ -1,38 +1,42 @@
-import React, { useState } from 'react';
-import ReactDOM from 'react-dom';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
-import { useAuth } from "../../context/AuthContext.jsx";
-import { useAppTheme } from "../../context/ThemeContext.jsx";
-import { FiPlus, FiEdit2, FiTrash2, FiMove, FiSave, FiX } from 'react-icons/fi';
-import { useTaskStates } from './useProjectsAndTags';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FiX, FiPlus, FiTrash2, FiEdit3, FiSave, FiMove, 
+  FiAlertCircle, FiCheck, FiArrowRight, FiSettings, FiZap,
+  FiEye, FiEyeOff, FiDroplet, FiTag, FiInfo, FiChevronUp, FiChevronDown
+} from 'react-icons/fi';
+import { useOrganizationStates } from '../../hooks/useOrganizationStates';
+import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
 
 // Estados predeterminados del sistema
-const DEFAULT_TASK_STATES = {
+const DEFAULT_STATES = {
   states: [
     {
-      id: 'pendiente',
+      id: 1,
       label: 'Pendiente',
-      icon: '🟡',
-      color: 'yellow',
+      icon: '🔴',
+      color: 'red',
       isDefault: true
     },
     {
-      id: 'en_progreso',
+      id: 2,
       label: 'En progreso',
       icon: '🔵',
       color: 'blue',
       isDefault: true
     },
     {
-      id: 'completada',
+      id: 3,
       label: 'Completada',
       icon: '🟢',
       color: 'green',
       isDefault: true
     }
   ],
-  default_state: 'pendiente',
-  final_states: ['completada']
+  default_state: 1,
+  final_states: [3]
 };
 
 const AVAILABLE_ICONS = ['🟡', '🔵', '🟢', '🔴', '⚪', '⚫', '🟣', '🟤', '🟠', '⭐', '💫', '🌟'];
@@ -48,368 +52,574 @@ const AVAILABLE_COLORS = [
   { name: 'pink', label: 'Rosa' }
 ];
 
-const TaskStatesManager = ({ onClose }) => {
-  const theme = useAppTheme();
+// Componente de contenido que puede ser usado dentro de otros modales
+export const TaskStatesManagerContent = ({ onClose, isEmbedded = false, onUpdate }) => {
   const { user } = useAuth();
-  const { taskStates, updateTaskStates } = useTaskStates();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { showNotification } = useNotifications();
+  const { taskStates, updateTaskStates, refetchStates } = useOrganizationStates();
+  const [states, setStates] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [editingState, setEditingState] = useState(null);
   const [newState, setNewState] = useState({
+    id: '',
     label: '',
-    icon: '🟡',
-    color: 'gray'
+    icon: '🔵',
+    color: 'blue'
   });
-  const [showNewStateForm, setShowNewStateForm] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
-  // Guardar estados en el backend
+  // Cargar estados iniciales desde useOrganizationStates
+  useEffect(() => {
+    if (taskStates?.states) {
+      setStates([...taskStates.states]);
+    }
+  }, [taskStates]);
+
   const handleSave = async () => {
+    setLoading(true);
+    setErrors({});
+
     try {
-      setLoading(true);
-      const session = JSON.parse(localStorage.getItem('session'));
-      if (!session?.token) {
-        throw new Error('No hay sesión activa');
+      const taskStatesData = {
+        states: states,
+        default_state: 1,
+        final_states: [3]
+      };
+
+      // Usar la función onUpdate si está disponible, sino usar updateTaskStates del hook
+      if (onUpdate) {
+        await onUpdate(taskStatesData);
+      } else {
+        await updateTaskStates(taskStatesData);
       }
 
-      const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${session.token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(taskStates)
-      });
+      // Refrescar los estados del hook para asegurar sincronización
+      await refetchStates();
 
-      if (!response.ok) {
-        throw new Error('Error al guardar los estados');
-      }
-
-      // Actualizar estados globalmente
-      updateTaskStates(taskStates);
-      onClose();
+      // Mostrar notificación de éxito
+      showNotification('Estados de tareas actualizados correctamente', 'success');
       
-      // Recargar la página después de guardar
-      window.location.reload();
+      if (onClose) {
+        onClose();
+      }
     } catch (error) {
-      console.error('Error:', error);
-      setError(error.message);
+      console.error('Error completo:', error);
+      setErrors({ general: error.message });
+      // Mostrar notificación de error
+      showNotification('Error al guardar los estados de tareas', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReorder = (newOrder) => {
-    updateTaskStates({
-      ...taskStates,
-      states: newOrder
-    });
+  const handleReorder = (result) => {
+    if (!result.destination) return;
+    
+    const items = Array.from(states);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    
+    setStates(items);
+  };
+
+  const moveStateUp = (index) => {
+    if (index === 0) return;
+    const newStates = [...states];
+    [newStates[index], newStates[index - 1]] = [newStates[index - 1], newStates[index]];
+    setStates(newStates);
+  };
+
+  const moveStateDown = (index) => {
+    if (index === states.length - 1) return;
+    const newStates = [...states];
+    [newStates[index], newStates[index + 1]] = [newStates[index + 1], newStates[index]];
+    setStates(newStates);
   };
 
   const handleAddState = () => {
-    if (!newState.label) return;
-
-    // Generar un ID único basado en el timestamp y un número aleatorio
-    const uniqueId = `state_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generar ID automático (máximo ID existente + 1)
+    const maxId = Math.max(...states.map(s => s.id), 0);
+    const newId = maxId + 1;
     
-    updateTaskStates({
-      ...taskStates,
-      states: [...taskStates.states, { 
-        ...newState, 
-        id: uniqueId,
-        isDefault: false 
-      }]
-    });
-    
-    setNewState({
+    setEditingState({
+      id: newId,
       label: '',
-      icon: '🟡',
-      color: 'gray'
+      icon: '🔴',
+      color: 'red',
+      isDefault: false
     });
-    setShowNewStateForm(false);
+    setShowAddForm(true);
   };
 
   const handleEditState = (state) => {
-    if (state.isDefault) return;
-    setEditingState({
-      ...state,
-      originalId: state.id // Guardamos el ID original para referencia
-    });
+    setNewState({ ...state });
+    setEditingState(state);
+    setShowAddForm(true);
+    setErrors({});
   };
 
   const handleUpdateState = (updatedState) => {
-    updateTaskStates({
-      ...taskStates,
-      states: taskStates.states.map(s => 
-        s.id === updatedState.originalId ? {
-          ...updatedState,
-          id: updatedState.originalId // Mantenemos el ID original
-        } : s
-      )
-    });
+    if (editingState) {
+      setStates(prev => prev.map(state => 
+        state.id === editingState.id ? updatedState : state
+      ));
+    } else {
+      setStates(prev => [...prev, updatedState]);
+    }
+    setShowAddForm(false);
     setEditingState(null);
+    setNewState({
+      id: '',
+      label: '',
+      icon: '🔵',
+      color: 'blue'
+    });
   };
 
   const handleDeleteState = (stateId) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este estado? Las tareas que lo usen pasarán al estado "pendiente".')) {
-      updateTaskStates({
-        ...taskStates,
-        states: taskStates.states.filter(s => s.id !== stateId)
-      });
+    const stateToDelete = states.find(s => s.id === stateId);
+    if (!stateToDelete) return;
+    
+    if (stateToDelete.isProtected) {
+      showNotification('No se puede eliminar un estado protegido', 'error');
+      return;
+    }
+    
+    if (window.confirm(`¿Estás seguro de que quieres eliminar el estado "${stateToDelete.label}"?`)) {
+      setStates(prev => prev.filter(state => state.id !== stateId));
+      showNotification('Estado eliminado correctamente', 'success');
     }
   };
 
-  return ReactDOM.createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm"
-    >
-      <motion.div
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-      >
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Gestionar Estados de Tareas</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <FiX size={24} />
-          </button>
-        </div>
-        
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+  const validateState = (state) => {
+    const newErrors = {};
+    
+    if (!state.label || state.label.trim() === '') {
+      newErrors.label = 'La etiqueta es requerida';
+    }
+    
+    if (!state.icon) {
+      newErrors.icon = 'El icono es requerido';
+    }
+    
+    if (!state.color) {
+      newErrors.color = 'El color es requerido';
+    }
+    
+    return newErrors;
+  };
 
-        {loading ? (
-          <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        ) : (
-          <>
-            <div className="mb-6">
-              <p className="text-gray-600 mb-4">
-                Organiza y personaliza los estados de las tareas para tu organización.
-                Los estados predeterminados no pueden ser modificados.
-              </p>
+  const handleSaveState = () => {
+    const validationErrors = validateState(editingState);
+    
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+    
+    // Verificar si es un estado existente o nuevo
+    const existingState = states.find(s => s.id === editingState.id);
+    
+    if (existingState) {
+      // Actualizar estado existente
+      const updatedStates = states.map(s => 
+        s.id === editingState.id ? editingState : s
+      );
+      setStates(updatedStates);
+    } else {
+      // Agregar nuevo estado
+      setStates(prev => {
+        const newStates = [...prev, editingState];
+        return newStates;
+      });
+      showNotification('Estado agregado correctamente', 'success');
+    }
+    
+    setEditingState(null);
+    setShowAddForm(false);
+    setErrors({});
+  };
+
+  const handleCancelEdit = () => {
+    setShowAddForm(false);
+    setEditingState(null);
+    setNewState({
+      id: '',
+      label: '',
+      icon: '🔵',
+      color: 'blue'
+    });
+    setErrors({});
+  };
+
+  function getBgColorClass(color) {
+    const colorMap = {
+      'red': 'bg-red-50 border-red-200 text-red-800',
+      'blue': 'bg-blue-50 border-blue-200 text-blue-800',
+      'green': 'bg-green-50 border-green-200 text-green-800',
+      'yellow': 'bg-yellow-50 border-yellow-200 text-yellow-800',
+      'purple': 'bg-purple-50 border-purple-200 text-purple-800',
+      'gray': 'bg-gray-50 border-gray-200 text-gray-800',
+      'orange': 'bg-orange-50 border-orange-200 text-orange-800',
+      'indigo': 'bg-indigo-50 border-indigo-200 text-indigo-800',
+      'pink': 'bg-pink-50 border-pink-200 text-pink-800'
+    };
+    return colorMap[color] || colorMap.gray;
+  }
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose?.();
+    }
+  };
+
+  const handleCloseClick = () => {
+    onClose?.();
+  };
+
+  const handleCancelClick = () => {
+    onClose?.();
+  };
+
+  // Si está embebido, no renderizar el modal completo
+  if (isEmbedded) {
+    return (
+      <div className="w-full">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-800 tracking-tight">Estados de Tareas</h2>
+              <p className="text-gray-600 font-medium">Gestiona los estados para el registro de tiempo</p>
             </div>
-
-            <Reorder.Group
-              axis="y"
-              values={taskStates.states}
-              onReorder={handleReorder}
-              className="space-y-3"
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleAddState}
+              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-300 font-medium flex items-center gap-2 shadow-lg"
             >
-              {taskStates.states.map((state) => (
-                <Reorder.Item
+              <FiPlus className="w-5 h-5" />
+              Agregar Estado
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Estados existentes */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-gray-800 mb-6 tracking-tight">Estados Configurados</h3>
+          <div className="space-y-3">
+            {states.map((state, index) => (
+              <motion.div
                   key={state.id}
-                  value={state}
-                  className={`flex items-center p-4 ${
-                    state.isDefault ? 'bg-gray-50' : 'bg-white'
-                  } border rounded-lg shadow-sm hover:shadow-md transition-shadow`}
-                  dragListener={!state.isDefault}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className={`p-4 rounded-xl border-2 transition-all duration-300 hover:shadow-md ${
+                  getBgColorClass(state.color)
+                }`}
                 >
-                  <div className="flex-1 flex items-center gap-4">
-                    {!state.isDefault && (
-                      <FiMove className="text-gray-400 cursor-move" />
-                    )}
-                    <span className="text-2xl">{state.icon}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl">{state.icon}</div>
                     <div>
-                      <h3 className="font-medium text-gray-900">{state.label}</h3>
-                      <p className="text-sm text-gray-500">ID: {state.id}</p>
+                      <h4 className="font-semibold text-lg">{state.label}</h4>
+                      <p className="text-sm opacity-75">ID: {state.id}</p>
                     </div>
                   </div>
-                  
-                  {!state.isDefault && (
                     <div className="flex items-center gap-2">
+                    {/* Botones de reordenamiento */}
                       <button
-                        onClick={() => handleEditState(state)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                      onClick={() => moveStateUp(index)}
+                      disabled={index === 0}
+                      className="p-2 rounded-lg hover:bg-white/20 transition-colors disabled:opacity-50"
+                      title="Mover hacia arriba"
                       >
-                        <FiEdit2 />
+                      <FiChevronUp className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDeleteState(state.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                      onClick={() => moveStateDown(index)}
+                      disabled={index === states.length - 1}
+                      className="p-2 rounded-lg hover:bg-white/20 transition-colors disabled:opacity-50"
+                      title="Mover hacia abajo"
+                    >
+                      <FiChevronDown className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Botones de edición */}
+                    <button
+                      onClick={() => handleEditState(state)}
+                      disabled={state.isProtected}
+                      className="p-2 rounded-lg hover:bg-white/20 transition-colors disabled:opacity-50"
+                      title="Editar estado"
                       >
-                        <FiTrash2 />
+                      <FiEdit3 className="w-4 h-4" />
                       </button>
                     </div>
-                  )}
-                </Reorder.Item>
+                </div>
+              </motion.div>
               ))}
-            </Reorder.Group>
+          </div>
+        </div>
 
-            {!showNewStateForm ? (
-              <button
-                onClick={() => setShowNewStateForm(true)}
-                className="mt-4 flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
-              >
-                <FiPlus /> Agregar nuevo estado
-              </button>
-            ) : (
-              <div className="mt-4 p-4 border rounded-lg bg-gray-50">
-                <h4 className="font-medium mb-3">Nuevo Estado</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Formulario de agregar/editar estado */}
+        <AnimatePresence>
+          {showAddForm && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                {editingState ? 'Editar Estado' : 'Nuevo Estado'}
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Etiqueta *
+                  </label>
                   <input
                     type="text"
-                    placeholder="Nombre del estado"
-                    value={newState.label}
-                    onChange={(e) => setNewState({ ...newState, label: e.target.value })}
-                    className="border rounded-lg px-3 py-2"
+                    value={editingState.label}
+                    onChange={(e) => setEditingState(prev => ({ ...prev, label: e.target.value }))}
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300 ${
+                      errors.label ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    placeholder="Ej: En Revisión"
                   />
-                  <select
-                    value={newState.icon}
-                    onChange={(e) => setNewState({ ...newState, icon: e.target.value })}
-                    className="border rounded-lg px-3 py-2"
-                  >
-                    {AVAILABLE_ICONS.map(icon => (
-                      <option key={icon} value={icon}>{icon}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={newState.color}
-                    onChange={(e) => setNewState({ ...newState, color: e.target.value })}
-                    className="border rounded-lg px-3 py-2"
-                  >
-                    {AVAILABLE_COLORS.map(color => (
-                      <option key={color.name} value={color.name}>{color.label}</option>
-                    ))}
-                  </select>
+                  {errors.label && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                      <FiAlertCircle className="w-4 h-4" />
+                      {errors.label}
+                    </p>
+                  )}
                 </div>
-                <div className="flex justify-end gap-2 mt-4">
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Estado por Defecto
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingState.isDefault}
+                        onChange={(e) => setEditingState(prev => ({ ...prev, isDefault: e.target.checked }))}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                      />
+                      <span className="text-sm text-gray-700">Marcar como estado por defecto</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Icono
+                  </label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {AVAILABLE_ICONS.map((icon) => (
+                      <button
+                        key={icon}
+                        type="button"
+                        onClick={() => setEditingState(prev => ({ ...prev, icon }))}
+                        className={`p-3 rounded-lg border-2 transition-all duration-200 text-xl ${
+                          editingState.icon === icon
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Color
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {AVAILABLE_COLORS.map((color) => (
+                      <button
+                        key={color.name}
+                        type="button"
+                        onClick={() => setEditingState(prev => ({ ...prev, color: color.name }))}
+                        className={`p-3 rounded-lg border-2 transition-all duration-200 text-sm font-medium ${
+                          editingState.color === color.name
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        } ${getBgColorClass(color.name)}`}
+                      >
+                        {color.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Vista previa */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Vista Previa
+                </label>
+                <div className={`p-4 rounded-xl border-2 ${getBgColorClass(editingState.color)}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl">{editingState.icon}</div>
+                    <div>
+                      <h4 className="font-semibold">{editingState.label || 'Etiqueta del estado'}</h4>
+                      <p className="text-sm opacity-75">ID: {editingState.id}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex items-center justify-end gap-3">
                   <button
-                    onClick={() => setShowNewStateForm(false)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  onClick={handleCancelEdit}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium"
                   >
                     Cancelar
                   </button>
                   <button
-                    onClick={handleAddState}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    disabled={!newState.label}
+                  onClick={handleSaveState}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 font-medium flex items-center gap-2 shadow-lg"
                   >
-                    Agregar Estado
+                  <FiSave className="w-4 h-4" />
+                  {editingState ? 'Actualizar' : 'Crear'}
                   </button>
-                </div>
               </div>
-            )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            <div className="flex justify-end space-x-3 mt-6">
+        {/* Error general */}
+        {errors.general && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6"
+          >
+            <p className="text-red-600 flex items-center gap-2">
+              <FiAlertCircle className="w-4 h-4" />
+              {errors.general}
+            </p>
+          </motion.div>
+        )}
+
+        {/* Información adicional */}
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+          <div className="flex items-start gap-3">
+            <FiInfo className="w-5 h-5 text-blue-600 mt-0.5" />
+            <div>
+              <h4 className="font-semibold text-blue-800 mb-1">Información Importante</h4>
+              <ul className="text-sm text-blue-700 space-y-1">
+                <li>• Los estados predeterminados no se pueden eliminar</li>
+                <li>• Los cambios se aplicarán a todas las tareas existentes</li>
+                <li>• El orden de los estados afecta la visualización en las tablas</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Botones de navegación */}
+        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+          <div></div>
+          <div className="flex items-center gap-3">
               <button
-                onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              onClick={handleCancelClick}
+              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSave}
-                className={`px-4 py-2 text-white rounded-lg flex items-center gap-2 ${theme.PRIMARY_GRADIENT_CLASS} ${theme.PRIMARY_GRADIENT_HOVER_CLASS}`}
                 disabled={loading}
-              >
-                <FiSave />
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 font-medium flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <FiCheck className="w-4 h-4" />
                 Guardar Cambios
+                </>
+              )}
               </button>
             </div>
-          </>
-        )}
+        </div>
+      </div>
+    );
+  }
 
-        {/* Modal de edición */}
+  // Renderizado completo del modal (comportamiento original)
+  return createPortal(
         <AnimatePresence>
-          {editingState && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        transition={{ duration: 0.3 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
             >
               <motion.div
-                initial={{ scale: 0.95 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.95 }}
-                className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
-              >
-                <h3 className="text-lg font-semibold mb-4">Editar Estado</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nombre del Estado
-                    </label>
-                    <input
-                      type="text"
-                      value={editingState.label}
-                      onChange={(e) => setEditingState({
-                        ...editingState,
-                        label: e.target.value
-                      })}
-                      className="w-full border rounded-lg px-3 py-2"
-                    />
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ 
+            type: 'spring', 
+            stiffness: 300, 
+            damping: 30,
+            duration: 0.4
+          }}
+          className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}
+        >
+          {/* Header */}
+          <div className="px-8 py-6 border-b border-gray-200/50 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-sm z-10">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 shadow-lg">
+                <FiSettings className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Icono
-                    </label>
-                    <select
-                      value={editingState.icon}
-                      onChange={(e) => setEditingState({
-                        ...editingState,
-                        icon: e.target.value
-                      })}
-                      className="w-full border rounded-lg px-3 py-2"
-                    >
-                      {AVAILABLE_ICONS.map(icon => (
-                        <option key={icon} value={icon}>{icon}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Color
-                    </label>
-                    <select
-                      value={editingState.color}
-                      onChange={(e) => setEditingState({
-                        ...editingState,
-                        color: e.target.value
-                      })}
-                      className="w-full border rounded-lg px-3 py-2"
-                    >
-                      {AVAILABLE_COLORS.map(color => (
-                        <option key={color.name} value={color.name}>
-                          {color.label}
-                        </option>
-                      ))}
-                    </select>
+                <h2 className="text-3xl font-bold text-gray-800 tracking-tight">Estados de Tareas</h2>
+                <p className="text-gray-600 font-medium">Gestiona los estados para el registro de tiempo</p>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2 mt-6">
                   <button
-                    onClick={() => setEditingState(null)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => handleUpdateState(editingState)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Guardar Cambios
+              onClick={handleCloseClick}
+              className="p-3 hover:bg-gray-100 rounded-2xl transition-all duration-300 group"
+            >
+              <FiX className="w-6 h-6 text-gray-500 group-hover:text-gray-700 transition-colors" />
                   </button>
                 </div>
-              </motion.div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-8">
+            <TaskStatesManagerContent onClose={onClose} isEmbedded={true} onUpdate={onUpdate} />
+          </div>
             </motion.div>
-          )}
-        </AnimatePresence>
       </motion.div>
-    </motion.div>,
-    document.getElementById('root')
+    </AnimatePresence>,
+    document.body
   );
+};
+
+// Componente principal que mantiene la compatibilidad
+const TaskStatesManager = ({ onClose, onUpdate }) => {
+  return <TaskStatesManagerContent onClose={onClose} isEmbedded={false} onUpdate={onUpdate} />;
 };
 
 export default TaskStatesManager; 

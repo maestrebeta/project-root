@@ -57,6 +57,12 @@ export default function ClientTable({
   };
 
   const getProjectsProgress = (client) => {
+    // Usar el progreso promedio calculado automáticamente si está disponible
+    if (client.projects_progress_average !== undefined && client.projects_progress_average !== null) {
+      return client.projects_progress_average;
+    }
+    
+    // Fallback: calcular basado en proyectos y horas (método anterior)
     const projectsCount = client.projects_count || 0;
     const totalHours = client.total_hours_registered || 0;
     
@@ -223,12 +229,6 @@ export default function ClientTable({
                           </div>
                         ) : (
                           <div className="text-sm text-gray-500">Sin email</div>
-                        )}
-                        {client.contact_phone && (
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <FiPhone className="w-3 h-3" />
-                            {client.contact_phone}
-                          </div>
                         )}
                       </div>
                     </td>
@@ -476,7 +476,9 @@ export default function ClientTable({
                                   <div className="text-xs text-gray-500">Pendiente</div>
                                 </div>
                                 <div className="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-100">
-                                  <div className="text-lg font-bold text-yellow-600">{(client.client_rating || 0).toFixed(1)}</div>
+                                  <div className="text-lg font-bold text-yellow-600">
+                                    {client.rating_average ? client.rating_average.toFixed(1) : 'N/A'}
+                                  </div>
                                   <div className="text-xs text-gray-500">Calificación</div>
                                 </div>
                                 <div className="text-center p-3 bg-red-50 rounded-lg border border-red-100">

@@ -71,6 +71,18 @@ class User(Base):
     
     # Relación para formularios externos creados
     created_external_forms = relationship("ExternalForm", back_populates="created_by_user")
+    
+    # Relaciones para notificaciones
+    received_notifications = relationship(
+        "Notification", 
+        foreign_keys="[Notification.recipient_user_id]", 
+        back_populates="recipient"
+    )
+    sent_notifications = relationship(
+        "Notification", 
+        foreign_keys="[Notification.sender_user_id]", 
+        back_populates="sender"
+    )
 
 class ExternalUser(Base):
     __tablename__ = "external_users"

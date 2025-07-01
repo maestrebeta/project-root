@@ -60,14 +60,12 @@ export default function Login() {
       
       if (appOptimized && !preloadStatus.isActive && isRecurrentSession) {
         // App ya optimizada y sesión recurrente, continuar directamente
-        console.log('App optimizada y sesión recurrente, activando modo enfoque directamente...');
         const focusActivated = focusMode.activateFocusMode();
         
         if (focusActivated) {
           // Verificar que se activó correctamente
           setTimeout(() => {
             if (!focusMode.isFocusMode) {
-              console.log('Reintentando activar modo enfoque...');
               focusMode.activateFocusMode();
             }
           }, 500);
@@ -75,7 +73,6 @@ export default function Login() {
           // Verificación adicional después de 2 segundos
           setTimeout(() => {
             if (!focusMode.isFocusMode) {
-              console.log('Verificación final: Activando modo enfoque...');
               focusMode.activateFocusMode();
               // También agregar la clase CSS directamente como fallback
               document.body.classList.add('focus-mode-active');
@@ -84,11 +81,9 @@ export default function Login() {
           
           // Navegar al home después de activar el modo enfoque
           setTimeout(() => {
-            console.log('Navegando al home...');
             navigate('/home');
           }, 2500);
         } else {
-          console.log('No se pudo activar el modo enfoque, navegando sin él...');
           navigate('/home');
         }
       } else {
@@ -189,7 +184,6 @@ export default function Login() {
         // No marcar nada - el usuario puede volver a activarla
       }
     } catch (error) {
-      console.log('Error al cambiar pantalla completa:', error);
     }
   };
 
@@ -247,7 +241,6 @@ export default function Login() {
           }
         }
       } catch (error) {
-        console.log('No se pudo activar pantalla completa automáticamente:', error);
       }
     };
 
@@ -331,12 +324,10 @@ export default function Login() {
       const oneHour = 60 * 60 * 1000; // 1 hora en milisegundos
       
       if (lastOptimization && (now - parseInt(lastOptimization)) < oneHour) {
-        console.log('App ya optimizada recientemente, saltando precarga...');
         setAppOptimized(true);
         return;
       }
 
-      console.log('Iniciando proceso de precarga...');
       setPreloadStatus({ isActive: true, currentStep: 'Iniciando optimización...', progress: 0 });
 
       const steps = [
@@ -351,8 +342,7 @@ export default function Login() {
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         const progress = ((i + 1) / steps.length) * 100;
-        
-        console.log(`Ejecutando paso ${i + 1}/${steps.length}: ${step.name}`);
+
         setPreloadStatus({
           isActive: true,
           currentStep: step.name,
@@ -364,7 +354,6 @@ export default function Login() {
         
         // Precarregar componentes pesados
         if (step.name.includes('componentes')) {
-          console.log('Precargando componentes...');
           try {
             await preloadHeavyComponents();
           } catch (error) {
@@ -373,7 +362,6 @@ export default function Login() {
         }
         
         if (step.name.includes('servicios')) {
-          console.log('Precargando servicios...');
           try {
             await preloadServices();
           } catch (error) {
@@ -382,7 +370,6 @@ export default function Login() {
         }
 
         if (step.name.includes('estilos')) {
-          console.log('Precargando estilos...');
           try {
             await preloadStyles();
           } catch (error) {
@@ -392,7 +379,6 @@ export default function Login() {
       }
 
       // Marcar como optimizada
-      console.log('Precarga completada exitosamente');
       localStorage.setItem('smartplanner_last_optimization', now.toString());
       setAppOptimized(true);
       
@@ -409,7 +395,6 @@ export default function Login() {
 
   const preloadHeavyComponents = async () => {
     try {
-      console.log('Iniciando precarga de componentes pesados...');
       // Precarregar componentes pesados dinámicamente
       const components = [
         // Componentes principales
@@ -458,7 +443,6 @@ export default function Login() {
       const successful = results.filter(result => result.status === 'fulfilled').length;
       const failed = results.filter(result => result.status === 'rejected').length;
       
-      console.log(`Precarga de componentes completada: ${successful} exitosos, ${failed} fallidos`);
     } catch (error) {
       console.error('Error en precarga de componentes:', error);
       throw error;
@@ -467,7 +451,6 @@ export default function Login() {
 
   const preloadServices = async () => {
     try {
-      console.log('Iniciando precarga de servicios...');
       // Precarregar servicios y datos
       const services = [
         // Simular precarga de servicios de autenticación
@@ -490,7 +473,6 @@ export default function Login() {
       ];
 
       await Promise.allSettled(services);
-      console.log('Precarga de servicios completada');
     } catch (error) {
       console.error('Error en precarga de servicios:', error);
       throw error;
@@ -500,7 +482,6 @@ export default function Login() {
   // Función para precargar estilos y recursos
   const preloadStyles = async () => {
     try {
-      console.log('Iniciando precarga de estilos...');
       // Precarregar estilos CSS críticos
       const stylePromises = [
         // Precargar estilos de componentes
@@ -544,7 +525,6 @@ export default function Login() {
       ];
 
       await Promise.allSettled(stylePromises);
-      console.log('Precarga de estilos completada');
     } catch (error) {
       console.error('Error en precarga de estilos:', error);
       throw error;
@@ -589,7 +569,6 @@ export default function Login() {
       
       // Configurar timer automático de 2.5 segundos
       const timer = setTimeout(() => {
-        console.log('Timer automático: Redirigiendo al home...');
         closePreparationModal();
       }, 2500);
       
@@ -636,7 +615,6 @@ export default function Login() {
     
     // Fase 2: Transición de fondo oscuro a blanco
     setTimeout(() => {
-      console.log('Cambiando fondo a light...');
       setBackgroundPhase('light');
       
       // Mostrar pantalla de bienvenida después de que el fondo blanco esté visible

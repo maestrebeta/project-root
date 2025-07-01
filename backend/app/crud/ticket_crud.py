@@ -1,6 +1,32 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models.ticket_models import Ticket, TicketCategory
 from app.schemas.ticket_schema import TicketCreate, TicketUpdate, TicketCategoryCreate, TicketCategoryUpdate
+from datetime import datetime
+
+def generate_ticket_number(db: Session, organization_id: int):
+    """Genera un número único de ticket para la organización"""
+    # Obtener el último ticket de la organización
+    last_ticket = db.query(Ticket).filter(
+        Ticket.organization_id == organization_id
+    ).order_by(Ticket.ticket_id.desc()).first()
+    
+    # Generar número basado en el año actual y un contador
+    current_year = datetime.now().year
+    if last_ticket and last_ticket.ticket_number:
+        # Intentar extraer el contador del último ticket
+        try:
+            parts = last_ticket.ticket_number.split('-')
+            if len(parts) >= 3 and parts[1] == str(current_year):
+                counter = int(parts[2]) + 1
+            else:
+                counter = 1
+        except (ValueError, IndexError):
+            counter = 1
+    else:
+        counter = 1
+    
+    return f"TKT-{current_year}-{counter:04d}"
 
 # CRUD para categorías de tickets
 def create_ticket_category(db: Session, category: TicketCategoryCreate):
@@ -37,9 +63,15 @@ def delete_ticket_category(db: Session, category_id: int):
         db.commit()
     return db_category
 
-# CRUD para tickets (existente)
+# CRUD para tickets (actualizado)
 def create_ticket(db: Session, ticket: TicketCreate):
-    db_ticket = Ticket(**ticket.dict())
+    # Generar número de ticket si no se proporciona
+    if not ticket.ticket_number:
+        ticket.ticket_number = generate_ticket_number(db, ticket.organization_id)
+    
+    # Crear el ticket
+    ticket_data = ticket.dict()
+    db_ticket = Ticket(**ticket_data)
     db.add(db_ticket)
     db.commit()
     db.refresh(db_ticket)
@@ -56,26 +88,17 @@ def get_tickets(
     """Obtener tickets con filtros opcionales"""
     query = db.query(Ticket)
     
-    print(f"DEBUG: Getting tickets with filters - client_id: {client_id}, organization_id: {organization_id}, status: {status}")
-    
     # Aplicar filtros según los parámetros
     if client_id is not None:
         query = query.filter(Ticket.client_id == client_id)
-        print(f"DEBUG: Filtering by client_id: {client_id}")
     
     if organization_id is not None:
         query = query.filter(Ticket.organization_id == organization_id)
-        print(f"DEBUG: Filtering by organization_id: {organization_id}")
     
     if status is not None:
         query = query.filter(Ticket.status == status)
-        print(f"DEBUG: Filtering by status: {status}")
     
     results = query.offset(skip).limit(limit).all()
-    print(f"DEBUG: Found {len(results)} tickets")
-    
-    for ticket in results:
-        print(f"DEBUG: Ticket {ticket.ticket_id} - Status: {ticket.status}, Client: {ticket.client_id}")
     
     return results
 

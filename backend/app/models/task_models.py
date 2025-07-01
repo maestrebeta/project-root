@@ -40,4 +40,5 @@ class Task(Base):
         foreign_keys=[assigned_by], 
         back_populates="tasks_created"
     )
-    organization = relationship("Organization", back_populates="tasks") 
+    organization = relationship("Organization", back_populates="tasks")
+    notifications = relationship("Notification", back_populates="task") 

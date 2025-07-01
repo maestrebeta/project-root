@@ -117,4 +117,40 @@ export const makeAuthenticatedRequest = async (url, options = {}) => {
   } catch (error) {
     handleAuthError(error);
   }
+};
+
+// Hook personalizado para requests autenticados
+export const useAuthenticatedRequest = () => {
+  const makeRequest = async (url, options = {}) => {
+    try {
+      const headers = getAuthHeaders();
+      
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...headers,
+          ...options.headers
+        },
+        credentials: 'include'
+      });
+      
+      // Manejar errores de autenticación
+      if (response.status === 401) {
+        handleAuthError(new Error('Unauthorized'), response);
+        return null;
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`);
+      }
+      
+      return response;
+    } catch (error) {
+      handleAuthError(error);
+      return null;
+    }
+  };
+
+  return { makeRequest };
 }; 

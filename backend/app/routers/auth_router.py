@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.crud import user_crud
 from app.schemas import auth_schema, user_schema
-from app.core.security import create_access_token, verify_password, get_current_user
+from app.core.security import create_access_token, verify_password, get_current_user, get_current_user_organization, validate_organization_subscription, get_organization_subscription_info
 from app.core.config import settings
 from app.models.user_models import User, ExternalUser
 
@@ -31,10 +31,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-from app.core.security import get_current_user
-
 @router.post("/login", response_model=auth_schema.LoginResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    Endpoint de login que también valida el estado de suscripción de la organización
+    """
     user = user_crud.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -43,16 +44,52 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Log para depuración
-    print(f"Usuario autenticado: {user.username}")
-    print(f"ID de organización: {user.organization_id}")
-    print(f"Datos completos del usuario: {user.__dict__}")
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuario inactivo"
+        )
     
+    # Verificar suscripción de la organización (excepto para super usuarios)
+    if user.role != 'super_user' and user.organization_id:
+        from app.models.organization_models import Organization
+        organization = db.query(Organization).filter(
+            Organization.organization_id == user.organization_id
+        ).first()
+        
+        if organization:
+            if not organization.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="La organización está inactiva. Contacta a soporte para más información."
+                )
+            
+            if not organization.is_subscription_active:
+                # Determinar el motivo del bloqueo
+                if organization.subscription_status == 'suspended':
+                    reason = "La suscripción ha sido suspendida"
+                elif organization.subscription_plan == 'free' and organization.trial_end_date and organization.trial_end_date < datetime.now(timezone.utc):
+                    reason = "El período de prueba gratuita ha expirado"
+                elif organization.subscription_end_date and organization.subscription_end_date < datetime.now(timezone.utc):
+                    reason = "La suscripción ha expirado"
+                else:
+                    reason = "Problema con la suscripción"
+                
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Acceso bloqueado: {reason}. Contacta a soporte para renovar tu plan."
+                )
+    
+    # Crear token de acceso
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username, "email": user.email, "role": user.role}, 
         expires_delta=access_token_expires
     )
+    
+    # Actualizar último login
+    user.last_login = datetime.now(timezone.utc)
+    db.commit()
     
     # Preparar información del usuario para la respuesta
     user_info = auth_schema.UserInfo(
@@ -66,9 +103,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         theme_preferences=user.theme_preferences,
         last_login=user.last_login
     )
-    
-    # Log para depuración
-    print(f"UserInfo creado: {user_info.dict()}")
     
     return {
         "access_token": access_token, 
@@ -86,16 +120,32 @@ def external_login(login_data: user_schema.ExternalUserLogin, db: Session = Depe
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Actualizar último login
-    user_crud.update_external_user_login(db, external_user.external_user_id)
+    if not external_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuario inactivo"
+        )
     
-    # Crear token
-    token, expires_at = user_crud.create_external_user_token(external_user)
+    # Verificar suscripción de la organización
+    if external_user.organization_id:
+        from app.models.organization_models import Organization
+        organization = db.query(Organization).filter(
+            Organization.organization_id == external_user.organization_id
+        ).first()
+        
+        if organization and not organization.is_subscription_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acceso bloqueado: La suscripción de la organización ha expirado."
+            )
+    
+    access_token_expires = timedelta(hours=24)  # Tokens más largos para usuarios externos
+    access_token = user_crud.create_external_user_token(external_user)
     
     return {
-        "access_token": token,
+        "access_token": access_token,
         "token_type": "bearer",
-        "expires_at": expires_at,
+        "expires_at": external_user.expires_at,
         "external_user": {
             "external_user_id": external_user.external_user_id,
             "username": external_user.username,
@@ -122,6 +172,25 @@ def external_register(register_data: user_schema.ExternalUserRegister, db: Sessi
             detail="Username already taken"
         )
     
+    # Verificar si la organización existe y está activa
+    if register_data.organization_id:
+        from app.models.organization_models import Organization
+        organization = db.query(Organization).filter(
+            Organization.organization_id == register_data.organization_id
+        ).first()
+        
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
+            )
+        
+        if not organization.is_active or not organization.is_subscription_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="La organización no está activa o la suscripción ha expirado"
+            )
+    
     # Crear usuario externo
     external_user_data = user_schema.ExternalUserCreate(
         username=register_data.username,
@@ -136,12 +205,13 @@ def external_register(register_data: user_schema.ExternalUserRegister, db: Sessi
     external_user = user_crud.create_external_user(db, external_user_data)
     
     # Crear token
-    token, expires_at = user_crud.create_external_user_token(external_user)
+    access_token_expires = timedelta(hours=24)
+    access_token = user_crud.create_external_user_token(external_user)
     
     return {
-        "access_token": token,
+        "access_token": access_token,
         "token_type": "bearer",
-        "expires_at": expires_at,
+        "expires_at": external_user.expires_at,
         "external_user": {
             "external_user_id": external_user.external_user_id,
             "username": external_user.username,
@@ -192,4 +262,29 @@ def refresh_external_token(token: str = Depends(oauth2_scheme), db: Session = De
             "organization_id": external_user.organization_id,
             "client_id": external_user.client_id
         }
+    }
+
+@router.get("/subscription-info", response_model=dict)
+def get_subscription_info(
+    subscription_info: dict = Depends(get_organization_subscription_info)
+):
+    """
+    Obtiene información detallada sobre la suscripción de la organización del usuario.
+    Útil para mostrar advertencias y estado de la suscripción en el frontend.
+    """
+    return subscription_info
+
+@router.get("/validate-subscription")
+def validate_subscription(
+    current_user: User = Depends(validate_organization_subscription)
+):
+    """
+    Endpoint para validar que la suscripción esté activa.
+    Si no está activa, lanza una excepción con el motivo.
+    """
+    return {
+        "status": "active",
+        "message": "Suscripción válida",
+        "user_id": current_user.user_id,
+        "organization_id": current_user.organization_id
     } 

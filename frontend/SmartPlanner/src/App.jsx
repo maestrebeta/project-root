@@ -20,15 +20,25 @@ import ExternalTicketForm from './components/External/ExternalTicketForm';
 import ExternalFormManager from './components/IT/ExternalFormManager';
 import Login from './components/Auth/Login.jsx';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import AutoRedirect from './components/Auth/AutoRedirect.jsx';
+import SubscriptionBlockedModal from './components/Common/SubscriptionBlockedModal';
+import SubscriptionWarning from './components/Common/SubscriptionWarning';
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ExternalAuthProvider } from "./context/ExternalAuthContext.jsx";
-import { NotificationsProvider } from "./context/NotificationsContext";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { FocusModeProvider, useFocusMode } from "./context/FocusModeContext.jsx";
+import { NotificationsProvider } from "./context/NotificationsContext.jsx";
 import { useAppTheme } from "./context/ThemeContext.jsx";
+import { useSubscriptionValidation } from "./hooks/useSubscriptionValidation";
+import { useOrganizationStates } from "./hooks/useOrganizationStates";
 import { getHeaderTitleFromSidebar } from './components/Template/sidebarConfig';
 import UnitTesting from './components/Testing/UnitTesting';
 import './index.css';
+import { NotificationProvider } from './context/NotificationContext';
+import { ProjectProgressProvider } from './context/ProjectProgressContext';
+
+// Importar interceptor de fetch para manejar errores 401 automáticamente
+import './utils/fetchInterceptor';
 
 // Importar script de diagnóstico en desarrollo
 if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
@@ -114,17 +124,27 @@ const ComingSoon = ({ title, description, icon }) => {
 
 function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [kanbanStates, setKanbanStates] = useState(DEFAULT_KANBAN_STATES);
+  const { kanbanStates: kanbanStatesData } = useOrganizationStates();
+  const kanbanStates = kanbanStatesData?.states || [];
   const location = useLocation();
   const headerTitle = getHeaderTitleFromSidebar(location.pathname);
   const theme = useAppTheme();
   const { isFocusMode } = useFocusMode();
+  
+  // Validación de suscripción
+  const {
+    isBlocked,
+    blockReason,
+    subscriptionInfo,
+    loading: subscriptionLoading,
+    organizationName
+  } = useSubscriptionValidation();
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  // Efecto para contraer automáticamente el sidebar cuando se active el modo enfoque
+  // Efecto para contraer automáticamente el sidebar principal cuando se active el modo enfoque
   useEffect(() => {
     if (isFocusMode && !sidebarCollapsed) {
       // Solo contraer si el modo enfoque se acaba de activar y el sidebar no está colapsado
@@ -140,8 +160,23 @@ function AppContent() {
     }
   }, [isFocusMode, sidebarCollapsed]);
 
-  // Debug: Log del estado del sidebar
-  console.log('Sidebar collapsed:', sidebarCollapsed, 'MarginLeft:', sidebarCollapsed ? 80 : 256);
+  // Efecto para resetear el estado del sidebar al iniciar sesión
+  useEffect(() => {
+    const handleLogin = () => {
+      // Limpiar flags de sessionStorage al iniciar sesión
+      sessionStorage.removeItem('focusModeSidebarContracted');
+      // Asegurar que el sidebar esté expandido por defecto al iniciar sesión
+      if (sidebarCollapsed) {
+        setSidebarCollapsed(false);
+      }
+    };
+
+    window.addEventListener('userLoggedIn', handleLogin);
+    
+    return () => {
+      window.removeEventListener('userLoggedIn', handleLogin);
+    };
+  }, [sidebarCollapsed]);
 
   // No mostrar Sidebar ni Header en la página de login
   const isLoginPage = location.pathname === '/login';
@@ -172,6 +207,17 @@ function AppContent() {
 
   return (
     <div id="app-layout" className={`app-layout bg-gradient-to-br from-[#f6f7fb] to-[#e9eaf3] min-h-screen ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}>
+      {/* Modal de bloqueo de suscripción */}
+      <SubscriptionBlockedModal
+        isOpen={isBlocked}
+        reason={blockReason}
+        organizationName={organizationName}
+        subscriptionInfo={subscriptionInfo}
+      />
+      
+      {/* Advertencia de suscripción */}
+      <SubscriptionWarning />
+      
       <Sidebar collapsed={sidebarCollapsed} onMenuClick={toggleSidebar} />
       <div
         className="app-content focus-mode-expand transition-all duration-300"
@@ -181,8 +227,18 @@ function AppContent() {
       >
         <Header onMenuClick={toggleSidebar} title={headerTitle}/>
         <div className="relative min-h-[calc(100vh-4rem)]">
+          {/* Overlay de bloqueo cuando la suscripción está inactiva */}
+          {isBlocked && (
+            <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50" />
+          )}
+          
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
+              {/* Ruta raíz - redirección automática basada en autenticación */}
+              <Route
+                path="/"
+                element={<AutoRedirect />}
+              />
               <Route
                 path="/home"
                 element={
@@ -306,10 +362,7 @@ function AppContent() {
                 element={
                   <ProtectedRoute>
                     <div className="h-full">
-                      <KanbanStatesManager
-                        states={kanbanStates}
-                        setStates={setKanbanStates}
-                      />
+                      <KanbanStatesManager onClose={() => navigate('/home')} />
                     </div>
                   </ProtectedRoute>
                 }
@@ -381,11 +434,15 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <ExternalAuthProvider>
-          <NotificationsProvider>
-            <FocusModeProvider>
-              <AppContent />
-            </FocusModeProvider>
-          </NotificationsProvider>
+          <FocusModeProvider>
+            <NotificationsProvider>
+              <NotificationProvider>
+                <ProjectProgressProvider>
+                  <AppContent />
+                </ProjectProgressProvider>
+              </NotificationProvider>
+            </NotificationsProvider>
+          </FocusModeProvider>
         </ExternalAuthProvider>
       </AuthProvider>
     </ThemeProvider>

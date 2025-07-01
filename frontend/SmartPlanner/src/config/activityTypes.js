@@ -2,20 +2,34 @@
 
 // Tipos de actividad predeterminados
 export const DEFAULT_ACTIVITY_TYPES = [
-    'trabajo',
+    'desarrollo',
+    'bpo',
+    'soporte',
     'reunion',
-    'capacitacion', 
-    'soporte', 
+    'capacitacion',
+    'documentacion',
     'otro'
 ];
 
 // Mapeo de tipos de actividad para conversión
 export const ACTIVITY_TYPE_MAPPING = {
-    // Trabajo
-    'development': 'trabajo',
-    'coding': 'trabajo',
-    'programming': 'trabajo',
-    'design': 'trabajo',
+    // Desarrollo
+    'development': 'desarrollo',
+    'coding': 'desarrollo',
+    'programming': 'desarrollo',
+    'design': 'desarrollo',
+    'trabajo': 'desarrollo',
+    
+    // BPO
+    'business_process': 'bpo',
+    'outsourcing': 'bpo',
+    'administrative': 'bpo',
+    'process_management': 'bpo',
+    
+    // Soporte
+    'support': 'soporte',
+    'helpdesk': 'soporte',
+    'maintenance': 'soporte',
     
     // Reunión
     'meeting': 'reunion',
@@ -26,10 +40,8 @@ export const ACTIVITY_TYPE_MAPPING = {
     'learning': 'capacitacion',
     'workshop': 'capacitacion',
     
-    // Soporte
-    'support': 'soporte',
-    'helpdesk': 'soporte',
-    'maintenance': 'soporte',
+    // Documentación
+    'documentation': 'documentacion',
     
     // Otros
     'miscellaneous': 'otro',

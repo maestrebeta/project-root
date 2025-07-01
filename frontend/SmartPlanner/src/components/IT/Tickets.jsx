@@ -5,16 +5,18 @@ import {
   FiPlus, FiFilter, FiSearch, FiEye, FiEyeOff, FiCheckCircle, 
   FiClock, FiAlertCircle, FiUser, FiCalendar, FiTag, FiMessageSquare,
   FiEdit2, FiTrash2, FiMoreVertical, FiArrowRight, FiUsers, FiTarget,
-  FiTrendingUp, FiTrendingDown, FiActivity, FiStar, FiZap, FiRefreshCw, FiGrid, FiList, FiX, FiAlertTriangle, FiFolder
+  FiTrendingUp, FiTrendingDown, FiActivity, FiStar, FiZap, FiRefreshCw, FiGrid, FiList, FiX, FiAlertTriangle, FiFolder, FiBarChart
 } from 'react-icons/fi';
 import TicketModal from './TicketModal';
 import TicketCard from './TicketCard';
 import TicketTable from './TicketTable';
+import TicketReportModal from './TicketReportModal';
 
 export default function Tickets() {
   const { user, isAuthenticated } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [users, setUsers] = useState([]);
+  const [externalUsers, setExternalUsers] = useState([]);
   const [clients, setClients] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,18 +26,23 @@ export default function Tickets() {
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
   
+  // Estado para el modal de reporte
+  const [showReportModal, setShowReportModal] = useState(false);
+  
   // Estados para filtros y búsqueda
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('all'); // Nuevo filtro por tiempo
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all'); // Nuevo filtro por rol
   const [viewMode, setViewMode] = useState('cards'); // 'cards' o 'table'
   const [showFilters, setShowFilters] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   
   // Estados para ordenamiento
-  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'days_open', direction: 'desc' }); // Ordenar por días abiertos por defecto
   
   // Estados de tickets disponibles
   const [ticketStatuses, setTicketStatuses] = useState([]);
@@ -46,8 +53,15 @@ export default function Tickets() {
   
   // Cargar datos iniciales
   useEffect(() => {
-    if (isAuthenticated && user?.organization_id) {
+    if (isAuthenticated && user) {
       fetchInitialData();
+      
+      // Configurar actualización automática cada 30 segundos
+      const interval = setInterval(() => {
+        fetchTickets();
+      }, 30000);
+      
+      return () => clearInterval(interval);
     }
   }, [isAuthenticated, user]);
 
@@ -70,6 +84,19 @@ export default function Tickets() {
       if (usersResponse.ok) {
         const usersData = await usersResponse.json();
         setUsers(usersData);
+      }
+
+      // Cargar usuarios externos
+      const externalUsersResponse = await fetch('http://localhost:8001/external-users/', {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (externalUsersResponse.ok) {
+        const externalUsersData = await externalUsersResponse.json();
+        setExternalUsers(externalUsersData);
       }
 
       // Cargar clientes
@@ -126,10 +153,6 @@ export default function Tickets() {
   const fetchTickets = async () => {
     try {
       const session = JSON.parse(localStorage.getItem('session'));
-      console.log('🔍 Fetching tickets...');
-      console.log('Session:', session);
-      console.log('User:', user);
-      console.log('Can manage tickets:', canManageTickets);
       
       const response = await fetch('http://localhost:8001/tickets/', {
         headers: {
@@ -138,26 +161,8 @@ export default function Tickets() {
         }
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
       if (response.ok) {
         const ticketsData = await response.json();
-        console.log('📋 Tickets recibidos:', ticketsData);
-        console.log('📊 Cantidad de tickets:', ticketsData.length);
-        
-        // TEMPORAL: Comentar filtrado por usuario para debugging
-        /*
-        if (!canManageTickets) {
-          // Usuarios no administradores solo ven sus tickets asignados
-          filteredTickets = ticketsData.filter(ticket => ticket.assigned_to_user_id === user.user_id);
-          console.log('🔒 Usuario no admin, tickets filtrados:', filteredTickets.length);
-          console.log('🔒 User ID:', user.user_id);
-          console.log('🔒 Tickets con assigned_to_user_id:', ticketsData.map(t => ({ id: t.ticket_id, assigned: t.assigned_to_user_id })));
-        }
-        */
-        
-        console.log('✅ Tickets finales a mostrar:', ticketsData);
         setTickets(ticketsData);
       } else {
         const errorText = await response.text();
@@ -177,73 +182,86 @@ export default function Tickets() {
     setRefreshing(false);
   };
 
-  // Filtrar tickets según los filtros aplicados
-  const getFilteredTickets = () => {
-    let filtered = tickets;
+  // Función para calcular días abiertos de un ticket
+  const getDaysOpen = (ticket) => {
+    const startDate = new Date(ticket.created_at);
+    const endDate = ticket.status === 'cerrado' && ticket.resolved_at 
+      ? new Date(ticket.resolved_at) 
+      : new Date();
     
-    // TEMPORAL: Comentar filtrado por usuario para debugging
-    /*
-    // Filtrar por usuario asignado
-    if (!canManageTickets) {
-      // Usuarios normales solo ven sus tickets asignados
-      filtered = filtered.filter(ticket => ticket.assigned_to_user_id === user?.user_id);
-    }
-    */
-    
-    // Filtrar por búsqueda
-    if (searchFilter) {
-      filtered = filtered.filter(ticket => 
-        ticket.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        ticket.description.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        ticket.ticket_number.toLowerCase().includes(searchFilter.toLowerCase())
-      );
-    }
-    
-    // Filtrar por estado
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(ticket => ticket.status === statusFilter);
-    }
-    
-    // Filtrar por prioridad
-    if (priorityFilter !== 'all') {
-      filtered = filtered.filter(ticket => ticket.priority === priorityFilter);
-    }
-    
-    // Filtrar por usuario asignado (solo para administradores)
-    if (canManageTickets && assignedToFilter !== 'all') {
-      filtered = filtered.filter(ticket => ticket.assigned_to_user_id === parseInt(assignedToFilter));
-    }
+    const diffTime = Math.abs(endDate - startDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
 
-    // Filtrar por cliente
-    if (clientFilter !== 'all') {
-      filtered = filtered.filter(ticket => ticket.client_id === parseInt(clientFilter));
-    }
+  // Función para verificar si un ticket cumple con el filtro de tiempo
+  const matchesTimeFilter = (ticket) => {
+    if (timeFilter === 'all') return true;
+    if (ticket.status === 'cerrado') return false; // Solo tickets abiertos
     
-    // Filtrar tickets cerrados según el toggle
-    if (!showClosed) {
-      filtered = filtered.filter(ticket => ticket.status !== 'cerrado');
-    }
+    const daysOpen = getDaysOpen(ticket);
     
-    // Ordenar
+    switch (timeFilter) {
+      case 'less_week': return daysOpen < 7;
+      case 'more_week': return daysOpen >= 7 && daysOpen < 30;
+      case 'more_month': return daysOpen >= 30 && daysOpen < 90;
+      case 'more_quarter': return daysOpen >= 90;
+      default: return true;
+    }
+  };
+
+  const getFilteredTickets = () => {
+    let filtered = tickets.filter(ticket => {
+      const matchesSearch = ticket.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
+                           ticket.description?.toLowerCase().includes(searchFilter.toLowerCase()) ||
+                           ticket.ticket_number.toLowerCase().includes(searchFilter.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
+      const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
+      const matchesTime = matchesTimeFilter(ticket);
+      const matchesAssigned = assignedToFilter === 'all' || 
+                             (assignedToFilter === 'unassigned' && !ticket.assigned_to_user_id) ||
+                             ticket.assigned_to_user_id?.toString() === assignedToFilter;
+      const matchesClient = clientFilter === 'all' || ticket.client_id?.toString() === clientFilter;
+      
+      // Filtro por rol del usuario asignado
+      const matchesRole = roleFilter === 'all' || 
+                         (ticket.assigned_to_user_id && (() => {
+                           const assignedUser = users.find(u => u.user_id === ticket.assigned_to_user_id);
+                           return assignedUser && assignedUser.role === roleFilter;
+                         })());
+      
+      // Aplicar filtro de tickets cerrados
+      const matchesClosedFilter = showClosed || ticket.status !== 'cerrado';
+      
+      return matchesSearch && matchesStatus && matchesPriority && matchesTime && matchesAssigned && matchesClient && matchesRole && matchesClosedFilter;
+    });
+    
+    // Ordenar tickets
     filtered.sort((a, b) => {
-      const aValue = a[sortConfig.key];
-      const bValue = b[sortConfig.key];
+      let aValue, bValue;
       
-      if (sortConfig.key === 'created_at' || sortConfig.key === 'due_date') {
-        return sortConfig.direction === 'asc' 
-          ? new Date(aValue || 0) - new Date(bValue || 0)
-          : new Date(bValue || 0) - new Date(aValue || 0);
+      if (sortConfig.key === 'days_open') {
+        aValue = getDaysOpen(a);
+        bValue = getDaysOpen(b);
+      } else if (sortConfig.key === 'created_at') {
+        aValue = new Date(a.created_at);
+        bValue = new Date(b.created_at);
+      } else if (sortConfig.key === 'title') {
+        aValue = a.title.toLowerCase();
+        bValue = b.title.toLowerCase();
+      } else if (sortConfig.key === 'priority') {
+        const priorityOrder = { 'critica': 4, 'alta': 3, 'media': 2, 'baja': 1 };
+        aValue = priorityOrder[a.priority] || 0;
+        bValue = priorityOrder[b.priority] || 0;
+      } else {
+        aValue = a[sortConfig.key];
+        bValue = b[sortConfig.key];
       }
       
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortConfig.direction === 'asc' 
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      }
-      
-      return sortConfig.direction === 'asc' 
-        ? (aValue || 0) - (bValue || 0)
-        : (bValue || 0) - (aValue || 0);
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
     });
     
     return filtered;
@@ -307,7 +325,6 @@ export default function Tickets() {
         };
       }
       
-      console.log('📤 Enviando datos del ticket:', finalTicketData);
       
       const response = await fetch(url, {
         method,
@@ -318,11 +335,8 @@ export default function Tickets() {
         body: JSON.stringify(finalTicketData)
       });
 
-      console.log('📥 Respuesta del servidor:', response.status, response.statusText);
-
       if (response.ok) {
         const savedTicket = await response.json();
-        console.log('✅ Ticket guardado exitosamente:', savedTicket);
         setShowTicketModal(false);
         setSelectedTicket(null);
         await fetchTickets();
@@ -362,16 +376,11 @@ export default function Tickets() {
   // Manejar cambio de estado de ticket
   const handleStatusChange = async (ticketId, newStatus) => {
     try {
-      console.log(`🔧 Intentando cambiar estado de ticket ${ticketId} a ${newStatus}`);
-      console.log(`🔧 Tipo de ticketId: ${typeof ticketId}`);
-      console.log(`🔧 Tipo de newStatus: ${typeof newStatus}`);
       
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
         throw new Error('No hay sesión activa');
       }
-      
-      console.log(`🔧 Token de sesión: ${session.token.substring(0, 20)}...`);
       
       // Usar el endpoint específico para cambios de estado
       const requestBody = { 
@@ -379,7 +388,6 @@ export default function Tickets() {
         resolved_at: newStatus === 'cerrado' ? new Date().toISOString() : null,
         closed_at: newStatus === 'cerrado' ? new Date().toISOString() : null
       };
-      console.log(`🔧 Cuerpo de la petición:`, requestBody);
       
       const response = await fetch(`http://localhost:8001/tickets/${ticketId}/status`, {
         method: 'PATCH',
@@ -390,12 +398,8 @@ export default function Tickets() {
         body: JSON.stringify(requestBody)
       });
 
-      console.log(`🔧 Respuesta del servidor: ${response.status} ${response.statusText}`);
-      console.log(`🔧 Headers de respuesta:`, Object.fromEntries(response.headers.entries()));
-
       if (response.ok) {
         const updatedTicket = await response.json();
-        console.log('✅ Ticket actualizado exitosamente:', updatedTicket);
         await fetchTickets();
       } else {
         const errorText = await response.text();
@@ -410,10 +414,26 @@ export default function Tickets() {
     }
   };
 
-  // Obtener nombre del usuario
-  const getUserName = (userId) => {
-    const user = users.find(u => u.user_id === userId);
-    return user ? user.full_name : 'Usuario desconocido';
+  // Obtener nombre del usuario (interno o externo)
+  const getUserName = (userId, externalUserId, contactName) => {
+    // Si hay un usuario externo, usar directamente el nombre de contacto
+    if (externalUserId) {
+      return contactName || 'Usuario externo';
+    }
+    
+    // Si es un usuario interno
+    if (userId) {
+      const user = users.find(u => u.user_id === userId);
+      if (user) {
+        // Extraer solo el nombre del usuario (antes del guión si existe)
+        const fullName = user.full_name || '';
+        const nameParts = fullName.split(' - ');
+        return nameParts[0] || fullName || 'Usuario desconocido';
+      }
+      return 'Usuario desconocido';
+    }
+    
+    return 'Usuario desconocido';
   };
 
   // Obtener nombre del cliente
@@ -433,9 +453,10 @@ export default function Tickets() {
     setSearchFilter('');
     setStatusFilter('all');
     setPriorityFilter('all');
+    setTimeFilter('all');
     setAssignedToFilter('all');
     setClientFilter('all');
-    setShowClosed(false);
+    setRoleFilter('all');
   };
 
   const handleSort = (key) => {
@@ -452,7 +473,7 @@ export default function Tickets() {
 
   const stats = getStats();
   const filteredTickets = getFilteredTickets();
-  const hasActiveFilters = searchFilter || statusFilter !== 'all' || priorityFilter !== 'all' || assignedToFilter !== 'all' || clientFilter !== 'all';
+  const hasActiveFilters = searchFilter || statusFilter !== 'all' || priorityFilter !== 'all' || timeFilter !== 'all' || assignedToFilter !== 'all' || clientFilter !== 'all' || roleFilter !== 'all';
 
   if (loading) {
     return (
@@ -556,14 +577,13 @@ export default function Tickets() {
                 )}
               </button>
 
-              {/* Botón de refrescar */}
+              {/* Botón de reporte por usuario */}
               <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all duration-300 disabled:opacity-50"
+                onClick={() => setShowReportModal(true)}
+                className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
               >
-                <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                Actualizar
+                <FiBarChart className="w-4 h-4" />
+                Reporte por Usuario
               </button>
 
               {/* Toggle de vista mejorado */}
@@ -629,7 +649,7 @@ export default function Tickets() {
           <AnimatePresence>
             {showFilters && (
               <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
                     <select
@@ -688,6 +708,55 @@ export default function Tickets() {
                     </select>
                   </div>
 
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>
+                    <select
+                      value={roleFilter}
+                      onChange={(e) => setRoleFilter(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    >
+                      <option value="all">Todos los roles</option>
+                      <option value="dev">Desarrollador</option>
+                      <option value="infra">Infraestructura</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Tiempo</label>
+                    <select
+                      value={timeFilter}
+                      onChange={(e) => setTimeFilter(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    >
+                      <option value="all">Todo el tiempo</option>
+                      <option value="less_week">Menos de 1 semana</option>
+                      <option value="more_week">Más de 1 semana</option>
+                      <option value="more_month">Más de 1 mes</option>
+                      <option value="more_quarter">Más de 3 meses</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Ordenar por</label>
+                    <select
+                      value={`${sortConfig.key}-${sortConfig.direction}`}
+                      onChange={(e) => {
+                        const [key, direction] = e.target.value.split('-');
+                        setSortConfig({ key, direction });
+                      }}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    >
+                      <option value="days_open-desc">Días abiertos (más antiguos primero)</option>
+                      <option value="days_open-asc">Días abiertos (más recientes primero)</option>
+                      <option value="priority-desc">Prioridad (más alta primero)</option>
+                      <option value="priority-asc">Prioridad (más baja primero)</option>
+                      <option value="created_at-desc">Fecha de creación (más reciente primero)</option>
+                      <option value="created_at-asc">Fecha de creación (más antigua primero)</option>
+                      <option value="title-asc">Título (A-Z)</option>
+                      <option value="title-desc">Título (Z-A)</option>
+                    </select>
+                  </div>
+
                   <div className="flex items-end">
                     <button
                       onClick={clearAllFilters}
@@ -731,7 +800,7 @@ export default function Tickets() {
           ) : (
             <AnimatePresence mode="wait">
               {viewMode === 'cards' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {filteredTickets.map((ticket) => (
                     <div
                       key={ticket.ticket_id}
@@ -739,7 +808,6 @@ export default function Tickets() {
                     >
                       <TicketCard
                         ticket={ticket}
-                        users={users}
                         canManage={canManageTickets}
                         onEdit={() => {
                           setSelectedTicket(ticket);
@@ -750,6 +818,7 @@ export default function Tickets() {
                         getUserName={getUserName}
                         getClientName={getClientName}
                         getProjectName={getProjectName}
+                        getDaysOpen={getDaysOpen}
                         ticketStatuses={ticketStatuses}
                         ticketPriorities={ticketPriorities}
                       />
@@ -772,6 +841,7 @@ export default function Tickets() {
                   getUserName={getUserName}
                   getClientName={getClientName}
                   getProjectName={getProjectName}
+                  getDaysOpen={getDaysOpen}
                   ticketStatuses={ticketStatuses}
                   ticketPriorities={ticketPriorities}
                   onSort={handleSort}
@@ -797,6 +867,14 @@ export default function Tickets() {
         onSave={handleSaveTicket}
         ticketStatuses={ticketStatuses}
         ticketPriorities={ticketPriorities}
+      />
+
+      {/* Modal de reporte por usuario */}
+      <TicketReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        tickets={tickets}
+        users={users}
       />
     </div>
   );

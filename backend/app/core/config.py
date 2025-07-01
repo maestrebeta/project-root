@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     # Configuración de JWT
     SECRET_KEY: str = "tu_clave_secreta_aqui_cambiala_en_produccion"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440 # 1 dia
     
     # Configuración del servidor
     HOST: str = "0.0.0.0"

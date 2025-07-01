@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 # Epic Schemas
@@ -13,15 +13,27 @@ class EpicBase(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
 
-    tags: Optional[Dict[str, Any]] = None
     acceptance_criteria: Optional[str] = None
     business_value: Optional[str] = None
 
     @validator('status')
     def validate_status(cls, v):
-        valid_statuses = ['backlog', 'planning', 'in_progress', 'review', 'done', 'blocked']
+        # Estados básicos que siempre están permitidos
+        basic_statuses = ['backlog', 'todo', 'in_progress', 'in_review', 'testing', 'done', 'blocked']
+        
+        # Estados adicionales que pueden venir de la configuración de kanban
+        additional_statuses = [
+            'nuevo', 'en_progreso', 'listo_pruebas', 'cerrado', 'en_revision', 
+            'pendiente', 'completada', 'bloqueada', 'cancelada'
+        ]
+        
+        valid_statuses = basic_statuses + additional_statuses
+        
         if v not in valid_statuses:
-            raise ValueError(f'Status must be one of: {valid_statuses}')
+            # En lugar de fallar, permitir el estado y loggear una advertencia
+            print(f"⚠️ Estado no estándar detectado: {v}. Permitido para compatibilidad.")
+            return v
+        
         return v
 
     @validator('priority')
@@ -41,7 +53,6 @@ class EpicUpdate(BaseModel):
     priority: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    tags: Optional[Dict[str, Any]] = None
     acceptance_criteria: Optional[str] = None
     business_value: Optional[str] = None
 
@@ -74,12 +85,6 @@ class UserStoryBase(BaseModel):
     specialization: str = Field(default='development')
     sub_specializations: Optional[List[str]] = None
     estimated_hours: Optional[Decimal] = Field(default=8, ge=0)
-    
-    # Estimaciones por tipo de trabajo
-    ui_hours: Optional[Decimal] = Field(default=0, ge=0)
-    development_hours: Optional[Decimal] = Field(default=0, ge=0)
-    testing_hours: Optional[Decimal] = Field(default=0, ge=0)
-    documentation_hours: Optional[Decimal] = Field(default=0, ge=0)
     
     # Asignación
     assigned_user_id: Optional[int] = None
@@ -140,9 +145,22 @@ class UserStoryBase(BaseModel):
 
     @validator('status')
     def validate_status(cls, v):
-        valid_statuses = ['backlog', 'todo', 'in_progress', 'in_review', 'testing', 'done', 'blocked']
+        # Estados básicos que siempre están permitidos
+        basic_statuses = ['backlog', 'todo', 'in_progress', 'in_review', 'testing', 'done', 'blocked']
+        
+        # Estados adicionales que pueden venir de la configuración de kanban
+        additional_statuses = [
+            'nuevo', 'en_progreso', 'listo_pruebas', 'cerrado', 'en_revision', 
+            'pendiente', 'completada', 'bloqueada', 'cancelada'
+        ]
+        
+        valid_statuses = basic_statuses + additional_statuses
+        
         if v not in valid_statuses:
-            raise ValueError(f'Status must be one of: {valid_statuses}')
+            # En lugar de fallar, permitir el estado y loggear una advertencia
+            print(f"⚠️ Estado no estándar detectado: {v}. Permitido para compatibilidad.")
+            return v
+        
         return v
 
     @validator('priority')
@@ -155,6 +173,9 @@ class UserStoryBase(BaseModel):
 class UserStoryCreate(UserStoryBase):
     pass
 
+class UserStoryCreateWithAssignment(UserStoryBase):
+    assigned_by_user_id: Optional[int] = None
+
 class UserStoryUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=300)
     description: Optional[str] = None
@@ -166,15 +187,12 @@ class UserStoryUpdate(BaseModel):
     specialization: Optional[str] = None
     sub_specializations: Optional[List[str]] = None
     estimated_hours: Optional[Decimal] = Field(None, ge=0)
+    actual_hours: Optional[Decimal] = Field(None, ge=0)
     
-    # Estimaciones por tipo de trabajo
-    ui_hours: Optional[Decimal] = Field(None, ge=0)
-    development_hours: Optional[Decimal] = Field(None, ge=0)
-    testing_hours: Optional[Decimal] = Field(None, ge=0)
-    documentation_hours: Optional[Decimal] = Field(None, ge=0)
-    
-    # Asignación
+    # Asignación y fechas
     assigned_user_id: Optional[int] = None
+    assigned_by_user_id: Optional[int] = None
+    epic_id: Optional[int] = None
     sprint_id: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -198,6 +216,35 @@ class UserStoryUpdate(BaseModel):
         if isinstance(v, dict):
             return list(v.keys()) if v else None
         return v
+
+    @validator('start_date', 'end_date', 'completed_date', pre=True)
+    def ensure_timezone(cls, v):
+        """Asegurar que las fechas tengan zona horaria correcta"""
+        if v is None:
+            return None
+            
+        if isinstance(v, datetime):
+            # Si no tiene zona horaria, mantenerla como está (hora local)
+            if v.tzinfo is None:
+                return v
+            return v
+            
+        if isinstance(v, str):
+            try:
+                # Si la fecha termina en Z, es UTC
+                if v.endswith('Z'):
+                    dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                # Si tiene + o -, tiene zona horaria
+                elif '+' in v or '-' in v:
+                    dt = datetime.fromisoformat(v)
+                else:
+                    # Si no tiene zona horaria, mantenerla como hora local
+                    dt = datetime.fromisoformat(v)
+                return dt
+            except ValueError as e:
+                raise ValueError(f"Formato de fecha inválido: {v}. Error: {e}")
+        
+        raise ValueError("Tipo de fecha inválido")
 
 class UserStoryOut(UserStoryBase):
     story_id: int
@@ -232,6 +279,35 @@ class UserStoryOut(UserStoryBase):
         if v is None:
             return False
         return bool(v)
+    
+    @validator('start_date', 'end_date', 'completed_date', 'created_at', 'updated_at', pre=True)
+    def ensure_timezone(cls, v):
+        """Asegurar que las fechas tengan zona horaria correcta al devolverlas"""
+        if v is None:
+            return None
+            
+        if isinstance(v, datetime):
+            # Si no tiene zona horaria, mantenerla como está (hora local)
+            if v.tzinfo is None:
+                return v
+            return v
+            
+        if isinstance(v, str):
+            try:
+                # Si la fecha termina en Z, es UTC
+                if v.endswith('Z'):
+                    dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                # Si tiene + o -, tiene zona horaria
+                elif '+' in v or '-' in v:
+                    dt = datetime.fromisoformat(v)
+                else:
+                    # Si no tiene zona horaria, mantenerla como hora local
+                    dt = datetime.fromisoformat(v)
+                return dt
+            except ValueError as e:
+                raise ValueError(f"Formato de fecha inválido: {v}. Error: {e}")
+        
+        raise ValueError("Tipo de fecha inválido")
     
     @validator('assigned_user', pre=True)
     def transform_assigned_user(cls, v):

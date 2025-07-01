@@ -341,12 +341,43 @@ export const planningService = {
 
       const completedStories = stories.filter(story => story.status === 'done').length;
       const progressPercentage = Math.round((completedStories / stories.length) * 100);
-
-      await epicService.updateEpic(epicId, {
+      
+      // Verificar si todas las historias están completadas
+      const allStoriesCompleted = stories.length > 0 && completedStories === stories.length;
+      
+      // Obtener la épica actual para verificar su estado
+      const epics = await epicService.getEpics();
+      const currentEpic = epics.find(epic => epic.epic_id === epicId);
+      
+      // Determinar el nuevo estado de la épica
+      let newStatus = currentEpic?.status;
+      
+      if (allStoriesCompleted && currentEpic && currentEpic.status !== 'done') {
+        // Si todas las historias están completadas, cambiar a 'done'
+        newStatus = 'done';
+      } else if (!allStoriesCompleted && currentEpic && currentEpic.status === 'done') {
+        // Si no todas las historias están completadas pero la épica está en 'done', regresar a 'in_progress'
+        newStatus = 'in_progress';
+      }
+      
+      // Preparar datos de actualización
+      const updateData = {
         progress_percentage: progressPercentage
-      });
+      };
+      
+      // Si el estado cambió, incluirlo en la actualización
+      if (newStatus !== currentEpic?.status) {
+        updateData.status = newStatus;
+      }
 
-      return { success: true, progress: progressPercentage };
+      await epicService.updateEpic(epicId, updateData);
+
+      return { 
+        success: true, 
+        progress: progressPercentage,
+        statusChanged: newStatus !== currentEpic?.status,
+        newStatus: newStatus
+      };
     } catch (error) {
       console.error('Error al actualizar progreso de épica:', error);
       return { success: false, error: error.message };
@@ -366,6 +397,19 @@ export const planningService = {
       return { success: true, story: updatedStory };
     } catch (error) {
       console.error('Error al mover historia de usuario:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async updateProjectStatusFromEpics(projectId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}/update-status-from-epics`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Error al actualizar estado del proyecto:', error);
       return { success: false, error: error.message };
     }
   }

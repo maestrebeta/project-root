@@ -14,7 +14,7 @@
     "auth": {
       "secret_key": "dev-secret-key-smartplanner-2024",
       "algorithm": "HS256",
-      "access_token_expire_minutes": 30,
+      "access_token_expire_minutes": 1440,
       "admin_username": "admin",
       "admin_password": "admin123"
     },

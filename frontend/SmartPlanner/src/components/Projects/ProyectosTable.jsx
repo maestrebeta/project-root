@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAppTheme } from '../../context/ThemeContext';
+import projectProgressService from '../../services/projectProgressService';
 
 export default function ProyectosTable() {
   const theme = useAppTheme();
   const [proyectos, setProyectos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [projectProgress, setProjectProgress] = useState({});
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -23,15 +25,12 @@ export default function ProyectosTable() {
   const fetchProyectos = async () => {
     try {
       const session = localStorage.getItem('session');
-      console.log('Sesión almacenada:', session); // Log de la sesión completa
 
       if (!session) {
         throw new Error('No hay sesión activa');
       }
 
       const parsedSession = JSON.parse(session);
-      console.log('Token:', parsedSession.token); // Log del token
-      console.log('Usuario:', parsedSession.user); // Log del usuario
 
       if (!parsedSession.token) {
         throw new Error('Token de autenticación no encontrado');
@@ -46,9 +45,6 @@ export default function ProyectosTable() {
         credentials: 'include'
       });
 
-      console.log('Respuesta completa:', response);
-      console.log('Estado de la respuesta:', response.status);
-
       if (!response.ok) {
         const errorData = await response.text(); // Cambiar a .text() para ver el contenido completo
         console.error('Datos de error:', errorData);
@@ -56,8 +52,14 @@ export default function ProyectosTable() {
       }
 
       const data = await response.json();
-      console.log('Proyectos cargados:', data);
       setProyectos(data);
+      
+      // Cargar progreso de todos los proyectos
+      if (data.length > 0) {
+        const projectIds = data.map(project => project.project_id);
+        const progressData = await projectProgressService.getMultipleProjectsProgress(projectIds);
+        setProjectProgress(progressData);
+      }
     } catch (error) {
       console.error('Error completo al cargar los proyectos:', error);
       alert(`Error al cargar proyectos: ${error.message}`);
@@ -94,7 +96,6 @@ export default function ProyectosTable() {
       }
 
       const data = await response.json();
-      console.log('Clientes cargados:', data);
       setClientes(data);
     } catch (error) {
       console.error('Error completo al cargar los clientes:', error);
@@ -259,11 +260,25 @@ export default function ProyectosTable() {
   // Función para traducir tipos de proyecto
   const getProjectTypeLabel = (projectType) => {
     const typeLabels = {
-      'development': 'Desarrollo',
-      'support': 'Soporte',
-      'meeting': 'Reunión',
+      'web_development': 'Desarrollo Web',
+      'mobile_development': 'Desarrollo Móvil',
+      'desktop_development': 'Desarrollo de Escritorio',
+      'api_development': 'Desarrollo de API',
+      'database_design': 'Diseño de Base de Datos',
+      'cloud_migration': 'Migración a la Nube',
+      'devops_infrastructure': 'DevOps e Infraestructura',
+      'security_audit': 'Auditoría de Seguridad',
+      'ui_ux_design': 'Diseño UI/UX',
+      'testing_qa': 'Testing y QA',
+      'maintenance_support': 'Mantenimiento y Soporte',
+      'consulting': 'Consultoría',
       'training': 'Capacitación',
-      'other': 'Otro'
+      'research_development': 'Investigación y Desarrollo',
+      'other': 'Otro',
+      // Mantener compatibilidad con tipos anteriores
+      'development': 'Desarrollo Web',
+      'support': 'Mantenimiento y Soporte',
+      'meeting': 'Consultoría'
     };
     return typeLabels[projectType] || projectType;
   };
@@ -328,6 +343,32 @@ export default function ProyectosTable() {
     return statusColors[status] || 'bg-gray-100 text-gray-800';
   };
 
+  // Función para obtener el progreso de un proyecto
+  const getProjectProgress = (projectId) => {
+    return projectProgress[projectId] || {
+      total_stories: 0,
+      completed_stories: 0,
+      total_estimated_hours: 0,
+      total_actual_hours: 0,
+      progress_percentage: 0,
+      velocity: 0,
+      points_velocity: 0
+    };
+  };
+
+  // Función para actualizar el progreso de un proyecto
+  const updateProjectProgress = async (projectId) => {
+    try {
+      const progress = await projectProgressService.refreshProjectProgress(projectId);
+      setProjectProgress(prev => ({
+        ...prev,
+        [projectId]: progress
+      }));
+    } catch (error) {
+      console.error('Error actualizando progreso del proyecto:', error);
+    }
+  };
+
   return (
     <div className={`${theme.FONT_CLASS}`}>
       <div className="overflow-x-auto">
@@ -381,10 +422,20 @@ export default function ProyectosTable() {
                   required
                 >
                   <option value="" disabled hidden>Selecciona un tipo</option>
-                  <option value="development">Desarrollo</option>
-                  <option value="support">Soporte</option>
-                  <option value="meeting">Reunión</option>
+                  <option value="web_development">Desarrollo Web</option>
+                  <option value="mobile_development">Desarrollo Móvil</option>
+                  <option value="desktop_development">Desarrollo de Escritorio</option>
+                  <option value="api_development">Desarrollo de API</option>
+                  <option value="database_design">Diseño de Base de Datos</option>
+                  <option value="cloud_migration">Migración a la Nube</option>
+                  <option value="devops_infrastructure">DevOps e Infraestructura</option>
+                  <option value="security_audit">Auditoría de Seguridad</option>
+                  <option value="ui_ux_design">Diseño UI/UX</option>
+                  <option value="testing_qa">Testing y QA</option>
+                  <option value="maintenance_support">Mantenimiento y Soporte</option>
+                  <option value="consulting">Consultoría</option>
                   <option value="training">Capacitación</option>
+                  <option value="research_development">Investigación y Desarrollo</option>
                   <option value="other">Otro</option>
                 </select>
               </div>
@@ -522,37 +573,42 @@ export default function ProyectosTable() {
               </tr>
             </thead>
             <tbody className="bg-white/50 backdrop-blur-sm divide-y divide-gray-200">
-              {proyectos.map((proyecto) => (
-                <tr key={proyecto.project_id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getClientName(proyecto.client_id)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getProjectTypeLabel(proyecto.project_type)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.start_date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.end_date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getStatusColor(proyecto.status)}`}>
-                      {getStatusLabel(proyecto.status)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
-                      onClick={() => handleEdit(proyecto)}
-                    >
-                      <span className="material-icons-outlined text-base">edit</span>
-                      Editar
-                    </button>
-                    <button
-                      className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
-                      onClick={() => handleDelete(proyecto.project_id, proyecto.name)}
-                    >
-                      <span className="material-icons-outlined text-base">delete</span>
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {proyectos.map((proyecto) => {
+                const progress = getProjectProgress(proyecto.project_id);
+                const cliente = clientes.find(c => c.client_id === proyecto.client_id);
+                
+                return (
+                  <tr key={proyecto.project_id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.project_id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getClientName(proyecto.client_id)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getProjectTypeLabel(proyecto.project_type)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.start_date}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proyecto.end_date}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getStatusColor(proyecto.status)}`}>
+                        {getStatusLabel(proyecto.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
+                        onClick={() => handleEdit(proyecto)}
+                      >
+                        <span className="material-icons-outlined text-base">edit</span>
+                        Editar
+                      </button>
+                      <button
+                        className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
+                        onClick={() => handleDelete(proyecto.project_id, proyecto.name)}
+                      >
+                        <span className="material-icons-outlined text-base">delete</span>
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

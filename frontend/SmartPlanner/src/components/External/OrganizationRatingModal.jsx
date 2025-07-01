@@ -25,11 +25,6 @@ export default function OrganizationRatingModal({ isOpen, onClose, organizationI
 
     setLoading(true);
     try {
-      console.log('🔍 Cargando calificación existente para:', {
-        organizationId,
-        external_user_id: externalUser.external_user_id,
-        clientId
-      });
 
       const response = await fetch(
         `http://localhost:8001/organizations/${organizationId}/ratings/external/user/${externalUser.external_user_id}/client/${clientId}`
@@ -37,12 +32,10 @@ export default function OrganizationRatingModal({ isOpen, onClose, organizationI
 
       if (response.ok) {
         const existingRatingData = await response.json();
-        console.log('✅ Calificación existente encontrada:', existingRatingData);
         setExistingRating(existingRatingData);
         setRating(existingRatingData.rating);
         setComment(existingRatingData.comment || '');
       } else if (response.status === 404) {
-        console.log('ℹ️ No hay calificación existente');
         setExistingRating(null);
         setRating(0);
         setComment('');
@@ -88,13 +81,6 @@ export default function OrganizationRatingModal({ isOpen, onClose, organizationI
     setError(null);
 
     try {
-      console.log('🔍 Enviando calificación:', {
-        organization_id: organizationId,
-        client_id: clientId,
-        external_user_id: externalUser.external_user_id,
-        rating: rating,
-        comment: comment.trim() || null
-      });
 
       const response = await fetch(`http://localhost:8001/organizations/${organizationId}/ratings/external`, {
         method: 'POST',
@@ -110,11 +96,9 @@ export default function OrganizationRatingModal({ isOpen, onClose, organizationI
         })
       });
 
-      console.log('📥 Respuesta del servidor:', response.status, response.statusText);
 
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Calificación guardada exitosamente:', result);
         setSuccess(true);
         
         // Cerrar modal después de 2 segundos

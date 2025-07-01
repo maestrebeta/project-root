@@ -11,9 +11,12 @@ import NotificationPortal from './NotificationPortal';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import Footer from "../Template/Footer.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { useProjectsAndTags, useTaskStates } from "./useProjectsAndTags.jsx";
+import { useProjectsAndTags } from './useProjectsAndTags';
+import { useOrganizationStates } from '../../hooks/useOrganizationStates';
 import TaskStatesManager from './TaskStatesManager';
+import ActivityCategoriesManager from './ActivityCategoriesManager';
 import TasksTable from './TasksTable';
+import { useNotifications } from '../../context/NotificationsContext';
 
 const calculateStats = (entries, projects, currentFilter = 'today') => {
   const totalHours = entries.reduce((sum, entry) => {
@@ -119,13 +122,9 @@ const calculateStats = (entries, projects, currentFilter = 'today') => {
 const TimeTracker = () => {
   const theme = useAppTheme();
   const { user } = useAuth();
-  const { 
-    projects, 
-    clients, 
-    loading: projectsLoading, 
-    error: projectsError 
-  } = useProjectsAndTags();
-  const { taskStates, updateTaskStates } = useTaskStates();
+  const { showNotification: showNotificationFromHook } = useNotifications();
+  const { projects, clients, loading: projectsLoading, error: projectsError, refresh: refreshProjects } = useProjectsAndTags();
+  const { taskStates, updateTaskStates, loading: statesLoading, error: statesError } = useOrganizationStates();
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -141,6 +140,7 @@ const TimeTracker = () => {
     productivityPoints: 0
   });
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(false);
   const [notification, setNotification] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [currentFilters, setCurrentFilters] = useState({});
@@ -148,30 +148,80 @@ const TimeTracker = () => {
   const [filter, setFilter] = useState('today');
   const [showTaskStates, setShowTaskStates] = useState(false);
   const [showEntryForm, setShowEntryForm] = useState(false);
+  const [showActivityCategories, setShowActivityCategories] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Variables de estado del timer
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerDescription, setTimerDescription] = useState('');
+  const [timerBillable, setTimerBillable] = useState(true);
+  const [loadingTimer, setLoadingTimer] = useState(false);
+
+  // Referencias y estado del scroll
+  const mainRef = useRef(null);
+  const [lastScrollTop, setLastScrollTop] = useState(0);
+
+  // Función de manejo de scroll
+  const handleScroll = () => {
+    if (mainRef.current) {
+      const scrollTop = mainRef.current.scrollTop;
+      setLastScrollTop(scrollTop);
+    }
+  };
+
+  // Función de manejo de teclas
+  const handleKeyDown = (e) => {
+    // Implementar navegación por teclado si es necesario
+  };
+
+  // Efecto para manejar el scroll
+  useEffect(() => {
+    const mainElement = mainRef.current;
+    if (mainElement) {
+      mainElement.addEventListener('scroll', handleScroll);
+      return () => mainElement.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
 
   // Normalizar estado
   const normalizeStatus = (status) => {
-    if (!status) return 'pendiente';
+    if (!status) return 1; // ID del estado por defecto (Pendiente)
     
-    const normalized = status.toLowerCase().trim();
-    switch (normalized) {
-      case 'pending':
-      case 'pendiente':
-      case 'nueva':
-        return 'pendiente';
-      case 'in_progress':
-      case 'in progress':
-      case 'en_progreso':
-      case 'en progreso':
-        return 'en_progreso';
-      case 'completed':
-      case 'completado':
-      case 'completada':
-      case 'done':
-        return 'completada';
-      default:
-        return 'pendiente';
+    // Si ya es un número, devolverlo directamente
+    if (typeof status === 'number') {
+      return status;
     }
+    
+    // Si es string, intentar convertirlo a número
+    if (typeof status === 'string') {
+      const numStatus = parseInt(status);
+      if (!isNaN(numStatus)) {
+        return numStatus;
+      }
+      
+      // Si no se puede convertir, mapear a IDs
+      const normalized = status.toLowerCase().trim();
+      switch (normalized) {
+        case 'pending':
+        case 'pendiente':
+        case 'nueva':
+          return 1; // Pendiente
+        case 'in_progress':
+        case 'in progress':
+        case 'en_progreso':
+        case 'en progreso':
+          return 2; // En Progreso
+        case 'completed':
+        case 'completado':
+        case 'completada':
+        case 'done':
+          return 3; // Completada
+        default:
+          return 1; // Pendiente por defecto
+      }
+    }
+    
+    return 1; // Estado por defecto
   };
 
   const handleFilterChange = (newFilter) => {
@@ -179,7 +229,6 @@ const TimeTracker = () => {
   };
 
   // Refs
-  const mainRef = useRef(null);
   const notificationTimeoutRef = useRef(null);
 
   // Fetch de entradas de tiempo
@@ -226,13 +275,13 @@ const TimeTracker = () => {
       console.error('Error al cargar entradas de tiempo:', error);
       
       if (error.message.includes('Sesión expirada') || error.message.includes('No hay sesión activa')) {
-        showNotification('error', 'Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+        showNotificationFromHook('error', 'Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
         // Aquí podrías redirigir al login si tienes un sistema de navegación
         // navigate('/login');
         return;
       }
       
-      showNotification('error', error.message || 'Error al cargar las entradas de tiempo');
+      showNotificationFromHook('error', error.message || 'Error al cargar las entradas de tiempo');
     }
   };
 
@@ -242,16 +291,6 @@ const TimeTracker = () => {
       fetchTimeEntries(filter);
     }
   }, [user?.user_id, filter, projects]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(mainRef.current?.scrollTop > 10);
-    };
-
-    const mainElement = mainRef.current;
-    mainElement?.addEventListener('scroll', handleScroll);
-    return () => mainElement?.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Manejo de notificaciones
   const showNotification = useCallback((type, message) => {
@@ -407,23 +446,36 @@ const TimeTracker = () => {
   const handleTaskStatesUpdate = async (newStates) => {
     try {
       await updateTaskStates(newStates);
-      // Recargar las entradas después de actualizar los estados
-      await fetchTimeEntries(filter);
-      showNotification('success', 'Estados actualizados correctamente');
+      showNotificationFromHook('Estados actualizados correctamente', 'success');
+      
+      // Recargar los datos sin recargar la página
+      fetchTimeEntries(filter);
     } catch (error) {
       console.error('Error al actualizar estados:', error);
-      showNotification('error', 'Error al actualizar los estados');
+      showNotificationFromHook(error.message || 'Error al actualizar estados', 'error');
     }
-    setShowTaskStates(false);
+  };
+
+  // Funciones del timer
+  const handleStartTimer = () => {
+    setIsTimerRunning(true);
+  };
+
+  const handlePauseTimer = () => {
+    setIsTimerRunning(false);
+  };
+
+  const handleStopTimer = () => {
+    setIsTimerRunning(false);
+    setTimerDescription('');
   };
 
   // Eliminar tarea - Método unificado
   const handleDelete = useCallback(async (taskId) => {
-    console.log('TimeTracker - Intentando eliminar tarea:', taskId);
     
     if (!taskId || isNaN(taskId)) {
       console.error('TimeTracker - ID de tarea inválido:', taskId);
-      showNotification('error', 'ID de tarea inválido');
+      showNotificationFromHook('ID de tarea inválido', 'error');
       return;
     }
 
@@ -436,8 +488,6 @@ const TimeTracker = () => {
       if (!session?.token) {
         throw new Error('No hay sesión activa');
       }
-
-      console.log('TimeTracker - Enviando petición DELETE a:', `http://localhost:8001/time-entries/${taskId}`);
       
       const response = await fetch(`http://localhost:8001/time-entries/${taskId}`, {
         method: 'DELETE',
@@ -454,13 +504,12 @@ const TimeTracker = () => {
 
       // Actualizar el estado local
       setTimeEntries(prev => prev.filter(task => task.entry_id !== taskId));
-      showNotification('success', 'Entrada eliminada correctamente');
-      console.log('TimeTracker - Tarea eliminada exitosamente:', taskId);
+      showNotificationFromHook('Entrada eliminada correctamente', 'success');
     } catch (err) {
       console.error('TimeTracker - Error al eliminar tarea:', err);
-      showNotification('error', err.message);
+      showNotificationFromHook(err.message, 'error');
     }
-  }, [showNotification]);
+  }, [showNotificationFromHook]);
 
   // Modificar handleSubmit para normalizar el estado
   const handleSubmit = useCallback(async (data) => {
@@ -481,8 +530,6 @@ const TimeTracker = () => {
         ? `http://localhost:8001/time-entries/${data.entry_id}`
         : 'http://localhost:8001/time-entries/';
       
-      console.log('Enviando datos:', normalizedData);
-      
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 
@@ -500,153 +547,68 @@ const TimeTracker = () => {
 
       await fetchTimeEntries(filter);
       setEditingEntry(null);
-      showNotification(
-        'success',
-        isEdit ? '¡Entrada actualizada con éxito!' : '¡Entrada creada con éxito!'
-      );
+      // Las notificaciones las maneja FormularioEntrada
     } catch (err) {
       console.error('Error en handleSubmit:', err);
-      showNotification('error', err.message);
+      // Las notificaciones de error las maneja FormularioEntrada
     }
-  }, [fetchTimeEntries, showNotification, filter, user?.organization_id]);
+  }, [fetchTimeEntries, filter, user?.organization_id]);
 
   return (
     <div className={`min-h-screen bg-gray-50 flex flex-col relative ${theme.FONT_CLASS} ${theme.FONT_SIZE_CLASS}`}>
-      {/* Header */}
-      <header className={`bg-white shadow-sm sticky top-0 z-20 transition-all duration-300 ${
-        isScrolled ? 'py-2 shadow-md' : 'py-4'
-      }`}>
-        <div className="w-full px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <div className="flex items-center space-x-6">
-            <motion.h1 
-              className="text-xl md:text-2xl font-bold text-gray-900 flex items-center"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <motion.span 
-                className={`text-white p-2 rounded-lg mr-3 ${theme.PRIMARY_GRADIENT_CLASS}`}
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 1, repeat: Infinity, repeatDelay: 5 }}
-              >
-                <FiClock className="w-5 h-5 md:w-6 md:h-6" />
-              </motion.span>
-              Seguimiento de Tiempo Pro
-            </motion.h1>
-
-            {/* Selector de filtro */}
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="ml-4 px-3 py-2 border rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="today">Hoy</option>
-              <option value="this_week">Esta semana</option>
-              <option value="this_month">Este mes</option>
-              <option value="all">Todas</option>
-            </select>
-          </div>
-          <div className="flex items-center space-x-3">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="hidden md:flex items-center bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 focus:outline-none"
-              onClick={() => setShowTaskStates(true)}
-            >
-              <span className="material-icons-outlined mr-2">settings</span>
-              Gestionar Estados
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="hidden md:flex items-center bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 focus:outline-none"
-              onClick={() => setShowCalendar(true)}
-            >
-              <FiCalendar className="mr-2" />
-              Entrada Calendario
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center text-white px-3 py-2 rounded-md shadow-sm text-sm font-medium focus:outline-none transition-all duration-200"
-              style={{
-                background: `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[700] || TAILWIND_COLORS.blue[700]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]})`;
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = `linear-gradient(to right, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[600] || TAILWIND_COLORS.blue[600]}, ${TAILWIND_COLORS[theme.PRIMARY_COLOR]?.[500] || TAILWIND_COLORS.blue[500]})`;
-              }}
-              onClick={() => setEditingEntry({})}
-            >
-              <FiPlus className="mr-2" />
-              Entrada manual
-            </motion.button>
-          </div>
-        </div>
-      </header>
-
       {/* Contenido principal */}
       <main 
         ref={mainRef}
         className="flex-1 overflow-y-auto focus:outline-none"
         tabIndex="0"
+        onScroll={handleScroll}
+        onKeyDown={handleKeyDown}
       >
-        <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
-          {/* Manejo de errores */}
-          {(projectsError || error) && (
-            <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
-              <div className="flex items-center gap-2">
-                <span className="material-icons-outlined text-xl">error_outline</span>
-                {projectsError || error}
-              </div>
-            </div>
-          )}
-
-          {/* Panel de timer */}
+        <div className="container mx-auto px-4 py-8">
+          {/* Timer Panel */}
           <motion.section
-            initial="hidden"
-            animate="visible"
-            variants={fadeIn}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
             className="mb-8"
           >
-            <TimerPanel 
-              billable={billable}
-              onBillableChange={() => setBillable(b => !b)}
-              onNuevaEntrada={fetchTimeEntries}
-              onSaveSuccess={() => {
-                fetchTimeEntries();
-                showNotification('success', 'Tiempo registrado correctamente');
-              }}
-              onSaveError={(error) => showNotification('error', error.message)}
+            <TimerPanel
+              userId={user?.user_id}
+              onNuevaEntrada={handleSubmit}
+              isRunning={isTimerRunning}
+              description={timerDescription}
+              onDescriptionChange={setTimerDescription}
+              onPlay={handleStartTimer}
+              onPause={handlePauseTimer}
+              onStop={handleStopTimer}
+              billable={timerBillable}
+              onBillableChange={setTimerBillable}
+              loading={loadingTimer}
             />
           </motion.section>
 
           {/* Estadísticas */}
           <motion.section
-            initial="hidden"
-            animate="visible"
-            variants={fadeIn}
-            transition={{ delay: 0.1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
             className="mb-8"
           >
-            <EstadisticasPanel 
+            <EstadisticasPanel
               todayHours={stats.todayHours}
               todayEntries={stats.todayEntries}
               weekHours={stats.weekHours}
               weekEntries={stats.weekEntries}
               productivityPoints={stats.productivityPoints}
-              loading={loadingEntries}
+              loading={loadingStats}
             />
           </motion.section>
 
           {/* Entradas de tiempo */}
           <motion.section
-            initial="hidden"
-            animate="visible"
-            variants={fadeIn}
-            transition={{ delay: 0.2 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
           >
             <EntradasTiempo
               entradas={filteredTimeEntries}
@@ -654,8 +616,17 @@ const TimeTracker = () => {
               onEditar={handleEditar}
               onEliminar={handleDelete}
               onRefresh={fetchTimeEntries}
-              currentFilters={currentFilters}
-              onFilterChange={handleFilterChange}
+              currentFilters={{ ...currentFilters, timeFilter: filter }}
+              onFilterChange={(filterType, value) => {
+                if (filterType === 'timeFilter') {
+                  setFilter(value);
+                } else {
+                  handleFilterChange(filterType, value);
+                }
+              }}
+              onCalendarEntry={() => setShowCalendar(true)}
+              onManualEntry={() => setEditingEntry({})}
+              organizationStates={taskStates}
             />
           </motion.section>
         </div>
@@ -685,6 +656,7 @@ const TimeTracker = () => {
             entries={timeEntries}
             onCreate={handleSubmit}
             onEdit={handleSubmit}
+            organizationStates={taskStates}
           />
         )}
       </AnimatePresence>
@@ -702,14 +674,14 @@ const TimeTracker = () => {
         )}
       </AnimatePresence>
 
-      {/* Tabla de tareas
-      <TasksTable
-        tasks={timeEntries}
-        onEdit={handleEditar}
-        onDelete={handleDelete}
-        organizationStates={taskStates}
-        onRefresh={fetchTimeEntries}
-      /> */}
+      {/* Modal de gestión de categorías de actividad */}
+      <AnimatePresence>
+        {showActivityCategories && (
+          <ActivityCategoriesManager
+            onClose={() => setShowActivityCategories(false)}
+          />
+        )}
+      </AnimatePresence>
 
     </div>
   );

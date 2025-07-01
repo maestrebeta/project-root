@@ -58,13 +58,11 @@ export function ThemeProvider({ children }) {
     try {
       // Verificar si hay sesión activa
       if (!isAuthenticated()) {
-        console.log('No hay sesión activa, no se sincroniza el tema');
         return;
       }
       
       const currentUser = getCurrentUser();
       if (!currentUser?.user_id) {
-        console.log('No se puede obtener el usuario actual');
         return;
       }
       
@@ -104,7 +102,6 @@ export function ThemeProvider({ children }) {
       }
       
     } catch (error) {
-      console.error('Error al sincronizar tema con el backend:', error);
       // No interrumpir la experiencia del usuario si falla la sincronización
       // Si es error 401, las utilidades de auth ya manejarán el logout
     }
@@ -142,7 +139,6 @@ export function ThemeProvider({ children }) {
             setTheme(DEFAULT_THEME);
           }
         } catch (error) {
-          console.error('Error al cargar tema desde sesión:', error);
           setTheme(DEFAULT_THEME);
         }
       } else {
@@ -159,7 +155,6 @@ export function ThemeProvider({ children }) {
     
     // Escuchar eventos de cierre de sesión
     const handleLogout = () => {
-      console.log('Reseteando tema al cerrar sesión');
       setTheme(DEFAULT_THEME);
     };
     

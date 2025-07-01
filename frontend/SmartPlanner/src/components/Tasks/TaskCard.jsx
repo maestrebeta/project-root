@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { 
   FiEdit2, FiTrash2, FiMoreVertical, FiUser, FiCalendar, 
   FiClock, FiTag, FiMessageSquare, FiCheckCircle, FiAlertCircle,
-  FiArrowRight
+  FiArrowRight, FiX
 } from 'react-icons/fi';
 
 export default function TaskCard({ 
@@ -239,26 +239,51 @@ export default function TaskCard({
       {/* Footer con botones de acción */}
       <div className="px-6 pb-6 mt-auto">
         <div className="flex items-center justify-between">
-          {/* Botón de completar rápida */}
-          <button
-            onClick={() => {
-              if (task.status === 'completed') {
-                onStatusChange(task.task_id, 'pending');
-              } else {
-                onStatusChange(task.task_id, 'completed');
-              }
-            }}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-              task.status === 'completed'
-                ? 'bg-green-100 text-green-700 border border-green-200'
-                : 'bg-gray-100 text-gray-700 hover:bg-green-100 hover:text-green-700 hover:border-green-200 border border-gray-200'
-            }`}
-          >
-            <FiCheckCircle className={`w-4 h-4 ${task.status === 'completed' ? 'text-green-600' : 'text-gray-500'}`} />
-            <span className="text-sm font-medium">
-              {task.status === 'completed' ? 'Marcar pendiente' : 'Completar'}
-            </span>
-          </button>
+          {/* Botones de acción principales */}
+          <div className="flex items-center space-x-2">
+            {/* Botón de completar rápida */}
+            <button
+              onClick={() => {
+                if (task.status === 'completed') {
+                  onStatusChange(task.task_id, 'pending');
+                } else {
+                  onStatusChange(task.task_id, 'completed');
+                }
+              }}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                task.status === 'completed'
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-green-100 hover:text-green-700 hover:border-green-200 border border-gray-200'
+              }`}
+            >
+              <FiCheckCircle className={`w-4 h-4 ${task.status === 'completed' ? 'text-green-600' : 'text-gray-500'}`} />
+              <span className="text-sm font-medium">
+                {task.status === 'completed' ? 'Marcar pendiente' : 'Completar'}
+              </span>
+            </button>
+
+            {/* Botón de toggle blocked */}
+            <button
+              onClick={() => {
+                if (task.status === 'blocked') {
+                  onStatusChange(task.task_id, 'pending');
+                } else {
+                  onStatusChange(task.task_id, 'blocked');
+                }
+              }}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                task.status === 'blocked'
+                  ? 'bg-red-100 text-red-700 border border-red-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700 hover:border-red-200 border border-gray-200'
+              }`}
+              title={task.status === 'blocked' ? 'Desbloquear tarea' : 'Bloquear tarea'}
+            >
+              <FiX className={`w-4 h-4 ${task.status === 'blocked' ? 'text-red-600' : 'text-gray-500'}`} />
+              <span className="text-sm font-medium">
+                {task.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+              </span>
+            </button>
+          </div>
 
           {/* Botón de ver detalles */}
           <button

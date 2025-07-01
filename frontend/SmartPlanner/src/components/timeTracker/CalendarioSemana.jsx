@@ -27,6 +27,7 @@ const CalendarioSemana = ({
   onDelete = () => {},
   projects = [],
   tags = [],
+  organizationStates = null,
 }) => {
   const [referenceDate, setReferenceDate] = useState(new Date());
   const [selectedCell, setSelectedCell] = useState({
@@ -49,15 +50,22 @@ const CalendarioSemana = ({
   // UX: Al hacer clic en celda vacía, abre formulario rápido
   const handleCellClick = (date, hour) => {
     setSelectedCell({ date: format(date, "yyyy-MM-dd"), hour });
+    
+    // Obtener la hora actual para calcular la hora de fin
+    const endHour = hour + 1;
+    
     setFormData({
       entry_date: format(date, "yyyy-MM-dd"),
       start_time: `${hour.toString().padStart(2, "0")}:00`,
-      end_time: `${(hour + 1).toString().padStart(2, "0")}:00`,
+      end_time: `${endHour.toString().padStart(2, "0")}:00`,
       description: "",
       project_id: "",
       etiquetas: [],
-      activity_type: "",
+      activity_type: "", // Se establecerá automáticamente en FormularioEntrada
       billable: true,
+      // Agregar datos adicionales para mejor integración
+      date: format(date, "yyyy-MM-dd"),
+      hour: hour
     });
     setShowForm(true);
   };
@@ -327,6 +335,7 @@ const CalendarioSemana = ({
               setFormData(null);
             }}
             onSubmit={handleFormSubmit}
+            organizationStates={organizationStates}
           />
         )}
       </div>

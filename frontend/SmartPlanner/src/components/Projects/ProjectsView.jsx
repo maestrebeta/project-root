@@ -36,7 +36,10 @@ export default function ProjectsView({
   handleEditProject,
   handleDeleteProject,
   handleUpdateProjectStatus,
-  isSuperUser
+  isSuperUser,
+  projectProgress,
+  getProjectProgress,
+  updateProjectProgress
 }) {
   const theme = useAppTheme();
   const { user } = useAuth();
@@ -280,6 +283,39 @@ export default function ProjectsView({
     );
   };
 
+  // Función para obtener el progreso de un proyecto
+  const getProjectProgressDisplay = (project) => {
+    const progress = getProjectProgress(project.project_id);
+    return {
+      percentage: progress.progress_percentage || 0,
+      totalStories: progress.total_stories || 0,
+      completedStories: progress.completed_stories || 0,
+      totalHours: progress.total_estimated_hours || 0,
+      completedHours: progress.total_actual_hours || 0
+    };
+  };
+
+  // Función para formatear fechas
+  const formatDate = (dateString) => {
+    if (!dateString) return null;
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch (error) {
+      return null;
+    }
+  };
+
+  // Función simple para mostrar la fecha límite sin colores
+  const getDeadlineDisplay = (endDate) => {
+    if (!endDate) return { icon: '📅', text: 'Sin fecha límite', color: 'text-gray-400' };
+    return { icon: '📅', text: `Límite: ${formatDate(endDate)}`, color: 'text-gray-600' };
+  };
+
   return (
     <div className="space-y-6">
       {/* 🚀 FILTROS ÉPICOS - NIVEL BILL GATES */}
@@ -292,39 +328,14 @@ export default function ProjectsView({
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-800">Filtros Avanzados</h3>
+              <h3 className="text-lg font-bold text-gray-800">Filtros</h3>
               <p className="text-sm text-gray-600">Encuentra exactamente lo que buscas</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-              </svg>
-              {getSortedAndFilteredProjects().length} resultados
-            </div>
             
             {/* Botones de selección múltiple y nuevo proyecto */}
             <div className="flex items-center space-x-2">
-              {/* Botón de selección múltiple - Solo para super_user */}
-              {isSuperUser && (
-                <button
-                  onClick={() => setIsSelectionMode(!isSelectionMode)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isSelectionMode
-                      ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-2 border-transparent'
-                  }`}
-                  title="Modo selección múltiple"
-                >
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    <span>{isSelectionMode ? 'Cancelar Selección' : 'Selección Múltiple'}</span>
-                  </div>
-                </button>
-              )}
               
               {/* Botón de nuevo proyecto */}
               <button
@@ -380,12 +391,12 @@ export default function ProjectsView({
           {/* Búsqueda general */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              🔍 Búsqueda General
+              🔍 Búsqueda
             </label>
             <div className="relative">
               <input
                 type="text"
-                placeholder="Ej: 'en curso', 'completado', 'retrasado', nombre del proyecto..."
+                placeholder="Escribe el nombre o estado del proyecto para buscar"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white/80 backdrop-blur-sm"
@@ -445,14 +456,14 @@ export default function ProjectsView({
 
       {/* Vista condicional: Tabla o Tarjetas */}
       {projectViewMode === 'table' ? (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+            <thead className="bg-gray-50/80">
               <tr>
                 {/* Columna de selección - Solo para super_user */}
                 {isSuperUser && isSelectionMode && (
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     <input
                       type="checkbox"
                       checked={selectedProjects.size === getSortedAndFilteredProjects().length && getSortedAndFilteredProjects().length > 0}
@@ -462,74 +473,84 @@ export default function ProjectsView({
                   </th>
                 )}
                 <th 
-                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
                   onClick={() => handleSort('name')}
                   data-sort="name"
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1">
                     <span>Proyecto</span>
                     {getSortIcon('name')}
                   </div>
                 </th>
                 <th 
-                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
                   onClick={() => handleSort('status')}
                   data-sort="status"
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1">
                     <span>Estado</span>
                     {getSortIcon('status')}
                   </div>
                 </th>
                 <th 
-                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
-                  onClick={() => handleSort('progress_percentage')}
-                  data-sort="progress_percentage"
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
+                  onClick={() => handleSort('end_date')}
+                  data-sort="end_date"
                 >
-                  <div className="flex items-center space-x-2">
-                    <span>Progreso</span>
-                    {getSortIcon('progress_percentage')}
+                  <div className="flex items-center space-x-1">
+                    <span>Fecha Límite</span>
+                    {getSortIcon('end_date')}
                   </div>
                 </th>
                 <th 
-                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
+                  onClick={() => handleSort('progress')}
+                  data-sort="progress"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Progreso</span>
+                    {getSortIcon('progress')}
+                  </div>
+                </th>
+                <th 
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
                   onClick={() => handleSort('total_hours')}
                   data-sort="total_hours"
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1">
                     <span>Horas</span>
                     {getSortIcon('total_hours')}
                   </div>
                 </th>
                 <th 
-                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
                   onClick={() => handleSort('efficiency')}
                   data-sort="efficiency"
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1">
                     <span>Eficiencia</span>
                     {getSortIcon('efficiency')}
                   </div>
                 </th>
                 <th 
-                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-blue-50 transition-all duration-300"
+                  className="group px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/80 transition-colors"
                   onClick={() => handleSort('unique_users')}
                   data-sort="unique_users"
                 >
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1">
                     <span>Equipo</span>
                     {getSortIcon('unique_users')}
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
+            <tbody className="bg-white divide-y divide-gray-200">
               {getSortedAndFilteredProjects().length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperUser && isSelectionMode ? "8" : "7"} className="px-4 py-12 text-center">
+                  <td colSpan={isSuperUser && isSelectionMode ? "9" : "8"} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center justify-center space-y-4">
                       <div className="relative">
                         <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center animate-pulse">
@@ -559,94 +580,116 @@ export default function ProjectsView({
                   </td>
                 </tr>
               ) : (
-                getSortedAndFilteredProjects().map((project, index) => (
-                  <tr key={project.project_id} className={`hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} ${selectedProjects.has(project.project_id) ? 'bg-purple-50 border-l-4 border-purple-500' : ''}`}>
-                    {/* Checkbox de selección - Solo para super_user */}
-                    {isSuperUser && isSelectionMode && (
+                getSortedAndFilteredProjects().map((project) => {
+                  const progress = getProjectProgressDisplay(project);
+                  const client = clients.find(c => c.client_id === project.client_id);
+                  
+                  return (
+                    <tr key={project.project_id} className="hover:bg-gray-50/50 transition-colors">
+                      {/* Checkbox de selección - Solo para super_user */}
+                      {isSuperUser && isSelectionMode && (
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedProjects.has(project.project_id)}
+                            onChange={() => toggleProjectSelection(project.project_id)}
+                            className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          checked={selectedProjects.has(project.project_id)}
-                          onChange={() => toggleProjectSelection(project.project_id)}
-                          className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                        />
-                      </td>
-                    )}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                              <span className="text-sm font-medium text-white">{project.name.charAt(0).toUpperCase()}</span>
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                <span className="text-sm font-medium text-white">{project.name.charAt(0).toUpperCase()}</span>
+                              </div>
                             </div>
-                          </div>
-                          <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{project.name}</div>
-                            <div className="text-sm text-gray-500">{clients.find(c => c.client_id === project.client_id)?.name || 'Sin cliente'}</div>
-                          </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                        <StatusSelector project={project} currentStatus={project.status} />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                            <div 
-                              className="h-2 rounded-full transition-all duration-700"
-                              style={{ 
-                                width: `${project.progress_percentage || 0}%`,
-                                backgroundColor: getProgressColors(project.progress_percentage || 0)
-                              }}
-                            />
+                            <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{project.name}</div>
+                              <div className="text-sm text-gray-500">{client?.name || 'Sin cliente'}</div>
+                            </div>
                         </div>
-                          <span className="text-sm text-gray-900">{project.progress_percentage || 0}%</span>
-                      </div>
-                    </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {project.total_hours || 0}h
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`text-sm font-semibold ${getEfficiencyColor(project.efficiency)}`}>
-                        {project.efficiency}
-                      </span>
-                    </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {project.unique_users || 0} usuarios
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            console.log('Edit button clicked for project card:', project);
-                            handleEditProject(project);
-                          }}
-                          className="group p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                          title="Editar proyecto"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                          {isSuperUser && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            console.log('Delete button clicked for project card:', project);
-                            handleDeleteProject(project);
-                          }}
-                          className="group p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                          title="Eliminar proyecto"
-                        >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                          <StatusSelector project={project} currentStatus={project.status} />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {project.end_date ? (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm">{getDeadlineDisplay(project.end_date).icon}</span>
+                            <span className={`text-sm font-medium ${getDeadlineDisplay(project.end_date).color}`}>
+                              {getDeadlineDisplay(project.end_date).text}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">Sin fecha límite</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="w-full">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-gray-600">
+                              {progress.completedStories}/{progress.totalStories} historias
+                            </span>
+                            <span className="font-medium">{Math.round(progress.percentage)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${getProgressColors(progress.percentage)}`}
+                              style={{ width: `${progress.percentage}%` }}
+                            />
+                          </div>
+                          {progress.totalHours > 0 && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {progress.completedHours}h / {progress.totalHours}h
+                            </div>
                           )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                        </div>
+                      </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {project.total_hours || 0}h
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`text-sm font-semibold ${getEfficiencyColor(project.efficiency)}`}>
+                          {project.efficiency || '-'}
+                        </span>
+                      </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {project.unique_users || 0} usuarios
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                          <div className="flex items-center space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditProject(project);
+                            }}
+                            className="group p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
+                            title="Editar proyecto"
+                          >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                            {isSuperUser && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteProject(project);
+                            }}
+                            className="group p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
+                            title="Eliminar proyecto"
+                          >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                            )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -683,90 +726,99 @@ export default function ProjectsView({
               </div>
             </div>
           ) : (
-            getSortedAndFilteredProjects().map((project) => (
-              <div key={project.project_id} className="bg-white rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                <div className="p-6">
-                  {/* Header de la tarjeta */}
-                  <div className="flex items-start justify-between mb-4">
-                <div>
-                        <h3 className="text-lg font-bold text-gray-900">{project.name}</h3>
-                        <p className="text-sm text-gray-600">{clients.find(c => c.client_id === project.client_id)?.name || 'Sin cliente'}</p>
-            </div>
+            getSortedAndFilteredProjects().map((project) => {
+              const progress = getProjectProgressDisplay(project);
+              const client = clients.find(c => c.client_id === project.client_id);
+              
+              return (
+                <div key={project.project_id} className="bg-white rounded-xl shadow-lg border border-gray-200 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                  <div className="p-6">
+                    {/* Header de la tarjeta */}
+                    <div className="flex items-start justify-between mb-4">
+                  <div>
+                          <h3 className="text-lg font-bold text-gray-900">{project.name}</h3>
+                          <p className="text-sm text-gray-600">{client?.name || 'Sin cliente'}</p>
+                          {/* Fecha límite */}
+                          <div className="flex items-center space-x-1 mt-1">
+                            <span className="text-sm">{getDeadlineDisplay(project.end_date).icon}</span>
+                            <span className={`text-sm font-medium ${getDeadlineDisplay(project.end_date).color}`}>
+                              {getDeadlineDisplay(project.end_date).text}
+                            </span>
+                          </div>
+                </div>
                     <StatusSelector project={project} currentStatus={project.status} />
-            </div>
+                </div>
                   
-                  {/* Barra de progreso */}
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm text-gray-600 mb-2">
-                      <span>Progreso</span>
-                      <span>{project.progress_percentage || 0}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="h-2 rounded-full transition-all duration-700"
-                        style={{ 
-                          width: `${project.progress_percentage || 0}%`,
-                          backgroundColor: getProgressColors(project.progress_percentage || 0)
-                        }}
-                      />
-          </div>
-        </div>
-        
-                  {/* Métricas */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-gray-900">{project.total_hours || 0}h</div>
-                      <div className="text-xs text-gray-600">Horas totales</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-gray-900">{project.unique_users || 0}</div>
-                      <div className="text-xs text-gray-600">Usuarios</div>
+                    {/* Barra de progreso */}
+                    <div className="mb-4">
+                      <div className="flex justify-between text-sm text-gray-600 mb-2">
+                        <span>Progreso</span>
+                        <span>{progress.percentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-700 ${getProgressColors(progress.percentage)}`}
+                          style={{ width: `${progress.percentage}%` }}
+                        />
                     </div>
                   </div>
                   
-                  {/* Eficiencia */}
-                  <div className="mb-4">
-                    <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getEfficiencyColor(project.efficiency)}`}>
-                      {project.efficiency || 'N/A'}
-                    </span>
-                  </div>
-                  
-                  {/* Acciones */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleEditProject(project)}
-                        className="text-blue-600 hover:text-blue-900 transition-colors p-2 rounded-lg hover:bg-blue-50"
-                        title="Editar proyecto"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      {isSuperUser && (
+                    {/* Métricas */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-gray-900">{project.total_hours || 0}h</div>
+                        <div className="text-xs text-gray-600">Horas registradas</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-gray-900">{project.unique_users || 0}</div>
+                        <div className="text-xs text-gray-600">Usuarios involucrados</div>
+                      </div>
+                    </div>
+                    
+                    {/* Eficiencia */}
+                    <div className="mb-4">
+                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${getEfficiencyColor(project.efficiency)}`}>
+                        {project.efficiency || '-'}
+                      </span>
+                    </div>
+                    
+                    {/* Acciones */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => handleDeleteProject(project)}
-                          className="text-red-600 hover:text-red-900 transition-colors p-2 rounded-lg hover:bg-red-50"
-                          title="Eliminar proyecto"
+                          onClick={() => handleEditProject(project)}
+                          className="text-blue-600 hover:text-blue-900 transition-colors p-2 rounded-lg hover:bg-blue-50"
+                          title="Editar proyecto"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
+                        {isSuperUser && (
+                          <button
+                            onClick={() => handleDeleteProject(project)}
+                            className="text-red-600 hover:text-red-900 transition-colors p-2 rounded-lg hover:bg-red-50"
+                            title="Eliminar proyecto"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                      {isSuperUser && isSelectionMode && (
+                <input
+                          type="checkbox"
+                          checked={selectedProjects.has(project.project_id)}
+                          onChange={() => toggleProjectSelection(project.project_id)}
+                          className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                        />
                       )}
                     </div>
-                    {isSuperUser && isSelectionMode && (
-              <input
-                        type="checkbox"
-                        checked={selectedProjects.has(project.project_id)}
-                        onChange={() => toggleProjectSelection(project.project_id)}
-                        className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                      />
-                    )}
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

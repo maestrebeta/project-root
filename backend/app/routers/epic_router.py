@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 from app.schemas.epic_schema import (
     EpicCreate, EpicUpdate, EpicOut,
     UserStoryCreate, UserStoryUpdate, UserStoryOut,
+    UserStoryCreateWithAssignment,
     ProjectPlanningStats
 )
 from app.crud import epic_crud
@@ -151,20 +152,37 @@ def get_all_user_stories(
 
 @router.post("/stories/", response_model=UserStoryOut, status_code=status.HTTP_201_CREATED)
 def create_user_story(
-    story: UserStoryCreate,
+    story: UserStoryCreateWithAssignment,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_organization)
 ):
     """Crear una nueva historia de usuario"""
     try:
-        created_story = epic_crud.create_user_story(db, story)
+        # Establecer el usuario que está haciendo la asignación
+        if hasattr(story, 'assigned_by_user_id') and story.assigned_by_user_id:
+            # Si se proporciona assigned_by_user_id, usarlo
+            pass
+        else:
+            # Si no se proporciona, usar el usuario actual
+            story.assigned_by_user_id = current_user.user_id
         
-        # Actualizar horas estimadas del proyecto
-        epic_crud.update_project_estimated_hours(db, story.project_id)
-        
-        return created_story
+        result = epic_crud.create_user_story(db, story)
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se pudo crear la historia de usuario"
+            )
+        return result
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor"
+        )
 
 @router.get("/stories/epic/{epic_id}", response_model=List[UserStoryOut])
 def get_user_stories_by_epic(
@@ -232,6 +250,12 @@ def update_user_story(
                 detail="Historia de usuario no encontrada"
             )
         
+        # Establecer el usuario que está haciendo la asignación
+        if hasattr(story_update, 'assigned_user_id') and story_update.assigned_user_id:
+            # Agregar el usuario que está haciendo la asignación
+            story_update.assigned_by_user_id = current_user.user_id
+        
+        # Actualizar la historia directamente
         updated_story = epic_crud.update_user_story(db, story_id, story_update)
         
         # Actualizar horas estimadas del proyecto

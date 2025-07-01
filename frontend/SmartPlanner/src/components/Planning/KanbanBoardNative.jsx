@@ -8,43 +8,59 @@ import {
   FiPlus,
   FiCheckCircle,
   FiXCircle,
-  FiAlertCircle
+  FiAlertCircle,
+  FiAlertTriangle,
+  FiInfo,
+  FiLoader
 } from 'react-icons/fi';
+import { formatDateForDisplay, formatDateForTooltip, debugDate, createCompletedDate } from '../../utils/dateUtils';
 
-// Componente de notificación
+// Componente de notificación toast
 function NotificationToast({ notification, onClose }) {
-  const icons = {
-    success: FiCheckCircle,
-    error: FiXCircle,
-    warning: FiAlertCircle
+  const getIcon = () => {
+    switch (notification.type) {
+      case 'success':
+        return <FiCheckCircle className="w-5 h-5" />;
+      case 'error':
+        return <FiAlertCircle className="w-5 h-5" />;
+      case 'warning':
+        return <FiAlertTriangle className="w-5 h-5" />;
+      default:
+        return <FiInfo className="w-5 h-5" />;
+    }
   };
 
-  const colors = {
-    success: 'from-green-500 to-green-600',
-    error: 'from-red-500 to-red-600',
-    warning: 'from-yellow-500 to-yellow-600'
+  const getColors = () => {
+    switch (notification.type) {
+      case 'success':
+        return 'bg-green-500 text-white';
+      case 'error':
+        return 'bg-red-500 text-white';
+      case 'warning':
+        return 'bg-yellow-500 text-white';
+      default:
+        return 'bg-blue-500 text-white';
+    }
   };
-
-  const Icon = icons[notification.type] || FiAlertCircle;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 50, scale: 0.9 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 50, scale: 0.9 }}
-      className={`fixed bottom-6 right-6 bg-gradient-to-r ${colors[notification.type]} text-white px-6 py-4 rounded-2xl shadow-lg z-[9999] max-w-md`}
+      className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-lg ${getColors()}`}
     >
       <div className="flex items-center gap-3">
-        <Icon className="w-5 h-5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="font-medium">{notification.title}</p>
+        {getIcon()}
+        <div>
+          <h4 className="font-semibold">{notification.title}</h4>
           {notification.message && (
-            <p className="text-sm opacity-90 mt-1">{notification.message}</p>
+            <p className="text-sm opacity-90">{notification.message}</p>
           )}
         </div>
         <button
           onClick={onClose}
-          className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+          className="ml-2 opacity-70 hover:opacity-100 transition-opacity"
         >
           ×
         </button>
@@ -52,35 +68,6 @@ function NotificationToast({ notification, onClose }) {
     </motion.div>
   );
 }
-
-// Función para actualizar historia en el backend
-const updateStoryStatus = async (storyId, newStatus) => {
-  try {
-    const session = JSON.parse(localStorage.getItem('session'));
-    if (!session?.token) {
-      throw new Error('No hay sesión activa');
-    }
-
-    const response = await fetch(`http://localhost:8001/epics/stories/${storyId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.token}`
-      },
-      body: JSON.stringify({ status: newStatus })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Error al actualizar el estado');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('❌ Error al actualizar estado en backend:', error);
-    throw error;
-  }
-};
 
 // Componente de tarjeta con HTML5 drag and drop
 function DraggableStoryCard({ story, users, onClick, isCompact, columnKey, kanbanStates, onDragStart, onDragEnd }) {
@@ -92,6 +79,10 @@ function DraggableStoryCard({ story, users, onClick, isCompact, columnKey, kanba
     medium: 'from-yellow-400 to-orange-500',
     low: 'from-green-400 to-green-600'
   };
+
+  // Lógica para mostrar fecha de completado o etiquetas
+  const shouldShowCompletedDate = story.status === "done" && story.completed_date;
+  const hasTags = story.tags && story.tags.length > 0;
 
   const handleDragStart = (e) => {
     setIsDragging(true);
@@ -165,6 +156,39 @@ function DraggableStoryCard({ story, users, onClick, isCompact, columnKey, kanba
         </div>
       )}
 
+      {/* Fecha de completado o etiquetas */}
+      {!isCompact && (
+        <div className="flex items-center gap-2 mb-3">
+          {shouldShowCompletedDate ? (
+            (() => {
+              // Debug de la fecha
+              debugDate(story.completed_date, 'DraggableStoryCard - Fecha de completado');
+              
+              return (
+                <span 
+                  className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium flex items-center gap-1"
+                  title={`Completada el ${formatDateForTooltip(story.completed_date)}`}
+                >
+                  <span>✅</span>
+                  <span>Completada {formatDateForDisplay(story.completed_date)}</span>
+                </span>
+              );
+            })()
+          ) : hasTags ? (
+            <div className="flex gap-1">
+              {story.tags.slice(0, 2).map((tag, index) => (
+                <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                  {tag}
+                </span>
+              ))}
+              {story.tags.length > 2 && (
+                <span className="text-xs text-gray-400">+{story.tags.length - 2}</span>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* Footer de la tarjeta */}
       <div className="flex items-center justify-between">
         {/* Usuario asignado */}
@@ -187,21 +211,30 @@ function DraggableStoryCard({ story, users, onClick, isCompact, columnKey, kanba
           )}
         </div>
 
-        {/* Tags y estado */}
-        <div className="flex items-center gap-1">
-          {story.tags && story.tags.length > 0 && (
+        {/* Tags (solo en modo compacto) */}
+        {isCompact && hasTags && !shouldShowCompletedDate && (
+          <div className="flex items-center gap-1">
             <div className="flex gap-1">
-              {story.tags.slice(0, 2).map((tag, index) => (
+              {story.tags.slice(0, 1).map((tag, index) => (
                 <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
                   {tag}
                 </span>
               ))}
-              {story.tags.length > 2 && (
-                <span className="text-xs text-gray-400">+{story.tags.length - 2}</span>
+              {story.tags.length > 1 && (
+                <span className="text-xs text-gray-400">+{story.tags.length - 1}</span>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Fecha de completado (solo en modo compacto) */}
+        {isCompact && shouldShowCompletedDate && (
+          <div className="flex items-center gap-1">
+            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium">
+              ✅
+            </span>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -225,9 +258,45 @@ function DropZoneColumn({
   
   // Formatear horas para mostrar máximo 1 decimal y sin ceros innecesarios
   const formatHours = (hours) => {
-    if (hours === 0) return '0h';
-    const formatted = parseFloat(hours).toFixed(1);
-    return formatted.endsWith('.0') ? `${parseInt(hours)}h` : `${formatted}h`;
+    if (!hours || hours === 0) return '0h';
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  };
+
+  // Función para obtener el color de fondo del estado
+  const getStateBgColor = (state) => {
+    if (!state || !state.color) return 'bg-gray-50';
+    
+    // Si el color ya es una clase de Tailwind, usarlo directamente
+    if (state.color.startsWith('bg-')) {
+      return state.color;
+    }
+    
+    // Mapear colores simples a clases de Tailwind (compatible con KanbanStatesManager)
+    const colorMap = {
+      'blue': 'bg-blue-50',
+      'green': 'bg-green-50',
+      'yellow': 'bg-yellow-50',
+      'orange': 'bg-orange-50',
+      'red': 'bg-red-50',
+      'purple': 'bg-purple-50',
+      'indigo': 'bg-indigo-50',
+      'pink': 'bg-pink-50',
+      'gray': 'bg-gray-50',
+      'slate': 'bg-slate-50',
+      'emerald': 'bg-emerald-50',
+      'teal': 'bg-teal-50',
+      'cyan': 'bg-cyan-50',
+      'sky': 'bg-sky-50',
+      'violet': 'bg-violet-50',
+      'fuchsia': 'bg-fuchsia-50',
+      'rose': 'bg-rose-50',
+      'amber': 'bg-amber-50',
+      'lime': 'bg-lime-50'
+    };
+    
+    return colorMap[state.color] || 'bg-gray-50';
   };
 
   const handleDragOver = (e) => {
@@ -271,7 +340,7 @@ function DropZoneColumn({
       <motion.div 
         className={`
           p-4 border-b border-gray-200/50 
-          ${column.headerBg || 'bg-white/80'}
+          ${getStateBgColor(column)}
           rounded-t-2xl relative overflow-hidden shadow-sm
         `}
         whileHover={{ scale: 1.01 }}
@@ -377,6 +446,7 @@ export default function KanbanBoardNative({
   users,
   onStoryClick,
   setStories,
+  onUpdateStory,
   onQuickCreate,
   kanbanStates
 }) {
@@ -391,14 +461,26 @@ export default function KanbanBoardNative({
 
   // Organizar historias por columnas
   const columns = useMemo(() => {
+    // Verificar que kanbanStates sea un array
+    if (!Array.isArray(kanbanStates)) {
+      console.warn('⚠️ kanbanStates no es un array:', kanbanStates);
+      return [];
+    }
+    
     const result = kanbanStates.map(col => {
-      const columnId = col.key || col.id || col.label;
+      const columnId = col.id || col.label;
+      const columnKey = col.key || col.id;
       const columnStories = stories.filter(st => {
         const storyStatus = st.status || st.estado;
-        return storyStatus === columnId || storyStatus === col.id || storyStatus === col.key;
+        // Comparar con ID numérico, clave del estado, o label
+        const matches = storyStatus === columnId || 
+               storyStatus === columnKey || 
+               storyStatus === col.id ||
+               storyStatus === col.key ||
+               storyStatus === col.label;
+        
+        return matches;
       });
-      
-      console.log(`📊 Columna ${columnId}:`, columnStories.length, 'historias');
       
       return {
         ...col,
@@ -406,14 +488,12 @@ export default function KanbanBoardNative({
       };
     });
     
-    console.log('🎯 Columnas organizadas:', result.map(c => ({ id: c.key || c.id, count: c.stories.length })));
     return result;
   }, [stories, kanbanStates]);
 
   // Manejar inicio de arrastre
   const handleDragStart = (story) => {
     setIsDragging(true);
-    console.log('🎯 Iniciando drag:', story?.title);
   };
 
   // Manejar fin de arrastre
@@ -423,65 +503,68 @@ export default function KanbanBoardNative({
 
   // Manejar drop de historia
   const handleDrop = async (storyId, newColumnId, story) => {
-    console.log('🎯 DROP:', { storyId, newColumnId, storyTitle: story?.title });
     
     const originalStatus = story.status || story.estado;
     
     if (newColumnId !== originalStatus) {
+      // Verificar que kanbanStates sea un array
+      if (!Array.isArray(kanbanStates)) {
+        console.warn('⚠️ kanbanStates no es un array en handleDrop:', kanbanStates);
+        return;
+      }
+      
       // Encontrar el nombre de la columna de destino
       const targetColumn = kanbanStates.find(col => 
-        col.key === newColumnId || col.id === newColumnId
+        col.id === newColumnId
       );
       
-      // Actualizar el estado local inmediatamente para UX fluida
-      const updatedStory = { 
-        ...story, 
-        status: newColumnId, 
-        estado: newColumnId 
+      // Crear una copia actualizada de la historia
+      const updatedStory = {
+        ...story,
+        status: newColumnId,
+        estado: newColumnId
       };
-
-      setStories(prev => {
-        const updated = prev.map(st => {
-          const currentId = st.story_id || st.id;
-          if (currentId === storyId) {
-            console.log('✅ Actualizando historia local:', st.title, 'de', st.status, 'a', newColumnId);
-            return updatedStory;
-          }
-          return st;
-        });
-        console.log('📊 Historias actualizadas localmente:', updated.length);
-        return updated;
-      });
-
-      // Intentar actualizar en el backend
-      try {
-        await updateStoryStatus(storyId, newColumnId);
-        console.log('✅ Estado actualizado en backend exitosamente');
-        showNotification(
-          'success', 
-          'Historia movida exitosamente',
-          `"${story.title}" se movió a ${targetColumn?.label || newColumnId}`
-        );
-      } catch (error) {
-        console.error('❌ Error al actualizar en backend, revirtiendo cambio local');
-        // Revertir el cambio local si falla el backend
-        setStories(prev => {
-          return prev.map(st => {
-            const currentId = st.story_id || st.id;
-            if (currentId === storyId) {
-              return { ...st, status: originalStatus, estado: originalStatus };
-            }
-            return st;
-          });
-        });
+      
+      // Manejar fecha de completado y horas reales en el estado local
+      if (newColumnId === 'done') {
+        const completedDate = createCompletedDate();
+        updatedStory.completed_date = completedDate;
         
-        showNotification(
-          'error',
-          'Error al mover historia',
-          'No se pudo actualizar el estado. Se ha revertido el cambio.'
-        );
+        // Si no hay horas reales registradas, establecer actual_hours igual a estimated_hours
+        if (!updatedStory.actual_hours || Number(updatedStory.actual_hours) === 0) {
+          updatedStory.actual_hours = Number(updatedStory.estimated_hours) || 0;
+        }
+      } else if (originalStatus === 'done') {
+        // Si estaba en "done" y ahora no, eliminar la fecha de completado y resetear horas reales
+        updatedStory.completed_date = null;
+        // Resetear actual_hours a 0 ya que la historia ya no está completada
+        updatedStory.actual_hours = 0;
+      }
+
+      // Actualizar estado local PRIMERO
+      setStories(prevStories => 
+        prevStories.map(story => 
+          story.story_id === storyId ? updatedStory : story
+        )
+      );
+
+      // Luego sincronizar con el backend
+      if (onUpdateStory) {
+        try {
+          await onUpdateStory(updatedStory);
+        } catch (error) {
+          // Revertir el cambio local si falla el backend
+          setStories(prev => 
+            prev.map(story => 
+              story.story_id === storyId ? { ...story, status: originalStatus } : story
+            )
+          );
+        }
       }
     }
+    
+    // Importante: Limpiar el estado de arrastre al final
+    setIsDragging(false);
   };
 
   return (
@@ -491,7 +574,7 @@ export default function KanbanBoardNative({
         <div className="flex gap-6 p-6 h-full min-w-max">
           {columns.map(col => (
             <DropZoneColumn
-              key={col.key || col.id || col.label}
+              key={col.id || col.label}
               column={col}
               users={users}
               onQuickCreate={onQuickCreate}

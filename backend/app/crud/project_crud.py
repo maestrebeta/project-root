@@ -71,11 +71,40 @@ def calculate_estimated_hours(start_date, end_date, project_type='development', 
     
     # Factor de dedicación según el tipo de proyecto
     project_dedication_factor = {
-        'development': 0.85,   # 85% del tiempo efectivo para desarrollo
-        'support': 0.60,       # 60% del tiempo efectivo para soporte
-        'meeting': 0.30,       # 30% del tiempo efectivo para reuniones
-        'training': 0.70,      # 70% del tiempo efectivo para capacitación
-        'other': 0.50          # 50% del tiempo efectivo para otros
+        # Desarrollo
+        'web_development': 0.85,
+        'mobile_development': 0.85,
+        'desktop_development': 0.85,
+        'api_development': 0.85,
+        
+        # Diseño y arquitectura
+        'database_design': 0.80,
+        'ui_ux_design': 0.75,
+        
+        # Infraestructura y DevOps
+        'cloud_migration': 0.90,
+        'devops_infrastructure': 0.80,
+        
+        # Seguridad y auditoría
+        'security_audit': 0.70,
+        
+        # Testing y QA
+        'testing_qa': 0.75,
+        
+        # Soporte y mantenimiento
+        'maintenance_support': 0.60,
+        
+        # Consultoría y otros
+        'consulting': 0.70,
+        'training': 0.70,
+        'research_development': 0.65,
+        'other': 0.50,
+        
+        # Mantener compatibilidad con tipos anteriores
+        'development': 0.85,
+        'support': 0.60,
+        'meeting': 0.30,
+        'training': 0.70
     }
     
     dedication_factor = project_dedication_factor.get(project_type, 0.50)
@@ -137,7 +166,9 @@ def create_project(db: Session, project: ProjectCreate):
     """
     # Tipos de proyecto válidos según la definición SQL
     valid_project_types = [
-        'development', 'support', 'meeting', 'training', 'other'
+        'web_development', 'mobile_development', 'desktop_development', 'api_development', 
+        'database_design', 'cloud_migration', 'devops_infrastructure', 'security_audit', 
+        'ui_ux_design', 'testing_qa', 'maintenance_support', 'consulting', 'training', 'research_development', 'other'
     ]
     
     # Estados válidos según la definición SQL
@@ -148,11 +179,53 @@ def create_project(db: Session, project: ProjectCreate):
 
     # Mapeo de tipos de proyecto (si es necesario)
     project_type_mapping = {
-        'desarrollo': 'development',
-        'soporte': 'support',
-        'reunion': 'meeting',
+        # Desarrollo web y aplicaciones
+        'desarrollo_web': 'web_development',
+        'desarrollo_movil': 'mobile_development',
+        'desarrollo_escritorio': 'desktop_development',
+        'desarrollo_api': 'api_development',
+        'desarrollo': 'web_development',  # Mantener compatibilidad
+        
+        # Base de datos y cloud
+        'diseno_bd': 'database_design',
+        'diseno_base_datos': 'database_design',
+        'migracion_cloud': 'cloud_migration',
+        'migracion_nube': 'cloud_migration',
+        
+        # DevOps e infraestructura
+        'devops': 'devops_infrastructure',
+        'infraestructura': 'devops_infrastructure',
+        
+        # Seguridad y auditoría
+        'auditoria_seguridad': 'security_audit',
+        'seguridad': 'security_audit',
+        
+        # Diseño y UX
+        'diseno_ui_ux': 'ui_ux_design',
+        'diseno_interfaz': 'ui_ux_design',
+        'ux_design': 'ui_ux_design',
+        
+        # Testing y QA
+        'testing': 'testing_qa',
+        'qa': 'testing_qa',
+        'pruebas': 'testing_qa',
+        
+        # Soporte y mantenimiento
+        'soporte': 'maintenance_support',
+        'mantenimiento': 'maintenance_support',
+        'soporte_tecnico': 'maintenance_support',
+        
+        # Consultoría y otros
+        'consultoria': 'consulting',
         'capacitacion': 'training',
-        'otro': 'other'
+        'investigacion': 'research_development',
+        'r_d': 'research_development',
+        'otro': 'other',
+        
+        # Mantener compatibilidad con tipos anteriores
+        'support': 'maintenance_support',
+        'meeting': 'consulting',
+        'training': 'training'
     }
 
     # Mapeo de estados (si es necesario)
@@ -263,17 +336,39 @@ def update_project(db: Session, project_id: int, updates: ProjectUpdate):
         # Validar tipos de proyecto si se proporcionan
         if updates.project_type:
             valid_project_types = [
-                'development', 'support', 'meeting', 'training', 'other'
+                'web_development', 'mobile_development', 'desktop_development', 'api_development', 
+                'database_design', 'cloud_migration', 'devops_infrastructure', 'security_audit', 
+                'ui_ux_design', 'testing_qa', 'maintenance_support', 'consulting', 'training', 'research_development', 'other'
             ]
             
             # Mapeo de tipos de proyecto
             project_type_mapping = {
-                'desarrollo': 'development',
-                'soporte': 'support',
-                'reunion': 'meeting',
+                'desarrollo_web': 'web_development',
+                'desarrollo_movil': 'mobile_development',
+                'desarrollo_escritorio': 'desktop_development',
+                'desarrollo_api': 'api_development',
+                'diseno_bd': 'database_design',
+                'diseno_base_datos': 'database_design',
+                'migracion_cloud': 'cloud_migration',
+                'migracion_nube': 'cloud_migration',
+                'devops': 'devops_infrastructure',
+                'infraestructura': 'devops_infrastructure',
+                'auditoria_seguridad': 'security_audit',
+                'seguridad': 'security_audit',
+                'diseno_ui_ux': 'ui_ux_design',
+                'diseno_interfaz': 'ui_ux_design',
+                'ux_design': 'ui_ux_design',
+                'testing': 'testing_qa',
+                'qa': 'testing_qa',
+                'pruebas': 'testing_qa',
+                'soporte': 'maintenance_support',
+                'mantenimiento': 'maintenance_support',
+                'soporte_tecnico': 'maintenance_support',
+                'consultoria': 'consulting',
                 'capacitacion': 'training',
-                'otro': 'other',
-                'consultoria': 'other'  # Mapear consultoria a other
+                'investigacion': 'research_development',
+                'r_d': 'research_development',
+                'otro': 'other'
             }
             
             # Normalizar tipo de proyecto
@@ -596,8 +691,6 @@ def get_quotations_by_client(db: Session, client_id: int, organization_id: int) 
             Project.organization_id == organization_id
         ).all()
         
-        print(f"Debug: Found {len(quotations)} quotations for client {client_id}")
-        
         result = []
         for quotation in quotations:
             # Obtener las cuotas de la cotización
@@ -635,7 +728,6 @@ def get_quotations_by_client(db: Session, client_id: int, organization_id: int) 
             }
             
             result.append(quotation_data)
-            print(f"Debug: Quotation {quotation.quotation_id} - Total: {quotation.total_amount}, Paid: {total_paid}, Pending: {total_pending}")
         
         return result
         

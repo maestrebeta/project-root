@@ -19,8 +19,15 @@ class ClientCreate(ClientBase):
     pass
 
 
-class ClientUpdate(ClientBase):
-    pass
+class ClientUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    code: Optional[str] = Field(None, max_length=20)
+    is_active: Optional[bool] = None
+    country_code: Optional[str] = Field(None, max_length=2)
+    address: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = Field(None, max_length=20)
+    tax_id: Optional[str] = Field(None, max_length=50)
 
 
 class ClientOut(ClientBase):

@@ -1,53 +1,54 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from "../../context/AuthContext.jsx";
-
-// Definir las categorías predeterminadas exactamente como en el backend
-const DEFAULT_CATEGORIES = [
-  { value: 'desarrollo', label: 'Desarrollo' },
-  { value: 'reunion', label: 'Reunión' },
-  { value: 'capacitacion', label: 'Capacitación' },
-  { value: 'soporte', label: 'Soporte' },
-  { value: 'otro', label: 'Otro' }
-];
-
-// Estados predeterminados del sistema
-const DEFAULT_STATES = ['pendiente', 'en_progreso', 'completada'];
+import { useOrganizationStates } from '../../hooks/useOrganizationStates';
 
 // Estados predeterminados
+const DEFAULT_STATES = [1, 2, 3];
+
+// Categorías de actividad predeterminadas
+const DEFAULT_CATEGORIES = [
+  { id: 1, name: 'Desarrollo', value: 'desarrollo' },
+  { id: 2, name: 'BPO', value: 'bpo' },
+  { id: 3, name: 'Soporte', value: 'soporte' },
+  { id: 4, name: 'Reunión', value: 'reunion' },
+  { id: 5, name: 'Capacitación', value: 'capacitacion' },
+  { id: 6, name: 'Documentación', value: 'documentacion' },
+  { id: 7, name: 'Otra', value: 'otro' }
+];
+
+// Estados predeterminados del sistema (fallback)
 const DEFAULT_TASK_STATES = {
   states: [
     {
-      id: 'pendiente',
+      id: 1,
       label: 'Pendiente',
-      icon: '🟡',
-      color: 'yellow',
+      icon: '🔴',
+      color: 'red',
       isDefault: true
     },
     {
-      id: 'en_progreso',
+      id: 2,
       label: 'En progreso',
       icon: '🔵',
       color: 'blue',
       isDefault: true
     },
     {
-      id: 'completada',
+      id: 3,
       label: 'Completada',
       icon: '🟢',
       color: 'green',
       isDefault: true
     }
   ],
-  default_state: 'pendiente',
-  final_states: ['completada']
+  default_state: 1,
+  final_states: [3]
 };
 
 // Función para obtener la actividad con más horas del usuario
-const getMostUsedActivity = (timeEntries) => {
-  console.log('Calculando actividad más usada con entradas:', timeEntries);
+const getMostUsedActivity = (timeEntries, activityCategories) => {
   
   if (!timeEntries || timeEntries.length === 0) {
-    console.log('No hay entradas, devolviendo desarrollo');
     return 'desarrollo';
   }
 
@@ -58,36 +59,46 @@ const getMostUsedActivity = (timeEntries) => {
       const activity = entry.activity_type;
       const hours = parseFloat(entry.duration_hours);
       activityHours[activity] = (activityHours[activity] || 0) + hours;
-      console.log(`Actividad: ${activity}, Horas: ${hours}, Total acumulado: ${activityHours[activity]}`);
     }
   });
 
-  console.log('Horas por actividad:', activityHours);
-
   if (Object.keys(activityHours).length === 0) {
-    console.log('No hay horas registradas, devolviendo desarrollo');
     return 'desarrollo';
   }
 
   // Encontrar la actividad con más horas
-  const mostUsed = Object.entries(activityHours)
+  const mostUsedId = Object.entries(activityHours)
     .sort(([,a], [,b]) => b - a)[0][0];
   
-  console.log('Actividad más usada:', mostUsed);
-  return mostUsed;
+  // Convertir ID a nombre de categoría
+  if (activityCategories && activityCategories.length > 0) {
+    const category = activityCategories.find(cat => cat.id === parseInt(mostUsedId));
+    return category ? category.name : 'desarrollo';
+  }
+  
+  // Fallback a mapeo hardcodeado si no hay categorías personalizadas
+  const idToNameMap = {
+    1: 'desarrollo',
+    2: 'reunion',
+    3: 'capacitacion',
+    4: 'documentacion',
+    5: 'soporte',
+    6: 'testing',
+    7: 'diseno',
+    8: 'otra'
+  };
+  
+  return idToNameMap[parseInt(mostUsedId)] || 'desarrollo';
 };
 
 // Función para obtener el proyecto con más horas del usuario
 const getMostUsedProject = (timeEntries, projects) => {
-  console.log('Calculando proyecto más usado con entradas:', timeEntries, 'y proyectos:', projects);
   
   if (!projects || projects.length === 0) {
-    console.log('No hay proyectos disponibles');
     return '';
   }
 
   if (!timeEntries || timeEntries.length === 0) {
-    console.log('No hay entradas, devolviendo primer proyecto:', projects[0].project_id);
     return projects[0].project_id.toString();
   }
 
@@ -98,22 +109,17 @@ const getMostUsedProject = (timeEntries, projects) => {
       const projectId = entry.project_id.toString();
       const hours = parseFloat(entry.duration_hours);
       projectHours[projectId] = (projectHours[projectId] || 0) + hours;
-      console.log(`Proyecto: ${projectId}, Horas: ${hours}, Total acumulado: ${projectHours[projectId]}`);
     }
   });
 
-  console.log('Horas por proyecto:', projectHours);
-
   if (Object.keys(projectHours).length === 0) {
-    console.log('No hay horas registradas, devolviendo primer proyecto:', projects[0].project_id);
     return projects[0].project_id.toString();
   }
 
   // Encontrar el proyecto con más horas
   const mostUsed = Object.entries(projectHours)
     .sort(([,a], [,b]) => b - a)[0][0];
-  
-  console.log('Proyecto más usado:', mostUsed);
+
   return mostUsed;
 };
 
@@ -125,18 +131,27 @@ const getClientForProject = (projectId, projects) => {
   
   const project = projects.find(p => p.project_id.toString() === projectId);
   const clientId = project?.client_id?.toString() || '';
-  console.log(`Cliente para proyecto ${projectId}:`, clientId);
   return clientId;
 };
 
 // Hook principal
 export const useProjectsAndTags = () => {
   const { user } = useAuth();
+  const { taskStates } = useOrganizationStates();
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
+  const [activityCategories, setActivityCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [statesLoading, setStatesLoading] = useState(false);
   const [userTimeEntries, setUserTimeEntries] = useState([]);
+
+  // Obtener categorías de actividad personalizables
+  const {
+    categories: activityCategoriesPersonalizable,
+    loading: categoriesLoadingPersonalizable
+  } = useActivityCategories();
 
   // Cargar datos
   const fetchData = useCallback(async () => {
@@ -146,8 +161,6 @@ export const useProjectsAndTags = () => {
       if (!session?.token) {
           throw new Error('No hay sesión activa');
         }
-
-      console.log('Cargando datos para usuario:', session.user.user_id);
 
       // Cargar proyectos, clientes y entradas de tiempo en paralelo
       const [projectsResponse, clientsResponse, timeEntriesResponse] = await Promise.all([
@@ -185,12 +198,6 @@ export const useProjectsAndTags = () => {
         entry.user_id === parseInt(session.user.user_id)
       );
 
-      console.log('Datos cargados:');
-      console.log('- Proyectos:', projectsData.length);
-      console.log('- Clientes:', clientsData.length);
-      console.log('- Entradas totales:', timeEntriesArray.length);
-      console.log('- Entradas del usuario:', userEntries.length);
-
       setProjects(projectsData);
       setClients(clientsData);
       setUserTimeEntries(userEntries);
@@ -213,11 +220,8 @@ export const useProjectsAndTags = () => {
 
   // Calcular valores sugeridos
   const suggestedValues = useMemo(() => {
-    console.log('Recalculando valores sugeridos...');
-    console.log('- Entradas del usuario:', userTimeEntries.length);
-    console.log('- Proyectos disponibles:', projects.length);
     
-    const mostUsedActivity = getMostUsedActivity(userTimeEntries);
+    const mostUsedActivity = getMostUsedActivity(userTimeEntries, activityCategoriesPersonalizable);
     const mostUsedProject = getMostUsedProject(userTimeEntries, projects);
     const clientForProject = getClientForProject(mostUsedProject, projects);
     
@@ -228,9 +232,8 @@ export const useProjectsAndTags = () => {
       userHasEntries: userTimeEntries.length > 0
     };
     
-    console.log('Valores sugeridos calculados:', result);
     return result;
-  }, [userTimeEntries, projects]);
+  }, [userTimeEntries, projects, activityCategoriesPersonalizable]);
 
   // Memoizar datos derivados
   const projectOptions = useMemo(() => {
@@ -257,26 +260,33 @@ export const useProjectsAndTags = () => {
     }, {});
   }, [projects]);
 
-  // Usar solo los valores de las categorías predeterminadas
+  // Usar las categorías de actividad personalizables
   const tagOptions = useMemo(() => {
-    return DEFAULT_CATEGORIES.map(cat => cat.value);
-  }, []);
+    if (activityCategoriesPersonalizable && activityCategoriesPersonalizable.length > 0) {
+      return activityCategoriesPersonalizable.map(cat => cat.name);
+    }
+    // Fallback a categorías predeterminadas si no hay personalizadas
+    return DEFAULT_CATEGORIES.map(cat => cat.name);
+  }, [activityCategoriesPersonalizable]);
 
-  // Usar los estados predeterminados del sistema
+  // Usar los estados de la organización si están disponibles, sino usar los predeterminados
   const statusOptions = useMemo(() => {
+    if (taskStates?.states && Array.isArray(taskStates.states)) {
+      return taskStates.states.map(state => state.id);
+    }
     return DEFAULT_STATES;
-  }, []);
+  }, [taskStates?.states]);
 
   return {
     projects: projectOptions,
     clients: clientOptions,
-    loading,
+    loading: loading || categoriesLoadingPersonalizable || statesLoading,
     error,
     suggestedProject: suggestedValues.suggestedProject,
     suggestedActivity: suggestedValues.suggestedActivity,
     defaultClient: suggestedValues.defaultClient,
     userHasEntries: suggestedValues.userHasEntries,
-    activityTypes: DEFAULT_CATEGORIES,
+    activityTypes: activityCategoriesPersonalizable || DEFAULT_CATEGORIES,
     projectIdToName,
     tagOptions,
     statusOptions,
@@ -284,80 +294,57 @@ export const useProjectsAndTags = () => {
   };
 };
 
-export const useTaskStates = () => {
+export const useActivityCategories = () => {
   const { user } = useAuth();
-  const [taskStates, setTaskStates] = useState(() => {
-    const savedStates = localStorage.getItem('taskStates');
-    return savedStates ? JSON.parse(savedStates) : DEFAULT_TASK_STATES;
-  });
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Cargar estados del backend
   useEffect(() => {
-    const fetchTaskStates = async () => {
-      try {
-        const session = JSON.parse(localStorage.getItem('session'));
-        if (!session?.token || !user?.organization_id) return;
-
-        const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
-          headers: {
-            'Authorization': `Bearer ${session.token}`,
-            'Accept': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setTaskStates(data);
-          localStorage.setItem('taskStates', JSON.stringify(data));
-        } else {
-          console.error('Error al cargar estados:', await response.text());
-        }
-      } catch (error) {
-        console.error('Error al cargar estados:', error);
-      }
-    };
-
-    fetchTaskStates();
-  }, [user?.organization_id]);
-
-  // Actualizar estados en el backend y localmente
-  const updateTaskStates = useCallback(async (newStates) => {
-    try {
-      const session = JSON.parse(localStorage.getItem('session'));
-      if (!session?.token || !user?.organization_id) return;
-
-      const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${session.token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(newStates)
-      });
-
-      if (response.ok) {
-        setTaskStates(newStates);
-        localStorage.setItem('taskStates', JSON.stringify(newStates));
-      } else {
-        console.error('Error al actualizar estados:', await response.text());
-        // Recargar estados del backend en caso de error
-        const currentStates = await fetch(`http://localhost:8001/organizations/${user.organization_id}/task-states`, {
-          headers: {
-            'Authorization': `Bearer ${session.token}`,
-            'Accept': 'application/json'
-          }
-        });
-        if (currentStates.ok) {
-          const data = await currentStates.json();
-          setTaskStates(data);
-          localStorage.setItem('taskStates', JSON.stringify(data));
-        }
-      }
-    } catch (error) {
-      console.error('Error al actualizar estados:', error);
+    if (user?.organization_id) {
+      fetchActivityCategories();
     }
   }, [user?.organization_id]);
 
-  return { taskStates, updateTaskStates };
+  const fetchActivityCategories = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const response = await fetch(`http://localhost:8001/organizations/${user.organization_id}/activity-categories`, {
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data.activity_categories || []);
+      } else {
+        throw new Error('Error al cargar las categorías de actividad');
+      }
+    } catch (err) {
+      console.error('Error fetching activity categories:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refresh = () => {
+    fetchActivityCategories();
+  };
+
+  return {
+    categories,
+    loading,
+    error,
+    refresh
+  };
 };

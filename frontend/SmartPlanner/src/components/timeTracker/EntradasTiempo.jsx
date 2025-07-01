@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   FiEdit2, FiTrash2, FiClock, FiTag, FiChevronDown,
-  FiChevronUp, FiDollarSign, FiFilter, FiPlus, FiSearch, FiRefreshCw, FiX
+  FiChevronUp, FiDollarSign, FiFilter, FiPlus, FiSearch, FiRefreshCw, FiX, FiCalendar, FiUser
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO, isToday, isYesterday } from 'date-fns';
@@ -11,33 +11,51 @@ import 'react-tippy/dist/tippy.css';
 import { useProjectsAndTags } from './useProjectsAndTags';
 import { useAppTheme } from "../../context/ThemeContext.jsx";
 import { useAutoAnimate } from '@formkit/auto-animate/react';
-import { useOrganizationStates } from '../../hooks/useOrganizationStates';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { useActivityCategories } from './useProjectsAndTags';
 
 // Orden de los estados
-const STATUS_ORDER = ['pendiente', 'en_progreso', 'completada'];
+const STATUS_ORDER = [1, 2, 3]; // Pendiente, En progreso, Completada
 
-// Función para normalizar estados
+// Función para normalizar el estado de las entradas
 const normalizeStatus = (status) => {
-  if (!status) return 'pendiente';
+  if (!status) return 1; // ID del estado por defecto (Pendiente)
   
-  const normalized = status.toLowerCase().replace(/[^a-z_]/g, '');
-  
-  switch (normalized) {
-    case 'pendiente':
-    case 'pending':
-      return 'pendiente';
-    case 'enprogreso':
-    case 'en_progreso':
-    case 'inprogress':
-    case 'progreso':
-      return 'en_progreso';
-    case 'completada':
-    case 'completed':
-    case 'completado':
-      return 'completada';
-    default:
-      return 'pendiente';
+  // Si ya es un número, devolverlo directamente
+  if (typeof status === 'number') {
+    return status;
   }
+  
+  // Si es string, intentar convertirlo a número
+  if (typeof status === 'string') {
+    const numStatus = parseInt(status);
+    if (!isNaN(numStatus)) {
+      return numStatus;
+    }
+    
+    // Si no se puede convertir, mapear a IDs
+    const normalized = status.toLowerCase().trim();
+    switch (normalized) {
+      case 'pending':
+      case 'pendiente':
+      case 'nueva':
+        return 1; // Pendiente
+      case 'in_progress':
+      case 'in progress':
+      case 'en_progreso':
+      case 'en progreso':
+        return 2; // En Progreso
+      case 'completed':
+      case 'completado':
+      case 'completada':
+      case 'done':
+        return 3; // Completada
+      default:
+        return 1; // Pendiente por defecto
+    }
+  }
+  
+  return 1; // Estado por defecto
 };
 
 const EntradasTiempo = ({
@@ -50,7 +68,11 @@ const EntradasTiempo = ({
   onFilterChange = () => {},
   currentFilters = {},
   onNuevaEntrada = () => {},
-  onRefresh
+  onRefresh,
+  onCalendarEntry = () => {},
+  onManualEntry = () => {},
+  onClose = () => {},
+  organizationStates = null
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'entry_date', direction: 'desc' });
   const [hoveredId, setHoveredId] = useState(null);
@@ -58,12 +80,17 @@ const EntradasTiempo = ({
   const [collapsed, setCollapsed] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [localFilters, setLocalFilters] = useState(currentFilters);
+  const [localFilters, setLocalFilters] = useState({
+    project: currentFilters.project || '',
+    tag: currentFilters.tag || '',
+    status: currentFilters.status || ''
+  });
   const [entries, setEntries] = useState([]);
   const [error, setError] = useState(null);
   const [parent] = useAutoAnimate();
-  const { states: organizationStates, loading: statesLoading } = useOrganizationStates();
   const theme = useAppTheme();
+  const { user } = useAuth();
+  const { categories: activityCategories, loading: categoriesLoading } = useActivityCategories();
   const [projects, setProjects] = useState([]);
   const [projectIdToName, setProjectIdToName] = useState({});
 
@@ -153,6 +180,14 @@ const EntradasTiempo = ({
     }
   }, []);
 
+  // Función para obtener el nombre de la categoría por ID
+  const getActivityTypeName = useCallback((activityTypeId) => {
+    if (!activityTypeId || !activityCategories) return 'Sin categoría';
+    
+    const category = activityCategories.find(cat => cat.id === activityTypeId);
+    return category ? category.name : `Categoría ${activityTypeId}`;
+  }, [activityCategories]);
+
   // FILTRO CORRECTO: Aplica todos los filtros juntos y soporta project_id y activity_type
   const filteredEntries = useMemo(() => {
     return entradas.filter(entry => {
@@ -185,21 +220,27 @@ const EntradasTiempo = ({
     });
   }, [entradas, localFilters, searchQuery, getEntryField, projectIdToName]);
 
-  // Agrupar por status dinámicamente según statusOptions
+  // Agrupar por status dinámicamente según los estados configurados
   const groupedEntries = useMemo(() => {
     const groups = {};
-    if (Array.isArray(statusOptions) && statusOptions.length > 0) {
-      statusOptions.forEach(status => {
-        groups[status] = [];
+    
+    // Inicializar todos los estados configurados con arrays vacíos
+    if (organizationStates?.states && Array.isArray(organizationStates.states)) {
+      organizationStates.states.forEach(state => {
+        groups[String(state.id)] = [];
       });
     }
+    
+    // Agrupar las entradas por su estado real
     filteredEntries.forEach((entry) => {
-      const status = normalizeStatus(getEntryField(entry, 'status')) || 'Sin estado';
-      if (!groups[status]) groups[status] = [];
-      groups[status].push(entry);
+      const status = normalizeStatus(getEntryField(entry, 'status'));
+      const statusKey = String(status);
+      if (!groups[statusKey]) groups[statusKey] = [];
+      groups[statusKey].push(entry);
     });
+    
     return groups;
-  }, [filteredEntries, statusOptions, getEntryField]);
+  }, [filteredEntries, getEntryField, organizationStates?.states]);
 
   // Ordenar dentro de cada grupo
   const sortedGroupedEntries = useMemo(() => {
@@ -216,14 +257,16 @@ const EntradasTiempo = ({
     return sorted;
   }, [groupedEntries, sortConfig, getEntryField]);
 
-  // Ordena los status: pendiente primero, luego en_progreso, completada, luego los demás
+  // Ordena los status según el orden definido en organizationStates.states
   const sortedStatusKeys = useMemo(() => {
-    const keys = Object.keys(sortedGroupedEntries);
-    return [
-      ...STATUS_ORDER.filter(status => keys.includes(status)),
-      ...keys.filter(status => !STATUS_ORDER.includes(status))
-    ];
-  }, [sortedGroupedEntries]);
+    // Si tenemos organizationStates.states, usar ese orden
+    if (organizationStates?.states && Array.isArray(organizationStates.states)) {
+      return organizationStates.states.map(state => String(state.id));
+    }
+    
+    // Fallback al orden hardcodeado si no hay organizationStates
+    return STATUS_ORDER.map(s => String(s));
+  }, [organizationStates?.states]);
 
   // Contrae 'completada' por defecto
   useEffect(() => {
@@ -245,7 +288,7 @@ const EntradasTiempo = ({
   }, [onEliminar]);
 
   const toggleCollapse = useCallback((status) => {
-    setCollapsed((prev) => ({ ...prev, [status]: !prev[status] }));
+    setCollapsed((prev) => ({ ...prev, [String(status)]: !prev[String(status)] }));
   }, []);
 
   const EmptyState = () => (
@@ -321,7 +364,7 @@ const EntradasTiempo = ({
   }, [filteredEntries, getEntryField]);
 
   // Mostrar estado de carga
-  if (loading || statesLoading) {
+  if (loading) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-xl shadow-xl p-6">
@@ -363,30 +406,22 @@ const EntradasTiempo = ({
       <div className="px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold">Registro de Tiempo</h2>
-            <p className="text-indigo-100">Gestiona tus horas trabajadas</p>
+            <h2 className="text-2xl font-bold">Detalle de entradas de tiempo</h2>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex gap-3">
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`p-2 rounded-md transition-colors ${
-                Object.keys(localFilters).length > 0
-                  ? `${theme.PRIMARY_BG_LIGHT} ${theme.PRIMARY_COLOR_CLASS}`
-                  : 'text-gray-500 hover:bg-gray-100'
-              }`}
-              title="Filtros"
+              onClick={onCalendarEntry}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white font-medium"
             >
-              <FiFilter />
+              <FiCalendar className="w-4 h-4" />
+              Entrada calendario
             </button>
             <button
-              onClick={onRefresh}
-              className={`p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors ${
-                loading ? 'animate-spin' : ''
-              }`}
-              disabled={loading}
-              title="Actualizar"
+              onClick={onManualEntry}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 text-white font-medium"
             >
-              <FiRefreshCw />
+              <FiPlus className="w-4 h-4" />
+              Entrada manual
             </button>
           </div>
         </div>
@@ -417,6 +452,19 @@ const EntradasTiempo = ({
           )}
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          {/* Selector de filtro de tiempo */}
+          <select
+            className="text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm h-9"
+            value={currentFilters.timeFilter || 'today'}
+            onChange={(e) => {
+              onFilterChange('timeFilter', e.target.value);
+            }}
+          >
+            <option value="today">Hoy</option>
+            <option value="this_week">Esta semana</option>
+            <option value="this_month">Este mes</option>
+            <option value="all">Todas</option>
+          </select>
           <select
             className="text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm h-9"
             value={localFilters.project || ''}
@@ -479,7 +527,7 @@ const EntradasTiempo = ({
           <EmptyState />
         ) : (
           sortedStatusKeys.map((status) => {
-            const state = organizationStates.states.find(s => s.id === status) || 
+            const state = organizationStates.states.find(s => String(s.id) === status) || 
                          organizationStates.states.find(s => s.id === organizationStates.default_state);
             
             // Mapear colores a clases de Tailwind
@@ -512,12 +560,12 @@ const EntradasTiempo = ({
                     <span className="text-xl">{meta.emoji}</span>
                     <span>{meta.label}</span>
                     <span className="ml-2 text-xs bg-white/50 rounded-full px-2 py-0.5 text-gray-700 font-normal">
-                      ({sortedGroupedEntries[status]?.length || 0})
+                      ({sortedGroupedEntries[String(status)]?.length || 0})
                     </span>
                   </span>
-                  {collapsed[status] ? <FiChevronDown /> : <FiChevronUp />}
+                  {collapsed[String(status)] ? <FiChevronDown /> : <FiChevronUp />}
                 </button>
-                {!collapsed[status] && sortedGroupedEntries[status]?.map((entry) => {
+                {!collapsed[String(status)] && sortedGroupedEntries[String(status)]?.map((entry) => {
                   const entryId = entry.entry_id || entry.id;
                   const isExpanded = expandedId === entryId;
                   const isHovered = hoveredId === entryId;
@@ -588,7 +636,7 @@ const EntradasTiempo = ({
                                         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
                                       >
                                         <FiTag className="mr-1" size={10} />
-                                        {getEntryField(entry, 'activity_type')}
+                                        {getActivityTypeName(getEntryField(entry, 'activity_type'))}
                                       </span>
                                     )}
                                 {getEntryField(entry, 'billable') && (

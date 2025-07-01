@@ -10,11 +10,11 @@ class TimeEntry(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=False)
     entry_date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    activity_type = Column(String(50), nullable=False, default='desarrollo')
+    activity_type = Column(Integer, nullable=False, default=1)
     start_time = Column(DateTime(timezone=True), nullable=False)
     end_time = Column(DateTime(timezone=True), nullable=True)
     description = Column(String(500), nullable=True)
-    status = Column(String(20), nullable=False, default='pendiente')
+    status = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 

@@ -27,7 +27,6 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
     setCurrentStep(1);
     
     if (project) {
-      console.log('Editing project:', project);
       
       const formatDate = (dateString) => {
         if (!dateString) return '';
@@ -52,7 +51,6 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
         priority: project.priority || 'medium'
       };
       
-      console.log('Setting form data:', formData);
       setForm(formData);
     } else {
       setForm({
@@ -160,6 +158,12 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
 
       Object.keys(projectData).forEach(key => {
         if (projectData[key] === null || projectData[key] === undefined) {
+          // Para fechas, mantener null explícitamente para que el backend las elimine
+          if (key === 'start_date' || key === 'end_date') {
+            // Mantener null para que el backend elimine la fecha
+            console.log(`Manteniendo ${key} como null para eliminación`);
+            return;
+          }
           delete projectData[key];
         }
         if ((key === 'start_date' || key === 'end_date') && projectData[key]) {
@@ -170,7 +174,7 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
         }
       });
 
-      console.log('Sending project data:', projectData);
+      console.log('Datos del proyecto a enviar:', projectData);
 
       const response = await fetch(url, {
         method,
@@ -197,7 +201,6 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
       }
 
       const savedProject = await response.json();
-      console.log('Project saved successfully:', savedProject);
       onSave();
     } catch (error) {
       console.error('Error:', error);
@@ -234,7 +237,7 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
           />
         </div>
 
-        <div>
+        {/* <div>
           <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
             <FiCode className="w-4 h-4" />
             Código del Proyecto
@@ -247,7 +250,7 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
             placeholder="PRJ-001"
           />
-        </div>
+        </div> */}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -261,10 +264,20 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
           >
             <option value="">Selecciona un tipo</option>
-            <option value="development">Desarrollo</option>
-            <option value="support">Soporte</option>
-            <option value="meeting">Reunión</option>
+            <option value="web_development">Desarrollo Web</option>
+            <option value="mobile_development">Desarrollo Móvil</option>
+            <option value="desktop_development">Desarrollo de Escritorio</option>
+            <option value="api_development">Desarrollo de API</option>
+            <option value="database_design">Diseño de Base de Datos</option>
+            <option value="cloud_migration">Migración a la Nube</option>
+            <option value="devops_infrastructure">DevOps e Infraestructura</option>
+            <option value="security_audit">Auditoría de Seguridad</option>
+            <option value="ui_ux_design">Diseño UI/UX</option>
+            <option value="testing_qa">Testing y QA</option>
+            <option value="maintenance_support">Mantenimiento y Soporte</option>
+            <option value="consulting">Consultoría</option>
             <option value="training">Capacitación</option>
+            <option value="research_development">Investigación y Desarrollo</option>
             <option value="other">Otro</option>
           </select>
         </div>
@@ -289,7 +302,7 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
           </select>
         </div>
 
-        <div>
+        <div className="hidden">
           <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
             <FiTrendingUp className="w-4 h-4" />
             Estado *
@@ -373,7 +386,7 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
           />
         </div>
 
-        <div>
+        {/* <div>
           <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
             <FiClock className="w-4 h-4" />
             Horas Estimadas
@@ -391,7 +404,7 @@ export default function ProjectModal({ project, clients, onClose, onSave }) {
             <FiAlertCircle className="w-3 h-3" />
             Las horas se calculan automáticamente considerando días laborables
           </p>
-        </div>
+        </div> */}
       </div>
 
       <div>

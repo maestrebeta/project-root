@@ -18,7 +18,6 @@ class Epic(Base):
     actual_hours = Column(Numeric(10, 2), nullable=True, default=0)
     progress_percentage = Column(Numeric(5, 2), nullable=True, default=0)
     color = Column(String(7), nullable=True, default='#3B82F6')  # Color hex para UI
-    tags = Column(JSON, nullable=True)
     acceptance_criteria = Column(Text, nullable=True)
     business_value = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -44,12 +43,6 @@ class UserStory(Base):
     specialization = Column(String(50), nullable=True, default='development')
     sub_specializations = Column(JSON, nullable=True)  # Array de sub-especializaciones
     estimated_hours = Column(Numeric(8, 2), nullable=True, default=8)  # Estimación principal
-    
-    # Estimaciones detalladas por tipo de trabajo
-    ui_hours = Column(Numeric(8, 2), nullable=True, default=0)
-    development_hours = Column(Numeric(8, 2), nullable=True, default=0)
-    testing_hours = Column(Numeric(8, 2), nullable=True, default=0)
-    documentation_hours = Column(Numeric(8, 2), nullable=True, default=0)
     
     # Horas reales trabajadas
     actual_hours = Column(Numeric(8, 2), nullable=True, default=0)
@@ -85,4 +78,5 @@ class UserStory(Base):
     epic = relationship("Epic", back_populates="user_stories")
     project = relationship("Project", back_populates="user_stories")
     assigned_user = relationship("User", foreign_keys=[assigned_user_id])
-    time_entries = relationship("TimeEntry", back_populates="user_story") 
+    time_entries = relationship("TimeEntry", back_populates="user_story")
+    notifications = relationship("Notification", back_populates="user_story") 

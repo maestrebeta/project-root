@@ -137,13 +137,10 @@ export default function StoryDetailsModal({
     specialization: 'development',
     sub_specializations: [],
     estimated_hours: 8, // Valor por defecto M (8 horas)
-    ui_hours: 0,
-    development_hours: 0,
-    testing_hours: 0,
-    documentation_hours: 0,
     assigned_user_id: '',
     epic_id: '',
-    due_date: '',
+    start_date: '',
+    end_date: '',
     tags: [],
     color: '#10B981'
   });
@@ -167,6 +164,18 @@ export default function StoryDetailsModal({
   // Inicializar formulario
   useEffect(() => {
     if (task) {
+      // Función para formatear fecha ISO a YYYY-MM-DD
+      const formatDateForInput = (dateString) => {
+        if (!dateString) return '';
+        try {
+          const date = new Date(dateString);
+          return date.toISOString().split('T')[0];
+        } catch (error) {
+          console.warn('Error formateando fecha:', dateString, error);
+          return '';
+        }
+      };
+
       const initialData = {
         title: task.title || '',
         description: task.description || '',
@@ -175,24 +184,21 @@ export default function StoryDetailsModal({
         priority: task.priority || 'medium',
         specialization: task.specialization || task.type || 'development',
         sub_specializations: task.sub_specializations || [],
-        estimated_hours: task.estimated_hours || 8,
-        ui_hours: task.ui_hours || 0,
-        development_hours: task.development_hours || 0,
-        testing_hours: task.testing_hours || 0,
-        documentation_hours: task.documentation_hours || 0,
-        assigned_user_id: task.assigned_user_id || '',
-        epic_id: task.epic_id || '',
-        due_date: task.due_date ? task.due_date.split('T')[0] : '',
+        estimated_hours: parseFloat(task.estimated_hours) || 8,
+        assigned_user_id: task.assigned_user_id || null,
+        epic_id: task.epic_id || null,
+        start_date: formatDateForInput(task.start_date),
+        end_date: formatDateForInput(task.end_date),
         tags: task.tags || [],
         color: task.color || '#10B981'
       };
       
       setFormData(initialData);
-      setOriginalEpicId(task.epic_id || '');
+      setOriginalEpicId(task.epic_id || null);
       setHasChanges(false);
     } else {
       // Valores por defecto inteligentes
-      const defaultProject = projects.length === 1 ? projects[0].project_id : '';
+      const defaultProject = projects.length === 1 ? projects[0].project_id : null;
       setFormData({
         title: '',
         description: '',
@@ -200,18 +206,16 @@ export default function StoryDetailsModal({
         status: 'backlog',
         priority: 'medium',
         specialization: 'development',
+        sub_specializations: [],
         estimated_hours: 8,
-        ui_hours: 0,
-        development_hours: 0,
-        testing_hours: 0,
-        documentation_hours: 0,
-        assigned_user_id: '',
-        epic_id: '',
-        due_date: '',
+        assigned_user_id: null,
+        epic_id: null,
+        start_date: '',
+        end_date: '',
         tags: [],
         color: '#10B981'
       });
-      setOriginalEpicId('');
+      setOriginalEpicId(null);
       setHasChanges(false);
     }
     setErrors({});
@@ -225,27 +229,7 @@ export default function StoryDetailsModal({
     }
   }, []);
 
-  // Validar fecha de vencimiento
-  const validateDueDate = (dateString) => {
-    if (!dateString) return true;
-    
-    const selectedDate = new Date(dateString);
-    const today = new Date();
-    const maxDate = new Date();
-    maxDate.setFullYear(today.getFullYear() + 15); // Máximo 15 años a futuro
-    
-    if (selectedDate < today) {
-      return 'La fecha de vencimiento no puede ser en el pasado';
-    }
-    
-    if (selectedDate > maxDate) {
-      return 'La fecha de vencimiento no puede ser más de 15 años a futuro';
-    }
-    
-    return true;
-  };
-
-  // Validación de campos individuales
+  // Validación de campos
   const validateField = (name, value) => {
     const newErrors = { ...errors };
     const newStatus = { ...validationStatus };
@@ -270,12 +254,19 @@ export default function StoryDetailsModal({
         }
         break;
       case 'estimated_hours':
-        if (value && (isNaN(value) || parseFloat(value) <= 0)) {
-          newErrors.estimated_hours = 'Debe ser un número positivo';
-          newStatus.estimated_hours = 'error';
+        const hours = parseFloat(value);
+        if (hours < 0) {
+          setErrors(prev => ({ ...prev, estimated_hours: 'Las horas no pueden ser negativas' }));
         } else {
           delete newErrors.estimated_hours;
-          newStatus.estimated_hours = value ? 'success' : 'neutral';
+        }
+        break;
+      case 'tags':
+        // Validación de tags
+        if (value && value.length > 10) {
+          setErrors(prev => ({ ...prev, tags: 'Máximo 10 etiquetas' }));
+        } else {
+          delete newErrors.tags;
         }
         break;
       default:
@@ -315,24 +306,12 @@ export default function StoryDetailsModal({
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    // Detectar cambios para confirmar al cambiar épica
-    if (name === 'epic_id' && value !== originalEpicId && !isNew) {
-      // Verificar si hay otros cambios
-      const currentFormData = { ...formData, [name]: value };
-      const hasOtherChanges = Object.keys(currentFormData).some(key => {
-        if (key === 'epic_id') return false;
-        return currentFormData[key] !== (task[key] || '');
-      });
-      
-      if (hasOtherChanges) {
-        const confirmChange = window.confirm(
-          '¿Estás seguro de cambiar la épica? Hay otros cambios sin guardar que se perderán.'
-        );
-        if (!confirmChange) {
-          return;
-        }
-      }
-    }
+    // Limpiar error del campo si existe
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[name];
+      return newErrors;
+    });
     
     // Validación especial para fecha de vencimiento
     if (name === 'due_date') {
@@ -403,42 +382,43 @@ export default function StoryDetailsModal({
     setErrors({});
 
     try {
-      // Mantener inalterados especialización, estimación y desglose de horas al editar
-      const storyData = {
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        acceptance_criteria: formData.acceptance_criteria?.trim() || null,
-        status: formData.status,
-        priority: formData.priority,
-        assigned_user_id: formData.assigned_user_id ? parseInt(formData.assigned_user_id) : null,
-        epic_id: formData.epic_id ? parseInt(formData.epic_id) : null,
-        due_date: formData.due_date || null,
-        tags: formData.tags, // Enviar como array
-        color: formData.color
+      // Función para convertir fecha YYYY-MM-DD a ISO
+      const convertDateToISO = (dateString) => {
+        if (!dateString) return null;
+        try {
+          const date = new Date(dateString + 'T00:00:00');
+          return date.toISOString();
+        } catch (error) {
+          console.warn('Error convirtiendo fecha:', dateString, error);
+          return null;
+        }
       };
 
-      // Solo incluir especialización y horas si es nueva historia o si se modificaron explícitamente
-      if (isNew) {
-        storyData.specialization = formData.specialization;
-        storyData.sub_specializations = formData.sub_specializations;
-        storyData.estimated_hours = parseFloat(formData.estimated_hours) || null;
-        storyData.ui_hours = parseFloat(formData.ui_hours) || 0;
-        storyData.development_hours = parseFloat(formData.development_hours) || 0;
-        storyData.testing_hours = parseFloat(formData.testing_hours) || 0;
-        storyData.documentation_hours = parseFloat(formData.documentation_hours) || 0;
-      } else {
-        // Al editar, mantener inalterados especialización, estimación y desglose de horas
-        // Solo actualizar si el usuario cambió explícitamente estos campos
-        if (formData.specialization !== (task.specialization || 'development')) {
-          storyData.specialization = formData.specialization;
-          storyData.sub_specializations = formData.sub_specializations;
-        }
-        if (formData.estimated_hours !== (task.estimated_hours || 8)) {
-          storyData.estimated_hours = parseFloat(formData.estimated_hours) || null;
+      const storyData = {
+        title: formData.title,
+        description: formData.description,
+        acceptance_criteria: formData.acceptance_criteria,
+        status: formData.status,
+        priority: formData.priority,
+        specialization: formData.specialization,
+        sub_specializations: formData.sub_specializations,
+        estimated_hours: parseFloat(formData.estimated_hours) || 8,
+        assigned_user_id: formData.assigned_user_id || null,
+        epic_id: formData.epic_id || null,
+        start_date: convertDateToISO(formData.start_date),
+        end_date: convertDateToISO(formData.end_date),
+        tags: formData.tags,
+        color: formData.color
+      };
+      
+      // Si se está asignando a un usuario, incluir assigned_by_user_id
+      if (formData.assigned_user_id && formData.assigned_user_id !== (task?.assigned_user_id || null)) {
+        // Obtener el usuario actual desde localStorage
+        const session = JSON.parse(localStorage.getItem('session') || '{}');
+        if (session.user_id) {
+          storyData.assigned_by_user_id = session.user_id;
         }
       }
-      
-      console.log('💾 Guardando historia:', storyData);
 
       let savedStory;
       if (isNew) {
@@ -448,12 +428,10 @@ export default function StoryDetailsModal({
         
         // Si cambió la épica, actualizar la UI para reflejar el cambio
         if (formData.epic_id !== originalEpicId) {
-          console.log('🔄 Épica cambió, actualizando UI...');
           // El componente padre manejará la actualización de la lista
         }
       }
 
-      console.log('✅ Historia guardada exitosamente:', savedStory);
       onSave(savedStory);
       onClose();
     } catch (error) {
@@ -521,8 +499,8 @@ export default function StoryDetailsModal({
   if (!task) return null;
 
   const selectedProject = projects.find(p => p.project_id === parseInt(formData.project_id));
-  const selectedEpic = epics.find(e => e.epic_id === parseInt(formData.epic_id));
-  const assignedUser = users.find(u => u.user_id === parseInt(formData.assigned_user_id));
+  const selectedEpic = formData.epic_id ? epics.find(e => e.epic_id === parseInt(formData.epic_id)) : null;
+  const assignedUser = formData.assigned_user_id ? users.find(u => u.user_id === parseInt(formData.assigned_user_id)) : null;
 
   return ReactDOM.createPortal(
     <AnimatePresence>
@@ -768,9 +746,20 @@ export default function StoryDetailsModal({
                               type="button"
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
-                              onClick={() => setFormData(prev => ({ ...prev, estimated_hours: config.hours }))}
+                              onClick={() => {
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  estimated_hours: config.hours 
+                                }));
+                                // Limpiar error si existe
+                                setErrors(prev => {
+                                  const newErrors = { ...prev };
+                                  delete newErrors.estimated_hours;
+                                  return newErrors;
+                                });
+                              }}
                               className={`p-4 rounded-xl border-2 transition-all ${
-                                formData.estimated_hours === config.hours
+                                parseFloat(formData.estimated_hours) === config.hours
                                   ? `bg-gradient-to-r ${config.color} text-white border-transparent shadow-lg`
                                   : 'bg-gray-50 border-gray-200 hover:border-gray-300 hover:bg-gray-100'
                               }`}
@@ -795,7 +784,23 @@ export default function StoryDetailsModal({
                               type="number"
                               name="estimated_hours"
                               value={formData.estimated_hours}
-                              onChange={handleChange}
+                              onChange={(e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  estimated_hours: value 
+                                }));
+                                // Validar y limpiar errores
+                                if (value < 0) {
+                                  setErrors(prev => ({ ...prev, estimated_hours: 'Las horas no pueden ser negativas' }));
+                                } else {
+                                  setErrors(prev => {
+                                    const newErrors = { ...prev };
+                                    delete newErrors.estimated_hours;
+                                    return newErrors;
+                                  });
+                                }
+                              }}
                               min="0.5"
                               step="0.5"
                               className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none text-center"
@@ -805,6 +810,16 @@ export default function StoryDetailsModal({
                               <FiClock className="w-4 h-4 text-gray-400" />
                             </div>
                           </div>
+                          {errors.estimated_hours && (
+                            <motion.p
+                              initial={{ opacity: 0, y: -5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-1 text-sm text-red-600 flex items-center gap-1"
+                            >
+                              <FiAlertCircle className="w-3 h-3" />
+                              {errors.estimated_hours}
+                            </motion.p>
+                          )}
                         </div>
                       </div>
 
@@ -908,31 +923,32 @@ export default function StoryDetailsModal({
                               </div>
                             </div>
 
-                            {/* Fecha de Vencimiento y Etiquetas en una fila */}
+                            {/* Fecha de Inicio */}
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Fecha de Vencimiento
+                                Fecha de Inicio
                               </label>
-                              <div className="relative">
-                                <input
-                                  type="date"
-                                  name="due_date"
-                                  value={formData.due_date}
-                                  onChange={handleChange}
-                                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                                />
-                                <FiCalendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                              </div>
-                              {errors.due_date && (
-                                <motion.p
-                                  initial={{ opacity: 0, y: -5 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="mt-1 text-sm text-red-600 flex items-center gap-1"
-                                >
-                                  <FiAlertCircle className="w-3 h-3" />
-                                  {errors.due_date}
-                                </motion.p>
-                              )}
+                              <input
+                                type="date"
+                                name="start_date"
+                                value={formData.start_date}
+                                onChange={handleChange}
+                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Fecha Límite */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Fecha Límite
+                              </label>
+                              <input
+                                type="date"
+                                name="end_date"
+                                value={formData.end_date}
+                                onChange={handleChange}
+                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                              />
                             </div>
 
                             {/* Criterios de Aceptación */}
@@ -993,78 +1009,6 @@ export default function StoryDetailsModal({
                                 >
                                   <FiPlus className="w-4 h-4" />
                                 </motion.button>
-                              </div>
-                            </div>
-
-                            {/* Horas Detalladas por Especialización */}
-                            <div className="lg:col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-3">
-                                Desglose de Horas por Especialización
-                              </label>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    UI/UX (horas)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    name="ui_hours"
-                                    value={formData.ui_hours}
-                                    onChange={handleChange}
-                                    min="0"
-                                    step="0.5"
-                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                                    placeholder="0"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Desarrollo (horas)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    name="development_hours"
-                                    value={formData.development_hours}
-                                    onChange={handleChange}
-                                    min="0"
-                                    step="0.5"
-                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                                    placeholder="0"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Testing (horas)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    name="testing_hours"
-                                    value={formData.testing_hours}
-                                    onChange={handleChange}
-                                    min="0"
-                                    step="0.5"
-                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                                    placeholder="0"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                                    Documentación (horas)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    name="documentation_hours"
-                                    value={formData.documentation_hours}
-                                    onChange={handleChange}
-                                    min="0"
-                                    step="0.5"
-                                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-300 hover:border-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                                    placeholder="0"
-                                  />
-                                </div>
-                              </div>
-                              <div className="mt-2 text-xs text-gray-500">
-                                💡 El desglose detallado es opcional. La estimación principal se usa si no se especifica desglose.
                               </div>
                             </div>
                           </div>

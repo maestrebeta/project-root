@@ -21,18 +21,62 @@ class ProjectBase(BaseModel):
 
     @validator('project_type')
     def validate_project_type(cls, v):
-        # Tipos de proyecto válidos según la definición SQL
+        # Tipos de proyecto válidos según la definición SQL - Tipos específicos para IT
         valid_project_types = [
-            'development', 'support', 'meeting', 'training', 'other'
+            'web_development', 'mobile_development', 'desktop_development', 'api_development', 
+            'database_design', 'cloud_migration', 'devops_infrastructure', 'security_audit', 
+            'ui_ux_design', 'testing_qa', 'maintenance_support', 'consulting', 'training', 'research_development', 'other'
         ]
         
-        # Mapeo de tipos de proyecto
+        # Mapeo de tipos de proyecto desde español a inglés
         type_mapping = {
-            'desarrollo': 'development',
-            'soporte': 'support',
-            'reunion': 'meeting',
+            # Desarrollo web y aplicaciones
+            'desarrollo_web': 'web_development',
+            'desarrollo_movil': 'mobile_development',
+            'desarrollo_escritorio': 'desktop_development',
+            'desarrollo_api': 'api_development',
+            'desarrollo': 'web_development',  # Mantener compatibilidad
+            
+            # Base de datos y cloud
+            'diseno_bd': 'database_design',
+            'diseno_base_datos': 'database_design',
+            'migracion_cloud': 'cloud_migration',
+            'migracion_nube': 'cloud_migration',
+            
+            # DevOps e infraestructura
+            'devops': 'devops_infrastructure',
+            'infraestructura': 'devops_infrastructure',
+            
+            # Seguridad y auditoría
+            'auditoria_seguridad': 'security_audit',
+            'seguridad': 'security_audit',
+            
+            # Diseño y UX
+            'diseno_ui_ux': 'ui_ux_design',
+            'diseno_interfaz': 'ui_ux_design',
+            'ux_design': 'ui_ux_design',
+            
+            # Testing y QA
+            'testing': 'testing_qa',
+            'qa': 'testing_qa',
+            'pruebas': 'testing_qa',
+            
+            # Soporte y mantenimiento
+            'soporte': 'maintenance_support',
+            'mantenimiento': 'maintenance_support',
+            'soporte_tecnico': 'maintenance_support',
+            
+            # Consultoría y otros
+            'consultoria': 'consulting',
             'capacitacion': 'training',
-            'otro': 'other'
+            'investigacion': 'research_development',
+            'r_d': 'research_development',
+            'otro': 'other',
+            
+            # Mantener compatibilidad con tipos anteriores
+            'support': 'maintenance_support',
+            'meeting': 'consulting',
+            'training': 'training'
         }
         
         # Convertir a minúsculas para comparación

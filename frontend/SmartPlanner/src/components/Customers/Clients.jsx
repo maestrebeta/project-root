@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
+import { useProjectProgress } from '../../hooks/useProjectProgress';
+import projectProgressService from '../../services/projectProgressService';
 import { 
   FiPlus, FiFilter, FiSearch, FiEye, FiEyeOff, FiCheckCircle, 
   FiClock, FiAlertCircle, FiUser, FiCalendar, FiTag, FiMessageSquare,
@@ -14,6 +16,7 @@ import ClientTable from './ClientTable';
 
 export default function Clients() {
   const { user, isAuthenticated } = useAuth();
+  const { getClientProjectsProgress, calculateClientProjectsProgress } = useProjectProgress();
   const [clients, setClients] = useState([]);
   const [countries, setCountries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,7 @@ export default function Clients() {
     tickets: {},
     projects: {},
     projectsInfo: {},
+    projectsProgress: {}, // Nuevo caché para progreso de proyectos
     lastUpdate: null
   });
   
@@ -78,7 +82,6 @@ export default function Clients() {
         throw new Error('No hay sesión activa');
       }
 
-      console.log('Fetching clients from backend...');
       const clientsResponse = await fetch('http://localhost:8001/clients/', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -94,54 +97,42 @@ export default function Clients() {
       }
 
       const clientsData = await clientsResponse.json();
-      console.log('Raw clients data:', clientsData);
       
       // Mostrar progreso de enriquecimiento de datos
       setLoading(true);
-      console.log('Enriqueciendo datos de clientes con información del backend...');
       
       // Enriquecer los datos con información real del backend
       const enrichedClients = await Promise.all(clientsData.map(async (client, index) => {
         try {
-          console.log(`Procesando cliente ${index + 1}/${clientsData.length}: ${client.name}`);
           
           // Obtener datos reales de cotizaciones, tickets y proyectos para este cliente
-          const [quotationsData, ticketsData] = await Promise.all([
+          const [quotationsData, ticketsData, projectsData] = await Promise.all([
             fetchClientQuotations(client.client_id),
-            fetchClientTickets(client.client_id)
+            fetchClientTickets(client.client_id),
+            fetchClientProjects(client.client_id)
           ]);
 
           // Calcular métricas reales
           const pendingQuotesAmount = quotationsData.reduce((total, quotation) => {
             // Usar total_pending del backend si está disponible, sino calcular manualmente
             if (quotation.total_pending !== undefined) {
-              console.log(`Usando total_pending del backend para cotización ${quotation.quotation_id}: ${quotation.total_pending}`);
               return total + (quotation.total_pending || 0);
             }
             // Fallback: calcular manualmente si no hay total_pending del backend
-            console.log(`Calculando manualmente para cotización ${quotation.quotation_id || 'sin_id'}`);
             const pendingAmount = quotation.installments?.reduce((sum, installment) => {
               return installment.is_paid ? sum : sum + (installment.amount || 0);
             }, 0) || 0;
             return total + pendingAmount;
           }, 0);
-          
-          console.log(`Total cotizaciones pendientes para cliente ${client.name}: ${pendingQuotesAmount} (de ${quotationsData.length} cotizaciones)`);
 
           // Depurar tickets para este cliente
-          console.log(`Tickets raw data for client ${client.name}:`, ticketsData);
-          console.log(`Total tickets found: ${ticketsData.length}`);
-          
           const openTicketsCount = ticketsData.filter(ticket => {
             const isOpen = ticket.status !== 'cerrado' && 
                           ticket.status !== 'resuelto' && 
                           ticket.status !== 'canceled' &&
                           ticket.status !== 'closed';
-            console.log(`Ticket ${ticket.ticket_id || 'no-id'} - Status: ${ticket.status}, Is Open: ${isOpen}`);
             return isOpen;
           }).length;
-          
-          console.log(`Open tickets count for client ${client.name}: ${openTicketsCount}`);
 
           // Obtener información de proyectos desde el backend
           const [projectsDataInfo, projectsInfo] = await Promise.all([
@@ -149,35 +140,51 @@ export default function Clients() {
             fetchClientProjectsInfo(client.client_id)
           ]);
 
-          // Depurar proyectos para este cliente
-          console.log(`Projects raw data for client ${client.name}:`, projectsDataInfo);
-          console.log(`Projects info for client ${client.name}:`, projectsInfo);
-          console.log(`Total projects found: ${projectsDataInfo.length}`);
-
           // Usar la información calculada en el backend para mayor consistencia
           const delayedProjectsCount = projectsInfo?.overdue_projects || 0;
           const riskProjectsCount = projectsInfo?.at_risk_projects || 0;
+
+          // Calcular progreso promedio de proyectos del cliente
+          let projectsProgressAverage = 0;
+          let totalHoursRegistered = 0;
           
-          console.log(`Delayed projects count for client ${client.name}: ${delayedProjectsCount}`);
-          console.log(`Risk projects count for client ${client.name}: ${riskProjectsCount}`);
+          if (projectsData.length > 0) {
+            try {
+              // Intentar obtener progreso desde el backend
+              const clientProgress = await getClientProjectsProgress(client.client_id);
+              if (clientProgress && !clientProgress.error) {
+                projectsProgressAverage = clientProgress.average_progress || 0;
+                totalHoursRegistered = clientProgress.total_actual_hours || 0;
+              } else {
+                // Fallback: calcular localmente si hay error en el backend
+                const projectIds = projectsData.map(p => p.project_id);
+                if (projectIds.length > 0) {
+                  const projectProgressData = await projectProgressService.getMultipleProjectsProgress(projectIds);
+                  const calculatedProgress = calculateClientProjectsProgress(projectsData);
+                  projectsProgressAverage = calculatedProgress.average_progress || 0;
+                  totalHoursRegistered = calculatedProgress.total_actual_hours || 0;
+                }
+              }
+            } catch (error) {
+              console.error(`Error calculando progreso de proyectos para cliente ${client.client_id}:`, error);
+              // En caso de error, usar valores por defecto
+              projectsProgressAverage = 0;
+              totalHoursRegistered = 0;
+            }
+          }
 
           const enrichedClient = {
             ...client,
             pending_quotes_amount: Math.round(pendingQuotesAmount),
-            rating_average: client.rating_average || 0, // Usar calificación real del backend
+            rating_average: client.rating_average, // Mantener el valor original del backend (puede ser null)
             open_tickets_count: openTicketsCount,
             delayed_projects_count: delayedProjectsCount,
             risk_projects_count: riskProjectsCount,
             projects_count: projectsDataInfo.length,
-            total_quotes_amount: Math.round(quotationsData.reduce((total, q) => total + (q.total_amount || 0), 0))
+            total_quotes_amount: Math.round(quotationsData.reduce((total, q) => total + (q.total_amount || 0), 0)),
+            projects_progress_average: projectsProgressAverage, // Nuevo campo para progreso promedio
+            total_hours_registered: totalHoursRegistered // Nuevo campo para horas registradas
           };
-
-          console.log(`Cliente ${client.name} enriquecido:`, {
-            pendingQuotes: enrichedClient.pending_quotes_amount,
-            openTickets: enrichedClient.open_tickets_count,
-            delayedProjects: enrichedClient.delayed_projects_count,
-            riskProjects: enrichedClient.risk_projects_count
-          });
 
           return enrichedClient;
         } catch (error) {
@@ -186,23 +193,23 @@ export default function Clients() {
           return {
             ...client,
             pending_quotes_amount: 0,
-            rating_average: 0,
+            rating_average: client.rating_average, // Mantener el rating original del cliente
             open_tickets_count: 0,
             delayed_projects_count: 0,
             risk_projects_count: 0,
             projects_count: 0,
-            total_quotes_amount: 0
+            total_quotes_amount: 0,
+            projects_progress_average: 0,
+            total_hours_registered: 0
           };
         }
       }));
       
-      console.log('Enriched clients:', enrichedClients);
       setClients(enrichedClients);
       
       // Calcular y actualizar estadísticas del dashboard basándose en datos reales
       const dashboardStats = calculateDashboardStats(enrichedClients);
       // Aquí podrías llamar a una función para actualizar las estadísticas globales si es necesario
-      console.log('Dashboard stats calculated:', dashboardStats);
       
     } catch (err) {
       console.error('Error fetching clients:', err);
@@ -218,7 +225,6 @@ export default function Clients() {
         throw new Error('No hay sesión activa');
       }
 
-      console.log('Fetching countries from backend...');
       const response = await fetch('http://localhost:8001/countries/', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -251,7 +257,6 @@ export default function Clients() {
       const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
 
       if (isCacheValid) {
-        console.log('Usando datos de cotizaciones de caché para el cliente:', clientId);
         return cachedData.data;
       }
 
@@ -278,7 +283,6 @@ export default function Clients() {
           }
         }));
 
-        console.log(`Fetched ${quotations.length} quotations for client ${clientId} using direct endpoint`);
         return Array.isArray(quotations) ? quotations : [];
       } else {
         console.error(`Error fetching quotations for client ${clientId}:`, response.status, response.statusText);
@@ -301,7 +305,6 @@ export default function Clients() {
       const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
 
       if (isCacheValid) {
-        console.log('Usando datos de tickets de caché para el cliente:', clientId);
         return cachedData.data;
       }
 
@@ -312,11 +315,9 @@ export default function Clients() {
         }
       });
 
-      console.log(`Tickets API response for client ${clientId}:`, response.status);
 
       if (response.ok) {
         const data = await response.json();
-        console.log(`Tickets raw response for client ${clientId}:`, data);
         
         // Actualizar caché
         setDataCache(prev => ({
@@ -330,7 +331,6 @@ export default function Clients() {
           }
         }));
         
-        console.log(`Processed tickets for client ${clientId}:`, Array.isArray(data) ? data.length : 'not array');
         return Array.isArray(data) ? data : [];
       } else {
         console.error(`Error fetching tickets for client ${clientId}:`, response.status, response.statusText);
@@ -352,7 +352,6 @@ export default function Clients() {
       const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
 
       if (isCacheValid) {
-        console.log('Usando datos de proyectos de caché para el cliente:', clientId);
         return cachedData.data;
       }
 
@@ -395,7 +394,6 @@ export default function Clients() {
       const isCacheValid = cachedData && (Date.now() - cachedData.timestamp < 5 * 60 * 1000); // 5 minutos
 
       if (isCacheValid) {
-        console.log('Usando datos de información de proyectos de caché para el cliente:', clientId);
         return cachedData.data;
       }
 
@@ -435,8 +433,44 @@ export default function Clients() {
       tickets: {},
       projects: {},
       projectsInfo: {},
+      projectsProgress: {}, // Incluir el nuevo caché
       lastUpdate: null
     });
+  };
+
+  // Función para actualizar el progreso de proyectos de un cliente específico
+  const updateClientProjectsProgress = async (clientId) => {
+    try {
+      const clientProgress = await getClientProjectsProgress(clientId);
+      if (clientProgress && !clientProgress.error) {
+        // Actualizar el cliente en el estado local
+        setClients(prevClients => 
+          prevClients.map(client => 
+            client.client_id === clientId 
+              ? { 
+                  ...client, 
+                  projects_progress_average: clientProgress.average_progress || 0,
+                  total_hours_registered: clientProgress.total_actual_hours || 0
+                }
+              : client
+          )
+        );
+        
+        // Actualizar caché
+        setDataCache(prev => ({
+          ...prev,
+          projectsProgress: {
+            ...prev.projectsProgress,
+            [clientId]: {
+              data: clientProgress,
+              timestamp: Date.now()
+            }
+          }
+        }));
+      }
+    } catch (error) {
+      console.error(`Error actualizando progreso de proyectos para cliente ${clientId}:`, error);
+    }
   };
 
   // Limpiar caché cuando se actualiza un cliente
@@ -630,6 +664,11 @@ export default function Clients() {
         // Limpiar caché para forzar actualización en la próxima carga
         clearDataCache();
         
+        // Si se actualizó un cliente existente, actualizar su progreso de proyectos
+        if (selectedClient) {
+          await updateClientProjectsProgress(selectedClient.client_id);
+        }
+        
         // Cerrar el modal
         setShowClientModal(false);
         setSelectedClient(null);
@@ -687,7 +726,6 @@ export default function Clients() {
 
   // Manejar cambio de estado de cliente
   const handleStatusChange = async (clientId, newStatus) => {
-    console.log('Cambiando estado del cliente:', clientId, 'nuevo estado:', newStatus);
     
     // Agregar el cliente al set de clientes siendo actualizados
     setUpdatingStatus(prev => new Set([...prev, clientId]));
@@ -695,23 +733,9 @@ export default function Clients() {
     try {
       const session = JSON.parse(localStorage.getItem('session'));
       
-      // Obtener los datos completos del cliente
-      const currentClient = clients.find(c => c.client_id === clientId);
-      if (!currentClient) {
-        throw new Error('Cliente no encontrado');
-      }
-      
-      // Enviar todos los datos del cliente con el estado actualizado
+      // Enviar solo el campo que necesita cambiar
       const updatedClientData = {
-        name: currentClient.name,
-        code: currentClient.code,
-        is_active: newStatus,
-        country_code: currentClient.country_code,
-        address: currentClient.address,
-        contact_email: currentClient.contact_email,
-        contact_phone: currentClient.contact_phone,
-        tax_id: currentClient.tax_id,
-        organization_id: session.user.organization_id
+        is_active: newStatus
       };
       
       const response = await fetch(`http://localhost:8001/clients/${clientId}`, {
@@ -925,16 +949,6 @@ export default function Clients() {
                 {hasActiveFilters && (
                   <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
                 )}
-              </button>
-
-              {/* Botón de refrescar */}
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all duration-300 disabled:opacity-50"
-              >
-                <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                Actualizar
               </button>
 
               {/* Toggle de vista mejorado */}

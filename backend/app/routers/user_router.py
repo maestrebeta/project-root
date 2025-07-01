@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
-from typing import List
+from sqlalchemy import func, and_, or_
+from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta
 # from app.schemas import user_schema
 from app.schemas.user_schema import UserCreate, UserUpdate, UserOut, ThemePreferences, UserOutSimple
 from app.core.database import get_db
-from app.core.security import get_current_user, get_password_hash, get_current_user_organization
+from app.core.security import get_current_user, get_password_hash, get_current_user_organization, validate_organization_subscription
 from app.models.user_models import User
 from app.models.epic_models import UserStory
 from app.models.ticket_models import Ticket
 from app.models.time_entry_models import TimeEntry
+from app.models.organization_models import Organization
 import logging
 
 # Configurar logging
@@ -35,15 +38,12 @@ def validate_user_role(current_user: User, target_role: str):
 @router.get("/stats", response_model=dict)
 def get_users_stats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_organization)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     """
     Obtener estadísticas de usuarios de la organización actual
     """
     try:
-        from sqlalchemy import func
-        from datetime import datetime, timedelta
-        
         organization_id = current_user.organization_id
         
         # Total de usuarios en la organización
@@ -144,24 +144,34 @@ def get_users_stats(
 @router.get("/capacity-analytics")
 async def get_users_capacity_analytics(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_organization)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     """
     Obtener análisis de capacidad y carga de trabajo de usuarios
     """
     try:
-        from sqlalchemy import func
-        from datetime import datetime, timedelta
-        
         organization_id = current_user.organization_id
         
-        # Obtener usuarios de la organización
-        users_query = db.query(User).filter(
-            User.organization_id == organization_id,
-            User.is_active == True
+        # Obtener información de la organización
+        organization = db.query(Organization).filter(
+            Organization.organization_id == organization_id
+        ).first()
+        
+        if not organization:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organización no encontrada"
+            )
+        
+        # Usuarios activos
+        active_users = db.query(User).filter(
+            and_(
+                User.organization_id == organization_id,
+                User.is_active == True
+            )
         ).all()
         
-        if not users_query:
+        if not active_users:
             return {
                 "users": [],
                 "summary": {
@@ -188,7 +198,7 @@ async def get_users_capacity_analytics(
         total_assigned_hours = 0
         overloaded_count = 0
         
-        for user in users_query:
+        for user in active_users:
             try:
                 # Calcular horas asignadas desde UserStory (usando import dinámico para evitar errores)
                 assigned_hours = 0
@@ -378,20 +388,16 @@ async def get_users_capacity_analytics(
 @router.get("/test", response_model=List[dict])
 def test_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_organization)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     """Endpoint de prueba para verificar serialización"""
     try:
         # Construir la consulta base
         query = db.query(User).options(joinedload(User.organization))
         
-        # Si el usuario es super_user, puede ver usuarios de todas las organizaciones
-        if current_user.role == 'super_user':
-            logger.info("Super usuario solicitando usuarios de todas las organizaciones")
-        else:
-            # Otros usuarios solo pueden ver usuarios de su organización
-            query = query.filter(User.organization_id == current_user.organization_id)
-            logger.info(f"Filtrando usuarios por organización {current_user.organization_id}")
+        # SIEMPRE filtrar por organización actual, sin excepción
+        query = query.filter(User.organization_id == current_user.organization_id)
+        logger.info(f"Filtrando usuarios por organización {current_user.organization_id}")
         
         # Aplicar paginación
         users = query.offset(0).limit(10).all()
@@ -427,22 +433,40 @@ def test_users(
 def get_users(
     skip: int = 0,
     limit: int = 100,
+    search: Optional[str] = Query(None),
+    role: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_organization)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     logger.info(f"Usuario {current_user.username} (rol: {current_user.role}) solicitando lista de usuarios")
     
     try:
+        organization_id = current_user.organization_id
+        
         # Construir la consulta base sin cargar organization temporalmente
         query = db.query(User)
         
-        # Si el usuario es super_user, puede ver usuarios de todas las organizaciones
-        if current_user.role == 'super_user':
-            logger.info("Super usuario solicitando usuarios de todas las organizaciones")
-        else:
-            # Otros usuarios solo pueden ver usuarios de su organización
-            query = query.filter(User.organization_id == current_user.organization_id)
-            logger.info(f"Filtrando usuarios por organización: {current_user.organization_id}")
+        # SIEMPRE filtrar por organización actual, sin excepción
+        query = query.filter(User.organization_id == organization_id)
+        logger.info(f"Filtrando usuarios por organización: {organization_id}")
+        
+        # Aplicar filtros
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    User.username.ilike(search_term),
+                    User.full_name.ilike(search_term),
+                    User.email.ilike(search_term)
+                )
+            )
+        
+        if role:
+            query = query.filter(User.role == role)
+        
+        if is_active is not None:
+            query = query.filter(User.is_active == is_active)
         
         # Aplicar paginación
         users = query.offset(skip).limit(limit).all()
@@ -468,7 +492,7 @@ def get_users(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     logger.info(f"Usuario {current_user.username} solicitando detalles del usuario {user_id}")
     
@@ -498,7 +522,7 @@ def get_user(
 def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     # Validar rol del usuario
     validate_user_role(current_user, user.role)
@@ -552,7 +576,7 @@ def update_user(
     user_id: int,
     user: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     # Si se está cambiando el rol, validar permisos
     if user.role:
@@ -647,7 +671,7 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     logger.info(f"Usuario {current_user.username} intentando eliminar usuario {user_id}")
     db_user = db.query(User).filter(User.user_id == user_id).first()
@@ -664,7 +688,7 @@ def update_user_theme(
     user_id: int,
     theme_data: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(validate_organization_subscription)
 ):
     try:
         logger.info(f"Usuario {current_user.username} actualizando tema para usuario {user_id}")

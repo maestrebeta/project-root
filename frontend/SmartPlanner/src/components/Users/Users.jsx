@@ -190,17 +190,12 @@ export default function Users() {
       }
       
       const data = await response.json();
-      console.log('Users.jsx - Usuarios obtenidos del backend:', data);
-      console.log('Users.jsx - Usuario actual es super_user:', user?.role === 'super_user');
       
       // Filtrar usuarios según el rol del usuario actual
       let filteredUsers = data;
       if (user?.role !== 'super_user') {
         // Si no es super_user, ocultar otros super_users
         filteredUsers = data.filter(userData => userData.role !== 'super_user');
-        console.log('Users.jsx - Usuarios filtrados (no super_user):', filteredUsers);
-      } else {
-        console.log('Users.jsx - Mostrando todos los usuarios (incluyendo super_users)');
       }
       
       setUsers(filteredUsers);
@@ -227,7 +222,6 @@ export default function Users() {
       }
       
       const updatedUser = await response.json();
-      console.log('Datos actualizados del usuario para edición:', updatedUser);
       
       setSelectedUser(updatedUser);
       setShowUserModal(true);
@@ -258,7 +252,6 @@ export default function Users() {
       }
 
     const savedUser = await response.json();
-    console.log('Usuario guardado exitosamente:', savedUser);
 
       setShowUserModal(false);
       setSelectedUser(null);

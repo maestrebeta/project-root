@@ -10,11 +10,11 @@ class TimeEntryBase(BaseModel):
     user_id: int = Field(..., gt=0)
     project_id: int = Field(..., gt=0)
     entry_date: Optional[datetime] = None
-    activity_type: str = Field(default='desarrollo', max_length=50)
+    activity_type: int = Field(default=1, gt=0)  # ID de la categoría de actividad
     start_time: datetime
     end_time: Optional[datetime] = None
     description: Optional[str] = Field(None, max_length=500)
-    status: str = Field(default='pendiente', max_length=50)
+    status: int = Field(default=1, gt=0)  # ID del estado
     billable: bool = True
     ticket_id: Optional[int] = None
     organization_id: Optional[int] = None
@@ -57,51 +57,17 @@ class TimeEntryBase(BaseModel):
 
     @validator('activity_type')
     def validate_activity_type(cls, v):
-        """Validar y normalizar el tipo de actividad"""
-        if not v:
-            return 'desarrollo'
-        
-        # Usar la función de normalización que mapea todos los tipos
-        normalized = normalize_activity_type(v)
-        
-        # Verificar que el resultado normalizado sea válido
-        if normalized not in DEFAULT_ACTIVITY_TYPES:
-            raise ValueError(f"Tipo de actividad inválido. Debe ser uno de: {DEFAULT_ACTIVITY_TYPES}")
-        
-        return normalized
+        """Validar que el tipo de actividad sea un ID válido"""
+        if not isinstance(v, int) or v <= 0:
+            raise ValueError('activity_type debe ser un ID entero positivo')
+        return v
 
     @validator('status')
     def validate_status(cls, v):
-        """Validar que el estado sea uno de los permitidos"""
-        if not v:
-            return 'pendiente'
-            
-        normalized = v.lower().strip()
-        
-        # Mapeo de estados
-        status_mapping = {
-            'pendiente': 'pendiente',
-            'pending': 'pendiente',
-            'nueva': 'pendiente',
-            'new': 'pendiente',
-            'en_progreso': 'en_progreso',
-            'en progreso': 'en_progreso',
-            'in_progress': 'en_progreso',
-            'progreso': 'en_progreso',
-            'completada': 'completada',
-            'completed': 'completada',
-            'completado': 'completada',
-            'done': 'completada'
-        }
-        
-        # Normalizar el estado
-        normalized_status = status_mapping.get(normalized, normalized)
-        
-        # Validar estado
-        if normalized_status not in VALID_STATES:
-            raise ValueError(f'Estado inválido. Debe ser uno de: {VALID_STATES}')
-        
-        return normalized_status
+        """Validar que el estado sea un ID válido"""
+        if not isinstance(v, int) or v <= 0:
+            raise ValueError('status debe ser un ID entero positivo')
+        return v
 
 class TimeEntryCreate(TimeEntryBase):
     pass

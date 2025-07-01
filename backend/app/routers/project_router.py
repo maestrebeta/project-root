@@ -224,14 +224,17 @@ def get_projects_time_analytics(
                     current_date += timedelta(days=1)
                 return working_days
             
-            # Si el proyecto tiene fecha de fin
-            if stat.end_date:
+            # Si el proyecto está completado, no mostrar eficiencia
+            if stat.status == 'completed':
+                efficiency = None
+            # Si no tiene fecha de fin, mostrar "Sin fecha límite"
+            elif not stat.end_date:
+                efficiency = "Sin fecha límite"
+            # Si tiene fecha de fin, calcular eficiencia basándose en la fecha
+            else:
                 # Si la fecha de fin ya pasó y el proyecto no está completado
-                if stat.end_date < today and stat.status != 'completed':
+                if stat.end_date < today:
                     efficiency = "Retrasado"
-                # Si el proyecto está completado
-                elif stat.status == 'completed':
-                    efficiency = "En tiempo"
                 # Si la fecha de fin está en el futuro
                 elif stat.end_date > today:
                     # Calcular días hábiles restantes
@@ -241,44 +244,10 @@ def get_projects_time_analytics(
                     if working_days_remaining <= 15:
                         efficiency = "Ligeramente retrasado"
                     else:
-                        # Calcular eficiencia basada en horas si hay estimación
-                        if estimated_hours > 0 and total_hours > 0:
-                            if total_hours <= estimated_hours:
-                                efficiency = "En tiempo"
-                            elif total_hours <= estimated_hours * 1.1:
-                                efficiency = "Ligeramente retrasado"
-                            else:
-                                efficiency = "Retrasado"
-                        else:
-                            # Si no hay estimación de horas, usar lógica basada en estado
-                            if stat.status in ['in_progress', 'at_risk']:
-                                efficiency = "En tiempo"
-                            elif stat.status in ['suspended', 'canceled']:
-                                efficiency = "N/A"
-                            else:
-                                efficiency = "En tiempo"
+                        efficiency = "En tiempo"
                 else:
                     # Proyecto completado en tiempo
                     efficiency = "En tiempo"
-            else:
-                # Si no hay fecha de fin, usar solo lógica de horas
-                if estimated_hours > 0 and total_hours > 0:
-                    if total_hours <= estimated_hours:
-                        efficiency = "En tiempo"
-                    elif total_hours <= estimated_hours * 1.1:
-                        efficiency = "Ligeramente retrasado"
-                    else:
-                        efficiency = "Retrasado"
-                else:
-                    # Si no hay estimación de horas, usar lógica basada en estado
-                    if stat.status == 'completed':
-                        efficiency = "En tiempo"
-                    elif stat.status in ['in_progress', 'at_risk']:
-                        efficiency = "En tiempo"
-                    elif stat.status in ['suspended', 'canceled']:
-                        efficiency = "N/A"
-                    else:
-                        efficiency = "En tiempo"
             
             project_data = {
                 "project_id": stat.project_id,
@@ -540,7 +509,6 @@ def get_quotations_summary_endpoint(
 ):
     """Obtener resumen de cotizaciones de la organización"""
     try:
-        print(f"Debug: User ID: {current_user.user_id}, Organization ID: {current_user.organization_id}")
         
         if not current_user.organization_id:
             print("Error: Usuario no tiene organización asignada")
@@ -550,7 +518,6 @@ def get_quotations_summary_endpoint(
             )
         
         result = get_quotations_summary(db, current_user.organization_id)
-        print(f"Debug: Summary result: {result}")
         return result
         
     except HTTPException:
@@ -646,7 +613,6 @@ def get_quotations_by_client_endpoint(
 ):
     """Obtener todas las cotizaciones de un cliente específico"""
     try:
-        print(f"Debug: Getting quotations for client {client_id}, User ID: {current_user.user_id}")
         
         if not current_user.organization_id:
             raise HTTPException(
@@ -665,7 +631,6 @@ def get_quotations_by_client_endpoint(
         
         # Obtener todas las cotizaciones del cliente
         result = get_quotations_by_client(db, client_id, current_user.organization_id)
-        print(f"Debug: Found {len(result)} quotations for client {client_id}")
         return result
         
     except HTTPException:
@@ -698,4 +663,261 @@ def get_client_projects_info_endpoint(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener información de proyectos del cliente: {str(e)}"
+        )
+
+@router.get("/{project_id}/progress", response_model=Dict[str, Any])
+def get_project_progress(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Obtener el progreso del proyecto basado en las historias de usuario
+    Esta es la fuente de verdad para el progreso del proyecto
+    """
+    try:
+        from sqlalchemy import func
+        from app.models.epic_models import UserStory
+        
+        # Verificar que el proyecto pertenece a la organización del usuario
+        project = db.query(Project).filter(
+            Project.project_id == project_id,
+            Project.organization_id == current_user.organization_id
+        ).first()
+        
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Proyecto no encontrado"
+            )
+        
+        # Obtener todas las historias del proyecto
+        stories = db.query(UserStory).filter(
+            UserStory.project_id == project_id
+        ).all()
+        
+        if not stories:
+            return {
+                "project_id": project_id,
+                "total_stories": 0,
+                "completed_stories": 0,
+                "total_estimated_hours": 0,
+                "total_actual_hours": 0,
+                "progress_percentage": 0,
+                "velocity": 0,
+                "points_velocity": 0
+            }
+        
+        # Calcular estadísticas basadas en historias
+        total_stories = len(stories)
+        completed_stories = len([s for s in stories if s.status == 'done'])
+        total_estimated_hours = sum(float(s.estimated_hours or 0) for s in stories)
+        total_actual_hours = sum(float(s.actual_hours or 0) for s in stories)
+        
+        # Calcular progreso basado en historias completadas
+        progress_percentage = (completed_stories / total_stories * 100) if total_stories > 0 else 0
+        
+        # Calcular velocidad (porcentaje de historias completadas)
+        velocity = progress_percentage
+        
+        # Calcular velocidad por puntos/horas (porcentaje de horas completadas)
+        points_velocity = (total_actual_hours / total_estimated_hours * 100) if total_estimated_hours > 0 else 0
+        
+        # Distribución por estado
+        status_distribution = {}
+        for story in stories:
+            status = story.status
+            if status not in status_distribution:
+                status_distribution[status] = 0
+            status_distribution[status] += 1
+        
+        return {
+            "project_id": project_id,
+            "total_stories": total_stories,
+            "completed_stories": completed_stories,
+            "total_estimated_hours": round(total_estimated_hours, 2),
+            "total_actual_hours": round(total_actual_hours, 2),
+            "progress_percentage": round(progress_percentage, 1),
+            "velocity": round(velocity, 1),
+            "points_velocity": round(points_velocity, 1),
+            "status_distribution": status_distribution,
+            "stories_by_status": {
+                "backlog": len([s for s in stories if s.status == 'backlog']),
+                "nuevo": len([s for s in stories if s.status == 'nuevo']),
+                "en_progreso": len([s for s in stories if s.status == 'en_progreso']),
+                "listo_pruebas": len([s for s in stories if s.status == 'listo_pruebas']),
+                "done": len([s for s in stories if s.status == 'done']),
+                "blocked": len([s for s in stories if s.status == 'blocked'])
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al calcular progreso del proyecto: {str(e)}"
+        )
+
+@router.post("/{project_id}/update-status-from-epics", response_model=Dict[str, Any])
+def update_project_status_from_epics_endpoint(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Actualizar el estado del proyecto basándose en el estado de sus épicas.
+    Si todas las épicas están en estado 'done', el proyecto cambia a 'completed'.
+    Si alguna épica no está en 'done', el proyecto cambia a 'in_progress'.
+    """
+    try:
+        # Verificar que el proyecto pertenece a la organización del usuario
+        project = db.query(Project).filter(
+            Project.project_id == project_id,
+            Project.organization_id == current_user.organization_id
+        ).first()
+        
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Proyecto no encontrado"
+            )
+        
+        # Importar la función del CRUD de épicas
+        from app.crud.epic_crud import update_project_status_from_epics
+        
+        # Actualizar el estado del proyecto
+        update_project_status_from_epics(db, project_id)
+        
+        # Obtener el proyecto actualizado
+        updated_project = db.query(Project).filter(Project.project_id == project_id).first()
+        
+        return {
+            "message": "Estado del proyecto actualizado exitosamente",
+            "project_id": project_id,
+            "project_name": updated_project.name,
+            "new_status": updated_project.status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al actualizar estado del proyecto: {str(e)}"
+        )
+
+@router.get("/by-client/{client_id}/progress", response_model=Dict[str, Any])
+def get_client_projects_progress_endpoint(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_organization)
+):
+    """
+    Obtener el progreso promedio de todos los proyectos de un cliente específico
+    """
+    try:
+        from sqlalchemy import func
+        from app.models.epic_models import UserStory
+        
+        # Verificar que el cliente pertenece a la organización del usuario
+        from ..crud.client_crud import get_client
+        client = get_client(db, client_id)
+        if not client or client.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cliente no encontrado o no autorizado"
+            )
+        
+        # Obtener todos los proyectos del cliente
+        projects = db.query(Project).filter(
+            Project.client_id == client_id,
+            Project.organization_id == current_user.organization_id
+        ).all()
+        
+        if not projects:
+            return {
+                "client_id": client_id,
+                "total_projects": 0,
+                "average_progress": 0,
+                "projects_progress": [],
+                "total_stories": 0,
+                "completed_stories": 0,
+                "total_estimated_hours": 0,
+                "total_actual_hours": 0
+            }
+        
+        # Calcular progreso para cada proyecto
+        projects_progress = []
+        total_progress = 0
+        total_stories = 0
+        completed_stories = 0
+        total_estimated_hours = 0
+        total_actual_hours = 0
+        
+        for project in projects:
+            # Obtener historias del proyecto
+            stories = db.query(UserStory).filter(
+                UserStory.project_id == project.project_id
+            ).all()
+            
+            if stories:
+                # Calcular estadísticas del proyecto
+                project_total_stories = len(stories)
+                project_completed_stories = len([s for s in stories if s.status == 'done'])
+                project_total_estimated_hours = sum(float(s.estimated_hours or 0) for s in stories)
+                project_total_actual_hours = sum(float(s.actual_hours or 0) for s in stories)
+                
+                # Calcular progreso del proyecto
+                project_progress = (project_completed_stories / project_total_stories * 100) if project_total_stories > 0 else 0
+                
+                # Acumular totales
+                total_progress += project_progress
+                total_stories += project_total_stories
+                completed_stories += project_completed_stories
+                total_estimated_hours += project_total_estimated_hours
+                total_actual_hours += project_total_actual_hours
+                
+                # Agregar progreso del proyecto a la lista
+                projects_progress.append({
+                    "project_id": project.project_id,
+                    "project_name": project.name,
+                    "progress_percentage": round(project_progress, 1),
+                    "total_stories": project_total_stories,
+                    "completed_stories": project_completed_stories,
+                    "total_estimated_hours": round(project_total_estimated_hours, 2),
+                    "total_actual_hours": round(project_total_actual_hours, 2)
+                })
+            else:
+                # Proyecto sin historias
+                projects_progress.append({
+                    "project_id": project.project_id,
+                    "project_name": project.name,
+                    "progress_percentage": 0,
+                    "total_stories": 0,
+                    "completed_stories": 0,
+                    "total_estimated_hours": 0,
+                    "total_actual_hours": 0
+                })
+        
+        # Calcular progreso promedio
+        average_progress = (total_progress / len(projects)) if projects else 0
+        
+        return {
+            "client_id": client_id,
+            "total_projects": len(projects),
+            "average_progress": round(average_progress, 1),
+            "projects_progress": projects_progress,
+            "total_stories": total_stories,
+            "completed_stories": completed_stories,
+            "total_estimated_hours": round(total_estimated_hours, 2),
+            "total_actual_hours": round(total_actual_hours, 2)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al calcular progreso de proyectos del cliente: {str(e)}"
         )

@@ -107,6 +107,7 @@ def create_ticket(
     ticket.organization_id = current_user.organization_id
     return ticket_crud.create_ticket(db, ticket)
 
+# Rutas externas (deben ir antes que las rutas con parámetros dinámicos)
 @router.post("/external/", response_model=TicketOut)
 async def create_external_ticket(
     title: str = Form(...),
@@ -115,12 +116,9 @@ async def create_external_ticket(
     category_id: Optional[int] = Form(None),
     client_name: str = Form(...),
     client_email: str = Form(...),
-    client_phone: Optional[str] = Form(None),
     project_name: Optional[str] = Form(None),
     contact_name: str = Form(...),
     contact_email: str = Form(...),
-    contact_phone: Optional[str] = Form(None),
-    due_date: Optional[str] = Form(None),
     additional_info: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db)
@@ -159,11 +157,24 @@ async def create_external_ticket(
                     continue
     
     # Buscar cliente y proyecto por nombre
-    from app.crud import client_crud, project_crud
+    from app.crud import client_crud, project_crud, user_crud
     client = client_crud.get_client_by_name(db, client_name)
     project = None
     if project_name:
         project = project_crud.get_project_by_name(db, project_name)
+    
+    # Crear o buscar usuario externo
+    external_user = user_crud.get_external_user_by_email(db, contact_email)
+    if not external_user:
+        # Crear nuevo usuario externo
+        from app.schemas.external_user_schema import ExternalUserCreate
+        external_user_data = ExternalUserCreate(
+            full_name=contact_name,
+            email=contact_email,
+            organization_id=1,  # Organización por defecto
+            is_active=True
+        )
+        external_user = user_crud.create_external_user(db, external_user_data)
     
     # Crear ticket
     ticket_data = TicketCreate(
@@ -175,9 +186,8 @@ async def create_external_ticket(
         client_id=client.client_id if client else None,
         project_id=project.project_id if project else None,
         organization_id=1,  # Organización por defecto
-        due_date=datetime.strptime(due_date, "%Y-%m-%d").date() if due_date else None,
+        external_user_id=external_user.external_user_id,  # Asociar usuario externo
         contact_email=contact_email,
-        contact_phone=contact_phone,
         contact_name=contact_name,
         attachments=attachments,
         resolution_description=additional_info
@@ -194,12 +204,9 @@ async def create_external_ticket_with_token(
     category_id: Optional[int] = Form(None),
     client_name: str = Form(...),
     client_email: str = Form(...),
-    client_phone: Optional[str] = Form(None),
     project_name: Optional[str] = Form(None),
     contact_name: str = Form(...),
     contact_email: str = Form(...),
-    contact_phone: Optional[str] = Form(None),
-    due_date: Optional[str] = Form(None),
     additional_info: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db)
@@ -243,11 +250,24 @@ async def create_external_ticket_with_token(
                     continue
     
     # Buscar cliente y proyecto por nombre dentro de la organización
-    from app.crud import client_crud, project_crud
+    from app.crud import client_crud, project_crud, user_crud
     client = client_crud.get_client_by_name_and_organization(db, client_name, form.organization_id)
     project = None
     if project_name:
         project = project_crud.get_project_by_name_and_organization(db, project_name, form.organization_id)
+    
+    # Crear o buscar usuario externo
+    external_user = user_crud.get_external_user_by_email(db, contact_email)
+    if not external_user:
+        # Crear nuevo usuario externo
+        from app.schemas.external_user_schema import ExternalUserCreate
+        external_user_data = ExternalUserCreate(
+            full_name=contact_name,
+            email=contact_email,
+            organization_id=form.organization_id,  # Usar la organización del formulario
+            is_active=True
+        )
+        external_user = user_crud.create_external_user(db, external_user_data)
     
     # Crear ticket
     ticket_data = TicketCreate(
@@ -259,9 +279,8 @@ async def create_external_ticket_with_token(
         client_id=client.client_id if client else None,
         project_id=project.project_id if project else None,
         organization_id=form.organization_id,  # Usar la organización del formulario
-        due_date=datetime.strptime(due_date, "%Y-%m-%d").date() if due_date else None,
+        external_user_id=external_user.external_user_id,  # Asociar usuario externo
         contact_email=contact_email,
-        contact_phone=contact_phone,
         contact_name=contact_name,
         attachments=attachments,
         resolution_description=additional_info
@@ -269,6 +288,7 @@ async def create_external_ticket_with_token(
     
     return ticket_crud.create_ticket(db, ticket_data)
 
+# Rutas con parámetros dinámicos (deben ir después de las rutas específicas)
 @router.get("/", response_model=List[TicketOut])
 def read_tickets(
     skip: int = 0, 
@@ -309,15 +329,49 @@ def update_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_organization)
 ):
-    db_ticket = ticket_crud.get_ticket(db, ticket_id)
-    if not db_ticket:
+    """Actualizar un ticket existente"""
+    
+    # Obtener el ticket actual para verificar cambios
+    current_ticket = ticket_crud.get_ticket(db, ticket_id)
+    if not current_ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    # GUARDAR EL VALOR ORIGINAL ANTES DE ACTUALIZAR
+    original_assigned_user_id = current_ticket.assigned_to_user_id
+    
     # Verificar que el ticket pertenece a la organización del usuario
-    if db_ticket.organization_id != current_user.organization_id:
+    if current_ticket.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="No autorizado")
     
-    db_ticket = ticket_crud.update_ticket(db, ticket_id, ticket)
-    return db_ticket
+    # Actualizar el ticket
+    updated_ticket = ticket_crud.update_ticket(db, ticket_id, ticket)
+    
+    # Verificar si se cambió la asignación del ticket usando el valor ORIGINAL
+    
+    if (ticket.assigned_to_user_id and 
+        ticket.assigned_to_user_id != original_assigned_user_id):
+        
+        # Crear notificación de asignación
+        from app.crud import notification_crud
+        try:
+            notification = notification_crud.create_ticket_assignment_notification(
+                db=db,
+                ticket_id=ticket_id,
+                assigned_user_id=ticket.assigned_to_user_id,
+                assigned_by_user_id=current_user.user_id,
+                organization_id=current_user.organization_id,
+                ticket_title=updated_ticket.title,
+                ticket_number=updated_ticket.ticket_number
+            )
+        except Exception as e:
+            print(f"❌ Error creating notification: {e}")
+            import traceback
+            traceback.print_exc()
+            # No fallar la actualización del ticket si falla la notificación
+    else:
+        pass
+    
+    return updated_ticket
 
 @router.patch("/{ticket_id}/status", response_model=TicketOut)
 def update_ticket_status(

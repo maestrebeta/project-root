@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { handleAuthError } from '../../utils/authUtils';
 
 const DAYS_OF_WEEK = [
   { id: 1, name: 'Lunes', short: 'L' },
@@ -62,6 +63,11 @@ export default function WorkHoursSettings() {
         }
       );
 
+      if (response.status === 401) {
+        handleAuthError(new Error('Unauthorized'), response);
+        return;
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Error al cargar configuración');
@@ -71,7 +77,7 @@ export default function WorkHoursSettings() {
       setConfig(data.work_hours_config || config);
     } catch (error) {
       console.error('Error:', error);
-      setError(error.message || 'Error al cargar la configuración');
+      handleAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -96,6 +102,11 @@ export default function WorkHoursSettings() {
         }
       );
 
+      if (response.status === 401) {
+        handleAuthError(new Error('Unauthorized'), response);
+        return;
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Error al guardar configuración');
@@ -109,7 +120,7 @@ export default function WorkHoursSettings() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error('Error:', error);
-      setError(error.message || 'Error al guardar la configuración');
+      handleAuthError(error);
     } finally {
       setSaving(false);
     }

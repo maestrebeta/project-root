@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import PlanningBoard from "./PlanningBoard";
 import EpicModal from "./EpicModal";
 import KanbanStatesManager from "./KanbanStatesManager";
 import { useFocusMode } from "../../context/FocusModeContext";
+import { useOrganizationStates } from "../../hooks/useOrganizationStates";
 import { Routes, Route } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -14,6 +15,9 @@ import {
 } from "../../services/planningService";
 import { FiTarget, FiTrendingUp, FiUsers, FiClock, FiChevronDown, FiPlus, FiFilter, FiSearch, FiGrid, FiList, FiZap, FiStar, FiActivity, FiBarChart2, FiLayers, FiCheckCircle, FiAlertCircle, FiX } from "react-icons/fi";
 import { createPortal } from 'react-dom';
+import EpicsSidebar from './EpicsSidebar';
+import KanbanBoardNative from './KanbanBoardNative';
+import projectProgressService from '../../services/projectProgressService';
 
 // Estados iniciales del kanban mejorados
 function getInitialKanbanStates() {
@@ -187,6 +191,7 @@ export default function PlanningContainer() {
   const [projects, setProjects] = useState([]);
   const [epics, setEpics] = useState([]);
   const [stories, setStories] = useState([]);
+  const [allProjectStories, setAllProjectStories] = useState([]); // Todas las historias del proyecto
   const [users, setUsers] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedEpic, setSelectedEpic] = useState(null);
@@ -196,7 +201,41 @@ export default function PlanningContainer() {
   
   // Estados de UI
   const [filters, setFilters] = useState({});
-  const [kanbanStates, setKanbanStates] = useState(getInitialKanbanStates());
+  const { kanbanStates: kanbanStatesData } = useOrganizationStates();
+  
+  // Transformar los estados kanban para que tengan la estructura correcta
+  const kanbanStates = useMemo(() => {
+    if (!kanbanStatesData?.states) return [];
+    
+    return kanbanStatesData.states.map(state => {
+      // Extraer el color base de las clases CSS (ej: 'bg-blue-50' -> 'blue')
+      let colorName = 'blue'; // default
+      if (state.color && state.color.startsWith('bg-')) {
+        const colorMatch = state.color.match(/bg-(\w+)-/);
+        if (colorMatch) {
+          colorName = colorMatch[1];
+        }
+      }
+      
+      // Extraer el color de texto base (ej: 'text-blue-700' -> 'blue')
+      let textColorName = 'blue'; // default
+      if (state.textColor && state.textColor.startsWith('text-')) {
+        const textColorMatch = state.textColor.match(/text-(\w+)-/);
+        if (textColorMatch) {
+          textColorName = textColorMatch[1];
+        }
+      }
+      
+      return {
+        ...state,
+        color: colorName,
+        textColor: textColorName,
+        // Agregar propiedades adicionales para el header
+        headerBg: state.color || 'bg-white/80',
+        icon: state.icon || '📋'
+      };
+    });
+  }, [kanbanStatesData]);
   const [viewMode, setViewMode] = useState('kanban'); // kanban, list, timeline
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
@@ -210,10 +249,10 @@ export default function PlanningContainer() {
 
   const focusMode = useFocusMode();
 
-  // Efecto para contraer automáticamente el sidebar en modo enfoque
+  // Efecto para contraer automáticamente el sidebar de épicas en modo enfoque
+  // NOTA: Este efecto solo afecta al sidebar interno de épicas, NO al sidebar principal de la app
   useEffect(() => {
     if (focusMode.isFocusMode) {
-      console.log('🎯 Modo enfoque detectado: Contrayendo sidebar automáticamente');
       setSidebarCollapsed(true);
     }
   }, [focusMode.isFocusMode]);
@@ -274,35 +313,24 @@ export default function PlanningContainer() {
       setIsLoading(true);
       setError(null);
       
-      console.log('🔄 Cargando datos de planificación desde el backend...');
-      
       // Cargar proyectos
       const projectsData = await projectService.getProjects();
-      console.log('✅ Proyectos cargados:', projectsData);
       setProjects(projectsData || []);
       
       // Cargar usuarios
       const usersData = await userService.getUsers();
-      console.log('✅ Usuarios cargados:', usersData);
       setUsers(usersData || []);
-      
-      // Cargar todas las épicas
-      const epicsData = await epicService.getEpics();
-      console.log('✅ Épicas cargadas:', epicsData);
-      setEpics(epicsData || []);
-      
-      // Cargar todas las historias de usuario
-      const storiesData = await userStoryService.getUserStories();
-      console.log('✅ Historias cargadas:', storiesData);
-      setStories(storiesData || []);
       
       // Cargar estadísticas de planificación
       const statsData = await planningStatsService.getPlanningStats();
-      console.log('✅ Estadísticas cargadas:', statsData);
       
-      // Seleccionar el primer proyecto por defecto
+      // Seleccionar el primer proyecto por defecto y cargar sus datos
       if (projectsData && projectsData.length > 0) {
-        setSelectedProject(projectsData[0]);
+        const firstProject = projectsData[0];
+        setSelectedProject(firstProject);
+        
+        // Cargar datos específicos del primer proyecto (incluye selección automática de primera épica)
+        await loadProjectData(firstProject.project_id);
       }
       
     } catch (error) {
@@ -329,19 +357,22 @@ export default function PlanningContainer() {
       const projectEpics = await epicService.getEpicsByProject(projectId);
       setEpics(projectEpics);
       
+      // Cargar todas las historias del proyecto para el sidebar
+      const allStories = await userStoryService.getUserStoriesByProject(projectId);
+      setAllProjectStories(allStories);
+      
       // Auto-seleccionar la primera épica si existe
       if (projectEpics.length > 0) {
         const firstEpic = projectEpics[0];
         setSelectedEpic(firstEpic);
-        console.log('✅ Auto-seleccionada primera épica:', firstEpic.name);
         
-        // Cargar historias de la primera épica
-        const epicStories = await userStoryService.getUserStoriesByProject(projectId);
+        // Cargar historias específicas de la primera épica
+        const epicStories = await userStoryService.getUserStoriesByEpic(firstEpic.epic_id);
         setStories(epicStories);
       } else {
-        // No hay épicas, limpiar historias
+        // No hay épicas, limpiar selección
+        setSelectedEpic(null);
         setStories([]);
-        console.log('ℹ️ No hay épicas en el proyecto');
       }
       
     } catch (error) {
@@ -352,10 +383,21 @@ export default function PlanningContainer() {
     }
   };
 
+  // Función para actualizar el progreso del proyecto
+  const updateProjectProgress = useCallback(async (projectId) => {
+    if (!projectId) return;
+    
+    try {
+      await projectProgressService.refreshProjectProgress(projectId);
+    } catch (error) {
+      console.error('❌ Error actualizando progreso del proyecto:', error);
+    }
+  }, []);
+
   // Manejar actualización de historias
   const handleUpdateStory = async (updatedStory) => {
     try {
-      console.log('🔄 Actualizando historia:', updatedStory);
+      setError('');
       
       const result = await userStoryService.updateUserStory(updatedStory.story_id, updatedStory);
       
@@ -366,16 +408,34 @@ export default function PlanningContainer() {
         )
       );
       
-      // Si la historia cambió de estado, actualizar progreso de la épica
+      setAllProjectStories(prevStories => 
+        prevStories.map(story => 
+          story.story_id === updatedStory.story_id ? result : story
+        )
+      );
+      
+      // Actualizar progreso del proyecto
+      if (selectedProject?.project_id) {
+        await updateProjectProgress(selectedProject.project_id);
+      }
+      
+      // Actualizar progreso de la épica si está asignada
       if (result.epic_id) {
         await updateEpicProgress(result.epic_id);
       }
       
-      console.log('✅ Historia actualizada exitosamente');
     } catch (error) {
       console.error('❌ Error al actualizar historia:', error);
+      setError(`Error al actualizar historia: ${error.message}`);
+      
       // Actualizar estado local como fallback
       setStories(prevStories => 
+        prevStories.map(story => 
+          story.story_id === updatedStory.story_id ? updatedStory : story
+        )
+      );
+      
+      setAllProjectStories(prevStories => 
         prevStories.map(story => 
           story.story_id === updatedStory.story_id ? updatedStory : story
         )
@@ -386,7 +446,6 @@ export default function PlanningContainer() {
   // Manejar creación de historias
   const handleCreateStory = async (newStory) => {
     try {
-      console.log('🔄 Creando nueva historia:', newStory);
       
       const storyData = {
         ...newStory,
@@ -396,44 +455,89 @@ export default function PlanningContainer() {
         status: newStory.status || 'backlog'
       };
       
-      console.log('📤 Enviando datos al backend:', storyData);
       
       const createdStory = await userStoryService.createUserStory(storyData);
       
-      // Actualizar estado local solo si la creación fue exitosa
-      setStories(prevStories => [...prevStories, createdStory]);
+      // Refrescar las historias de la épica específica
+      if (selectedEpic && selectedEpic.epic_id) {
+        try {
+          const epicStories = await userStoryService.getUserStoriesByEpic(selectedEpic.epic_id);
+          setStories(epicStories);
+        } catch (error) {
+          console.error('❌ Error al refrescar historias:', error);
+          // Fallback: agregar solo la nueva historia al estado local
+          setStories(prevStories => [...prevStories, createdStory]);
+        }
+      } else {
+        // Si no hay épica seleccionada, agregar solo la nueva historia
+        setStories(prevStories => [...prevStories, createdStory]);
+      }
       
-      console.log('✅ Historia creada exitosamente con estado:', createdStory.status);
-      console.log('✅ Historia creada con ID real:', createdStory.story_id);
-      console.log('✅ Historia asignada a épica:', selectedEpic?.name || 'Sin épica');
+      // Actualizar también todas las historias del proyecto
+      if (selectedProject) {
+        try {
+          const allStories = await userStoryService.getUserStoriesByProject(selectedProject.project_id);
+          setAllProjectStories(allStories);
+        } catch (error) {
+          console.error('❌ Error al refrescar todas las historias:', error);
+          // Fallback: agregar solo la nueva historia al estado local
+          setAllProjectStories(prevStories => [...prevStories, createdStory]);
+        }
+      }
       
-      // Mostrar notificación de éxito
-      setSuccessMessage(`Historia "${createdStory.title}" creada exitosamente en "${selectedEpic?.name || 'Sin épica'}"`);
+      // Actualizar progreso del proyecto
+      if (selectedProject?.project_id) {
+        await updateProjectProgress(selectedProject.project_id);
+      }
       
-      return createdStory;
+      // Actualizar progreso de la épica si está asignada
+      if (createdStory.epic_id) {
+        await updateEpicProgress(createdStory.epic_id);
+      }
+      
     } catch (error) {
       console.error('❌ Error al crear historia:', error);
-      console.error('❌ Datos que causaron el error:', newStory);
-      
-      // Usar el sistema de notificaciones en lugar de alert
       setError(`Error al crear historia: ${error.message}`);
+    }
+  };
+
+  // Manejar eliminación de historias
+  const handleDeleteStory = async (storyId) => {
+    try {
+      setError('');
       
-      // Re-lanzar el error para que el componente que llama pueda manejarlo
-      throw error;
+      await userStoryService.deleteUserStory(storyId);
+      
+      // Actualizar estado local
+      setStories(prevStories => prevStories.filter(story => story.story_id !== storyId));
+      setAllProjectStories(prevStories => prevStories.filter(story => story.story_id !== storyId));
+      
+      // Actualizar progreso del proyecto
+      if (selectedProject?.project_id) {
+        await updateProjectProgress(selectedProject.project_id);
+      }
+      
+      // Actualizar progreso de la épica si está asignada
+      const deletedStory = stories.find(story => story.story_id === storyId);
+      if (deletedStory?.epic_id) {
+        await updateEpicProgress(deletedStory.epic_id);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error al eliminar historia:', error);
+      setError(`Error al eliminar historia: ${error.message}`);
     }
   };
 
   // Manejar creación de épicas
   const handleCreateEpic = async (newEpic) => {
     try {
-      console.log('🔄 Creando nueva épica:', newEpic);
       
       const createdEpic = await epicService.createEpic(newEpic);
       
       // Actualizar estado local solo si la creación fue exitosa
       setEpics(prevEpics => [...prevEpics, createdEpic]);
       
-      console.log('✅ Épica creada exitosamente con ID real:', createdEpic.epic_id);
       return createdEpic;
     } catch (error) {
       console.error('❌ Error al crear épica:', error);
@@ -450,7 +554,6 @@ export default function PlanningContainer() {
   // Manejar edición de épicas
   const handleEditEpic = async (updatedEpic) => {
     try {
-      console.log('🔄 Actualizando épica:', updatedEpic);
       
       // Procesar correctamente todos los campos
       const epicData = {
@@ -479,7 +582,6 @@ export default function PlanningContainer() {
         setSelectedEpic(result);
       }
       
-      console.log('✅ Épica actualizada exitosamente');
       return result;
     } catch (error) {
       console.error('❌ Error al actualizar épica:', error);
@@ -491,15 +593,77 @@ export default function PlanningContainer() {
   // Actualizar progreso de épica
   const updateEpicProgress = async (epicId) => {
     try {
-      const epicStories = stories.filter(story => story.epic_id === epicId);
+      // Obtener historias actualizadas del backend en lugar de usar el estado local
+      const epicStories = await userStoryService.getUserStoriesByEpic(epicId);
       const completedStories = epicStories.filter(story => story.status === 'done');
       const progress = epicStories.length > 0 ? (completedStories.length / epicStories.length) * 100 : 0;
       
-      setEpics(prevEpics => 
-        prevEpics.map(epic => 
-          epic.epic_id === epicId ? { ...epic, progress_percentage: progress } : epic
-        )
-      );
+      // Verificar si todas las historias están completadas (100% de progreso)
+      const allStoriesCompleted = epicStories.length > 0 && completedStories.length === epicStories.length;
+      
+      // Obtener la épica actual
+      const currentEpic = epics.find(epic => epic.epic_id === epicId);
+      
+      // Determinar el nuevo estado de la épica
+      let newStatus = currentEpic?.status;
+      
+      if (allStoriesCompleted && currentEpic && currentEpic.status !== 'done') {
+        // Si todas las historias están completadas, cambiar a 'done'
+        newStatus = 'done';
+        console.log(`🎉 Todas las historias de la épica ${currentEpic.name} están completadas. Cambiando estado a "done"...`);
+      } else if (!allStoriesCompleted && currentEpic && currentEpic.status === 'done') {
+        // Si no todas las historias están completadas pero la épica está en 'done', regresar a 'in_progress'
+        newStatus = 'in_progress';
+        console.log(`🔄 Algunas historias de la épica ${currentEpic.name} ya no están completadas. Regresando estado a "in_progress"...`);
+      }
+      
+      // Si el estado cambió, actualizar en el backend
+      if (newStatus !== currentEpic?.status) {
+        try {
+          // Actualizar el estado de la épica en el backend
+          const updatedEpicData = {
+            ...currentEpic,
+            status: newStatus
+          };
+          
+          const updatedEpic = await epicService.updateEpic(epicId, updatedEpicData);
+          
+          // Actualizar estado local
+          setEpics(prevEpics => 
+            prevEpics.map(epic => 
+              epic.epic_id === epicId ? { ...epic, progress_percentage: progress, status: newStatus } : epic
+            )
+          );
+          
+          // Si es la épica seleccionada, actualizarla también
+          if (selectedEpic && selectedEpic.epic_id === epicId) {
+            setSelectedEpic(prev => ({ ...prev, status: newStatus }));
+          }
+          
+          console.log(`✅ Épica "${currentEpic.name}" actualizada a estado "${newStatus}"`);
+          
+          // Actualizar el estado del proyecto padre
+          if (selectedProject) {
+            try {
+              await planningService.updateProjectStatusFromEpics(selectedProject.project_id);
+              console.log(`🔄 Estado del proyecto "${selectedProject.name}" actualizado basándose en épicas`);
+            } catch (error) {
+              console.error('❌ Error al actualizar estado del proyecto:', error);
+            }
+          }
+          
+        } catch (error) {
+          console.error('❌ Error al actualizar estado de la épica:', error);
+          // Continuar con la actualización del progreso aunque falle el cambio de estado
+        }
+      } else {
+        // Solo actualizar el progreso si no cambió el estado
+        setEpics(prevEpics => 
+          prevEpics.map(epic => 
+            epic.epic_id === epicId ? { ...epic, progress_percentage: progress } : epic
+          )
+        );
+      }
     } catch (error) {
       console.error('❌ Error al actualizar progreso de épica:', error);
     }
@@ -510,14 +674,8 @@ export default function PlanningContainer() {
     setFilters(newFilters);
   };
 
-  // Manejar actualización de estados kanban
-  const handleUpdateKanbanStates = (newStates) => {
-    setKanbanStates(newStates);
-  };
-
   // Manejar cambio de proyecto
   const handleProjectChange = (project) => {
-    console.log('🔄 Cambiando proyecto:', project);
     setSelectedProject(project);
     setSelectedEpic(null);
     setStories([]);
@@ -527,29 +685,21 @@ export default function PlanningContainer() {
     if (project?.project_id) {
       loadProjectData(project.project_id);
     }
-    
-    console.log('✅ Proyecto cambiado a:', project.name);
   };
 
   // Manejar selección de épica
   const handleEpicSelect = async (epic) => {
-    console.log('🎯 Épica seleccionada:', epic?.name);
     setSelectedEpic(epic);
     
     if (epic && selectedProject) {
       try {
-        // Cargar historias de la épica seleccionada
-        const epicStories = await userStoryService.getUserStoriesByProject(selectedProject.project_id);
-        // Filtrar solo las historias de esta épica (o sin épica si epic_id es null)
-        const filteredStories = epic.epic_id 
-          ? epicStories.filter(story => story.epic_id === epic.epic_id)
-          : epicStories.filter(story => !story.epic_id);
-        
-        setStories(filteredStories);
-        console.log(`✅ Cargadas ${filteredStories.length} historias para la épica "${epic.name}"`);
+        // Cargar historias específicas de la épica seleccionada
+        const epicStories = await userStoryService.getUserStoriesByEpic(epic.epic_id);
+        setStories(epicStories);
       } catch (error) {
         console.error('❌ Error al cargar historias de la épica:', error);
         setError(`Error al cargar historias: ${error.message}`);
+        setStories([]);
       }
     } else {
       setStories([]);
@@ -588,7 +738,6 @@ export default function PlanningContainer() {
         // Auto-seleccionar la épica recién creada
         if (createdEpic) {
           await handleEpicSelect(createdEpic);
-          console.log('✅ Épica creada y auto-seleccionada:', createdEpic.name);
         }
         
         setShowEpicModal(false);
@@ -601,18 +750,13 @@ export default function PlanningContainer() {
     }
   };
 
-  // Filtrar historias según filtros aplicados y épica seleccionada
+  // Filtrar historias según filtros aplicados
   const getFilteredStories = () => {
-    if (!selectedEpic) return [];
+    if (!selectedEpic) {
+      return [];
+    }
     
-    return stories.filter(story => {
-      // Filtrar por épica seleccionada
-      const belongsToEpic = selectedEpic.epic_id 
-        ? story.epic_id === selectedEpic.epic_id
-        : !story.epic_id; // Historias sin épica
-      
-      if (!belongsToEpic) return false;
-      
+    const filtered = stories.filter(story => {
       // Aplicar filtros adicionales
       if (filters.assignedUser && story.assigned_user_id !== filters.assignedUser) {
         return false;
@@ -628,14 +772,19 @@ export default function PlanningContainer() {
       
       if (filters.search) {
         const searchTerm = filters.search.toLowerCase();
-        return (
+        const matches = (
           story.title.toLowerCase().includes(searchTerm) ||
           (story.description && story.description.toLowerCase().includes(searchTerm))
         );
+        if (!matches) {
+          return false;
+        }
       }
       
       return true;
     });
+    
+    return filtered;
   };
 
   // Filtrar épicas por proyecto seleccionado
@@ -646,15 +795,14 @@ export default function PlanningContainer() {
 
   // Calcular estadísticas del proyecto actual
   const getProjectStats = () => {
-    const projectStories = getFilteredStories();
     const projectEpics = getFilteredEpics();
     
     return {
       totalEpics: projectEpics.length,
-      totalStories: projectStories.length,
-      completedStories: projectStories.filter(s => s.status === 'done').length,
-      inProgressStories: projectStories.filter(s => s.status === 'in_progress').length,
-      totalHours: projectStories.reduce((sum, s) => sum + (Number(s.development_hours) || 0) + (Number(s.ui_hours) || 0) + (Number(s.testing_hours) || 0), 0),
+      totalStories: allProjectStories.length,
+      completedStories: allProjectStories.filter(s => s.status === 'done').length,
+      inProgressStories: allProjectStories.filter(s => s.status === 'in_progress').length,
+      totalHours: allProjectStories.reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0),
       avgProgress: projectEpics.length > 0 ? projectEpics.reduce((sum, e) => sum + (e.progress_percentage || 0), 0) / projectEpics.length : 0
     };
   };
@@ -771,7 +919,6 @@ export default function PlanningContainer() {
                               whileHover={{ backgroundColor: '#f8fafc' }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('🖱️ Click en proyecto:', project.name);
                                 handleProjectChange(project);
                                 setShowProjectSelector(false);
                               }}
@@ -880,7 +1027,8 @@ export default function PlanningContainer() {
       <div className="flex-1 overflow-hidden">
         <PlanningBoard
           epics={getFilteredEpics()}
-          stories={getFilteredStories()}
+          stories={stories}
+          allProjectStories={allProjectStories}
           users={users}
           projects={projects}
           selectedProject={selectedProject}
@@ -893,7 +1041,6 @@ export default function PlanningContainer() {
           onNewEpic={handleNewEpic}
           onProjectChange={handleProjectChange}
           kanbanStates={kanbanStates}
-          onEditKanbanStates={handleUpdateKanbanStates}
           filters={filters}
           onFilterChange={handleFilterChange}
           viewMode={viewMode}

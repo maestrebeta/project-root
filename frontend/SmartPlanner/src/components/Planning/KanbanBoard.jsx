@@ -72,13 +72,25 @@ const updateStoryStatus = async (storyId, newStatus) => {
       throw new Error('No hay sesión activa');
     }
 
+    // Preparar los datos de actualización
+    const updateData = { status: newStatus };
+    
+    // Si el estado es "done", agregar fecha de completado
+    if (newStatus === 'done') {
+      updateData.completed_date = new Date().toISOString();
+    }
+    // Si el estado no es "done", eliminar fecha de completado (se enviará como null)
+    else {
+      updateData.completed_date = null;
+    }
+
     const response = await fetch(`http://localhost:8001/epics/stories/${storyId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.token}`
       },
-      body: JSON.stringify({ status: newStatus })
+      body: JSON.stringify(updateData)
     });
 
     if (!response.ok) {
@@ -257,7 +269,7 @@ function DroppableColumn({
   kanbanStates,
   isDragging
 }) {
-  const columnId = column.key || column.id || column.label;
+  const columnId = column.id || column.label;
   const { setNodeRef } = useDroppable({
     id: columnId,
     data: {
@@ -272,9 +284,56 @@ function DroppableColumn({
   
   // Formatear horas para mostrar máximo 1 decimal y sin ceros innecesarios
   const formatHours = (hours) => {
-    if (hours === 0) return '0h';
-    const formatted = parseFloat(hours).toFixed(1);
-    return formatted.endsWith('.0') ? `${parseInt(hours)}h` : `${formatted}h`;
+    if (!hours || hours === 0) return '0h';
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  };
+
+  // Función para obtener el color de fondo del estado
+  const getStateBgColor = (state) => {
+    if (!state || !state.color) return 'bg-gray-50';
+    
+    // Si el color ya es una clase de Tailwind, usarlo directamente
+    if (state.color.startsWith('bg-')) {
+      return state.color;
+    }
+    
+    // Mapear colores simples a clases de Tailwind (compatible con KanbanStatesManager)
+    const colorMap = {
+      'blue': 'bg-blue-50',
+      'green': 'bg-green-50',
+      'yellow': 'bg-yellow-50',
+      'orange': 'bg-orange-50',
+      'red': 'bg-red-50',
+      'purple': 'bg-purple-50',
+      'indigo': 'bg-indigo-50',
+      'pink': 'bg-pink-50',
+      'gray': 'bg-gray-50',
+      'slate': 'bg-slate-50',
+      'emerald': 'bg-emerald-50',
+      'teal': 'bg-teal-50',
+      'cyan': 'bg-cyan-50',
+      'sky': 'bg-sky-50',
+      'violet': 'bg-violet-50',
+      'fuchsia': 'bg-fuchsia-50',
+      'rose': 'bg-rose-50',
+      'amber': 'bg-amber-50',
+      'lime': 'bg-lime-50'
+    };
+    
+    const mappedColor = colorMap[state.color] || 'bg-gray-50';
+    
+    // Solo log si hay un problema con el mapeo
+    if (!colorMap[state.color]) {
+      console.warn('🎨 KanbanBoard - Color no encontrado en el mapa:', {
+        originalColor: state.color,
+        stateId: state.id,
+        stateLabel: state.label
+      });
+    }
+    
+    return mappedColor;
   };
 
   return (
@@ -293,7 +352,7 @@ function DroppableColumn({
       <motion.div 
         className={`
           p-4 border-b border-gray-200/50 
-          ${column.headerBg || 'bg-white/80'}
+          ${getStateBgColor(column)}
           rounded-t-2xl relative overflow-hidden shadow-sm
         `}
         whileHover={{ scale: 1.01 }}
@@ -426,14 +485,18 @@ export default function KanbanBoard({
 
   // Organizar historias por columnas
   const columns = useMemo(() => {
+    // Verificar que kanbanStates sea un array
+    if (!Array.isArray(kanbanStates)) {
+      console.warn('⚠️ kanbanStates no es un array:', kanbanStates);
+      return [];
+    }
+    
     const result = kanbanStates.map(col => {
-      const columnId = col.key || col.id || col.label;
+      const columnId = col.id || col.label;
       const columnStories = stories.filter(st => {
         const storyStatus = st.status || st.estado;
-        return storyStatus === columnId || storyStatus === col.id || storyStatus === col.key;
+        return storyStatus === columnId || storyStatus === col.id;
       });
-      
-      console.log(`📊 Columna ${columnId}:`, columnStories.length, 'historias');
       
       return {
         ...col,
@@ -441,7 +504,6 @@ export default function KanbanBoard({
       };
     });
     
-    console.log('🎯 Columnas organizadas:', result.map(c => ({ id: c.key || c.id, count: c.stories.length })));
     return result;
   }, [stories, kanbanStates]);
 
@@ -451,7 +513,6 @@ export default function KanbanBoard({
     setActiveStory(story);
     setIsDragging(true);
     document.body.style.cursor = 'grabbing';
-    console.log('🎯 Iniciando drag:', story?.title);
   };
 
   // Manejar arrastre sobre columna
@@ -461,10 +522,8 @@ export default function KanbanBoard({
 
   // Manejar fin de arrastre - MEJORADO CON PERSISTENCIA Y NOTIFICACIONES
   const handleDragEnd = async ({ active, over }) => {
-    console.log('🎯 DRAG END:', { active: active?.id, over: over?.id });
     
-    if (!over) {
-      console.log('❌ No hay destino válido');
+    if (!active || !over) {
       handleDragCancel();
       return;
     }
@@ -474,50 +533,54 @@ export default function KanbanBoard({
     const story = active.data.current?.story;
     
     if (!story) {
-      console.log('❌ No se encontró la historia');
       handleDragCancel();
       return;
     }
 
     const originalStatus = story.status || story.estado;
-    
-    console.log('🔄 Cambiando estado:', { 
-      storyId, 
-      from: originalStatus, 
-      to: newColumnId,
-      storyTitle: story.title 
-    });
 
     if (newColumnId !== originalStatus) {
+      // Verificar que kanbanStates sea un array
+      if (!Array.isArray(kanbanStates)) {
+        console.warn('⚠️ kanbanStates no es un array en handleDrop:', kanbanStates);
+        return;
+      }
+      
       // Encontrar el nombre de la columna de destino
       const targetColumn = kanbanStates.find(col => 
-        col.key === newColumnId || col.id === newColumnId
+        col.id === newColumnId
       );
       
-      // Actualizar el estado local inmediatamente para UX fluida
+      // Preparar la actualización local
       const updatedStory = { 
         ...story, 
         status: newColumnId, 
         estado: newColumnId 
       };
 
+      // Manejar fecha de completado en el estado local
+      if (newColumnId === 'done') {
+        const completedDate = new Date().toISOString();
+        updatedStory.completed_date = completedDate;
+      } else if (originalStatus === 'done') {
+        // Si estaba en "done" y ahora no, eliminar la fecha de completado
+        updatedStory.completed_date = null;
+      }
+
       setStories(prev => {
         const updated = prev.map(st => {
           const currentId = st.story_id || st.id;
           if (currentId === storyId) {
-            console.log('✅ Actualizando historia local:', st.title, 'de', st.status, 'a', newColumnId);
             return updatedStory;
           }
           return st;
         });
-        console.log('📊 Historias actualizadas localmente:', updated.length);
         return updated;
       });
 
       // Intentar actualizar en el backend
       try {
         await updateStoryStatus(storyId, newColumnId);
-        console.log('✅ Estado actualizado en backend exitosamente');
         showNotification(
           'success', 
           'Historia movida exitosamente',
@@ -530,7 +593,13 @@ export default function KanbanBoard({
           return prev.map(st => {
             const currentId = st.story_id || st.id;
             if (currentId === storyId) {
-              return { ...st, status: originalStatus, estado: originalStatus };
+              return { 
+                ...st, 
+                status: originalStatus, 
+                estado: originalStatus,
+                // Revertir también la fecha de completado
+                completed_date: originalStatus === 'done' ? st.completed_date : null
+              };
             }
             return st;
           });
@@ -544,6 +613,7 @@ export default function KanbanBoard({
       }
     }
 
+    // Importante: Llamar handleDragCancel al final para limpiar el estado
     handleDragCancel();
   };
 
@@ -570,9 +640,9 @@ export default function KanbanBoard({
           <div className="flex gap-6 p-6 h-full min-w-max">
             {columns.map(col => (
               <DroppableColumn
-                key={col.key || col.id || col.label}
+                key={col.id || col.label}
                 column={col}
-                isOver={activeColumn === (col.key || col.id)}
+                isOver={activeColumn === (col.id || col.label)}
                 users={users}
                 onQuickCreate={onQuickCreate}
                 onStoryClick={onStoryClick}

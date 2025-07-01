@@ -3,9 +3,11 @@ from typing import Dict, List, Optional
 # Tipos de actividad predeterminados
 DEFAULT_ACTIVITY_TYPES: List[str] = [
     'desarrollo',
+    'bpo',
+    'soporte',
     'reunion',
     'capacitacion',
-    'soporte',
+    'documentacion',
     'otro'
 ]
 
@@ -23,7 +25,13 @@ ACTIVITY_TYPE_MAPPING: Dict[str, str] = {
     'testing': 'desarrollo',
     'analisis': 'desarrollo',
     'investigacion': 'desarrollo',
-    'documentacion': 'desarrollo',
+    'documentacion': 'documentacion',
+    
+    # BPO
+    'business_process': 'bpo',
+    'outsourcing': 'bpo',
+    'administrative': 'bpo',
+    'process_management': 'bpo',
     
     # Reunión
     'meeting': 'reunion',

@@ -5,6 +5,7 @@ import {
   FiChevronDown, FiChevronRight, FiFilter, FiPlus, FiEdit2, FiTarget, FiSearch, FiTrendingUp, FiUsers, FiClock, 
   FiZap, FiActivity, FiStar, FiFlag, FiEdit3, FiMoreVertical, FiLayers, FiBarChart2, FiCheckCircle
 } from "react-icons/fi";
+import projectProgressService from '../../services/projectProgressService';
 
 // Componente principal del sidebar de épicas
 export default function EpicsSidebar({
@@ -34,28 +35,24 @@ export default function EpicsSidebar({
   const [filterPriority, setFilterPriority] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
-  // Calcular estadísticas de épicas con historias
+  // Calcular estadísticas de épicas usando el servicio centralizado
   const epicsWithStats = useMemo(() => {
     return epics.map(epic => {
-      // Filtrar historias que pertenecen a esta épica
-      const epicStories = stories.filter(story => 
-        story.epic_id === epic.epic_id || story.epica_id === epic.epic_id
-      );
+      // Filtrar historias de esta épica
+      const epicStories = stories.filter(story => story.epic_id === epic.epic_id);
       
-      const totalStories = epicStories.length;
-      const doneStories = epicStories.filter(story => 
-        story.status === 'done' || story.estado === 'done' || story.estado === 'cerrado'
-      ).length;
-      
-      const progress = totalStories > 0 ? Math.round((doneStories / totalStories) * 100) : 0;
+      // Usar el servicio centralizado para calcular estadísticas
+      const stats = projectProgressService.calculateProgressFromStories(epicStories);
       
       return {
         ...epic,
-        totalStories,
-        doneStories,
-        progress,
-        hasCompleted: doneStories > 0,
-        hasActive: totalStories - doneStories > 0,
+        totalStories: stats.totalStories,
+        completedStories: stats.completedStories,
+        totalHours: stats.totalEstimatedHours,
+        completedHours: stats.totalActualHours,
+        progress: stats.progressPercentage,
+        hasCompleted: stats.completedStories > 0,
+        hasActive: stats.totalStories - stats.completedStories > 0,
       };
     });
   }, [epics, stories]);
@@ -97,48 +94,49 @@ export default function EpicsSidebar({
   // Agrupar épicas por proyecto
   const epicsByProject = useMemo(() => {
     const map = {};
-    filteredEpics.forEach(epic => {
+    epicsWithStats.forEach(epic => {
       const pid = epic.project_id || "Sin proyecto";
       if (!map[pid]) map[pid] = [];
       map[pid].push(epic);
     });
     return map;
-  }, [filteredEpics]);
+  }, [epicsWithStats]);
 
-  // Calcular progreso global por proyecto
+  // Calcular progreso global por proyecto usando el servicio centralizado
   const projectProgress = useMemo(() => {
     const progressMap = {};
     projects.forEach(project => {
-      const projectEpics = epicsByProject[project.project_id] || [];
-      let totalStories = 0;
-      let doneStories = 0;
-      projectEpics.forEach(epic => {
-        totalStories += epic.totalStories;
-        doneStories += epic.doneStories;
-      });
+      // Obtener todas las historias del proyecto
+      const projectStories = stories.filter(story => story.project_id === project.project_id);
+      
+      // Usar el servicio centralizado para calcular estadísticas del proyecto
+      const stats = projectProgressService.calculateProgressFromStories(projectStories);
+      
       progressMap[project.project_id] = {
-        totalStories,
-        doneStories,
-        percent: totalStories ? (doneStories / totalStories) * 100 : 0,
+        totalStories: stats.totalStories,
+        completedStories: stats.completedStories,
+        totalHours: stats.totalEstimatedHours,
+        completedHours: stats.totalActualHours,
+        percent: stats.progressPercentage,
       };
     });
     
     // Para épicas sin proyecto
     if (epicsByProject["Sin proyecto"]) {
-      let totalStories = 0;
-      let doneStories = 0;
-      epicsByProject["Sin proyecto"].forEach(epic => {
-        totalStories += epic.totalStories;
-        doneStories += epic.doneStories;
-      });
+      const noProjectStories = stories.filter(story => !story.project_id);
+      const stats = projectProgressService.calculateProgressFromStories(noProjectStories);
+      
       progressMap["Sin proyecto"] = {
-        totalStories,
-        doneStories,
-        percent: totalStories ? (doneStories / totalStories) * 100 : 0,
+        totalStories: stats.totalStories,
+        completedStories: stats.completedStories,
+        totalHours: stats.totalEstimatedHours,
+        completedHours: stats.totalActualHours,
+        percent: stats.progressPercentage,
       };
     }
+    
     return progressMap;
-  }, [projects, epicsByProject]);
+  }, [projects, stories, epicsByProject]);
 
   const toggleEpicCollapse = epicId => {
     setCollapsedEpics(prev => ({
@@ -168,13 +166,13 @@ export default function EpicsSidebar({
     switch (priority) {
       case 'high':
       case 'critical':
-        return 'bg-red-100 text-red-700';
+        return 'from-red-400 to-red-600';
       case 'medium':
-        return 'bg-yellow-100 text-yellow-700';
+        return 'from-yellow-400 to-yellow-600';
       case 'low':
-        return 'bg-green-100 text-green-700';
+        return 'from-green-400 to-green-600';
       default:
-        return 'bg-gray-100 text-gray-700';
+        return 'from-gray-400 to-gray-600';
     }
   };
 
@@ -205,35 +203,47 @@ export default function EpicsSidebar({
     }));
   };
 
-  // Calcular estadísticas del proyecto
+  // Calcular estadísticas del proyecto usando el servicio centralizado
   const projectStats = useMemo(() => {
-    const projectStories = stories.filter(story => 
-      !selectedProject || story.project_id === selectedProject.project_id
-    );
+    // Si hay un proyecto seleccionado, calcular estadísticas de todas las historias del proyecto
+    if (selectedProject) {
+      // Obtener todas las historias del proyecto (no filtradas por épica)
+      const projectStories = stories.filter(story => story.project_id === selectedProject.project_id);
+      
+      // Usar el servicio centralizado para calcular estadísticas
+      const stats = projectProgressService.calculateProgressFromStories(projectStories);
+      
+      return {
+        totalStories: stats.totalStories,
+        completedStories: stats.completedStories,
+        totalHours: stats.totalEstimatedHours,
+        completedHours: stats.totalActualHours,
+        velocity: stats.velocity,
+        pointsVelocity: stats.pointsVelocity,
+        totalEpics: epicsWithStats.filter(epic => epic.project_id === selectedProject.project_id).length,
+        activeEpics: epicsWithStats.filter(e => 
+          e.project_id === selectedProject.project_id && 
+          (e.status === 'in_progress' || e.status === 'planned')
+        ).length,
+        inProgressStories: stats.totalStories - stats.completedStories
+      };
+    }
     
-    const totalStories = projectStories.length;
-    const completedStories = projectStories.filter(s => s.status === 'done').length;
-    const inProgressStories = projectStories.filter(s => s.status === 'in_progress').length;
-    const totalHours = projectStories.reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0);
-    const completedHours = projectStories
-      .filter(s => s.status === 'done')
-      .reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0);
-    
-    const velocity = totalStories > 0 ? (completedStories / totalStories) * 100 : 0;
-    const pointsVelocity = totalHours > 0 ? (completedHours / totalHours) * 100 : 0;
+    // Si no hay proyecto seleccionado, calcular estadísticas globales de todas las historias
+    const stats = projectProgressService.calculateProgressFromStories(stories);
 
     return {
-      totalStories,
-      completedStories,
-      inProgressStories,
-      totalHours,
-      completedHours,
-      velocity,
-      pointsVelocity,
-      totalEpics: epics.length,
-      activeEpics: epics.filter(e => e.status === 'in_progress' || e.status === 'planned').length
+      totalStories: stats.totalStories,
+      completedStories: stats.completedStories,
+      totalHours: stats.totalEstimatedHours,
+      completedHours: stats.totalActualHours,
+      velocity: stats.velocity,
+      pointsVelocity: stats.pointsVelocity,
+      totalEpics: epicsWithStats.length,
+      activeEpics: epicsWithStats.filter(e => e.status === 'in_progress' || e.status === 'planned').length,
+      inProgressStories: stats.totalStories - stats.completedStories
     };
-  }, [stories, epics, selectedProject]);
+  }, [stories, selectedProject, epicsWithStats]);
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-white to-gray-50/50 overflow-hidden">
@@ -472,13 +482,6 @@ export default function EpicsSidebar({
           <div className="p-3">
             <div className="space-y-3">
               {filteredEpics.slice(0, 6).map((epic) => {
-                const epicStories = stories.filter(s => s.epic_id === epic.epic_id);
-                const completedEpicStories = epicStories.filter(s => s.status === 'done');
-                const epicProgress = epicStories.length > 0 ? (completedEpicStories.length / epicStories.length) * 100 : 0;
-                const epicHours = epicStories.reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0);
-                const completedHours = epicStories
-                  .filter(s => s.status === 'done')
-                  .reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0);
                 const isSelected = selectedEpic?.epic_id === epic.epic_id;
 
                 return (
@@ -505,7 +508,7 @@ export default function EpicsSidebar({
                         </div>
                       </div>
                       <div className="text-xs font-bold text-gray-600 flex-shrink-0">
-                        {Math.round(epicProgress)}%
+                        {epic.progress}%
                       </div>
                     </div>
 
@@ -513,7 +516,7 @@ export default function EpicsSidebar({
                     <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${epicProgress}%` }}
+                        animate={{ width: `${epic.progress}%` }}
                         transition={{ duration: 0.8, ease: "easeOut" }}
                         className="h-1.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"
                       />
@@ -524,16 +527,16 @@ export default function EpicsSidebar({
                       <div className="flex items-center gap-3">
                         <span className="flex items-center gap-1">
                           <FiActivity className="w-3 h-3" />
-                          {epicStories.length} historias
+                          {epic.totalStories} historias
                         </span>
                         <span className="flex items-center gap-1">
                           <FiCheckCircle className="w-3 h-3" />
-                          {completedEpicStories.length} completadas
+                          {epic.completedStories} completadas
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <FiClock className="w-3 h-3" />
-                        {completedHours}/{epicHours}h
+                        {epic.completedHours}/{epic.totalHours}h
                       </div>
                     </div>
                   </motion.button>
@@ -646,9 +649,6 @@ export default function EpicsSidebar({
               <div className="space-y-3">
                 <AnimatePresence>
                   {filteredEpics.map((epic, index) => {
-                    const epicStories = stories.filter(s => s.epic_id === epic.epic_id);
-                    const completedEpicStories = epicStories.filter(s => s.status === 'done');
-                    const epicProgress = epicStories.length > 0 ? (completedEpicStories.length / epicStories.length) * 100 : 0;
                     const isSelected = selectedEpic?.epic_id === epic.epic_id;
 
                     return (
@@ -704,11 +704,11 @@ export default function EpicsSidebar({
                         <div className="flex items-center gap-4 mb-3 text-xs text-gray-500">
                           <div className="flex items-center gap-1">
                             <FiActivity className="w-3 h-3" />
-                            <span>{epicStories.length} historias</span>
+                            <span>{epic.totalStories} historias</span>
                           </div>
                           <div className="flex items-center gap-1">
                             <FiTarget className="w-3 h-3" />
-                            <span>{epicStories.reduce((sum, s) => sum + (Number(s.estimated_hours) || 0), 0)} horas</span>
+                            <span>{epic.totalHours} horas</span>
                           </div>
                         </div>
 
@@ -716,12 +716,12 @@ export default function EpicsSidebar({
                         <div className="mb-3">
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-medium text-gray-700">Progreso</span>
-                            <span className="text-xs font-bold text-gray-900">{Math.round(epicProgress)}%</span>
+                            <span className="text-xs font-bold text-gray-900">{epic.progress}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <motion.div
                               initial={{ width: 0 }}
-                              animate={{ width: `${epicProgress}%` }}
+                              animate={{ width: `${epic.progress}%` }}
                               transition={{ duration: 0.8, ease: "easeOut" }}
                               className="h-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"
                             />
@@ -731,13 +731,21 @@ export default function EpicsSidebar({
                         {/* Estado y estadísticas */}
                         <div className="flex items-center justify-between">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(epic.status)}`}>
-                            {epic.status === 'completed' ? 'Completada' :
+                            {epic.status === 'backlog' ? 'Backlog' :
+                             epic.status === 'planning' ? 'Planeación' :
                              epic.status === 'in_progress' ? 'En progreso' :
+                             epic.status === 'review' ? 'En revisión' :
+                             epic.status === 'done' ? 'Completada' :
+                             epic.status === 'blocked' ? 'Bloqueada' :
+                             epic.status === 'completed' ? 'Completada' :
                              epic.status === 'planned' ? 'Planeada' :
                              epic.status === 'on_hold' ? 'En pausa' : epic.status}
                           </span>
                           
                           <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {epic.completedHours}/{epic.totalHours}h
+                            </span>
                             {epic.color && (
                               <div 
                                 className="w-4 h-4 rounded-full border-2 border-white shadow-sm"

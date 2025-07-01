@@ -238,12 +238,15 @@ export default function Tasks() {
       return dueDate < today;
     }).length;
     
-    // Calcular tendencias
-    const totalHours = filteredTasks.reduce((sum, t) => sum + (t.actual_hours || 0), 0);
-    const estimatedHours = filteredTasks.reduce((sum, t) => sum + (t.estimated_hours || 0), 0);
-    const efficiency = estimatedHours > 0 ? Math.round((totalHours / estimatedHours) * 100) : 0;
+    // Calcular progreso: porcentaje de tareas completadas del total (sin filtros)
+    const allTasks = tasks; // Usar todas las tareas sin filtros
+    const completedTasks = allTasks.filter(t => t.status === 'completed').length;
+    const totalTasks = allTasks.length;
     
-    return { total, pending, blocked, overdue, totalHours, estimatedHours, efficiency };
+    // Si no hay tareas o todas están completadas, mostrar 100%
+    const progress = totalTasks === 0 || completedTasks === totalTasks ? 100 : Math.round((completedTasks / totalTasks) * 100);
+    
+    return { total, pending, blocked, overdue, progress };
   };
 
   // Manejar creación/edición de tareas
@@ -303,8 +306,6 @@ export default function Tasks() {
   // Manejar cambio de estado de tarea
   const handleStatusChange = async (taskId, newStatus) => {
     try {
-      console.log(`Intentando cambiar estado de tarea ${taskId} a ${newStatus}`);
-      
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
         throw new Error('No hay sesión activa');
@@ -319,15 +320,11 @@ export default function Tasks() {
         body: JSON.stringify({ status: newStatus })
       });
 
-      console.log(`Respuesta del servidor: ${response.status} ${response.statusText}`);
-
       if (response.ok) {
         const updatedTask = await response.json();
-        console.log('Tarea actualizada exitosamente:', updatedTask);
         await fetchTasks();
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Error del servidor:', errorData);
         throw new Error(`Error al actualizar el estado: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
@@ -448,12 +445,12 @@ export default function Tasks() {
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 font-medium">Eficiencia</p>
-                  <p className="text-3xl font-bold text-green-600">{stats.efficiency}%</p>
-                  <p className="text-xs text-gray-500 mt-1">Horas vs Estimado</p>
+                  <p className="text-sm text-gray-600 font-medium">Progreso</p>
+                  <p className="text-3xl font-bold text-green-600">{stats.progress}%</p>
+                  <p className="text-xs text-gray-500 mt-1">Tareas completadas</p>
                 </div>
                 <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-xl">
-                  <FiTrendingUp className="w-6 h-6 text-white" />
+                  <FiCheckCircle className="w-6 h-6 text-white" />
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 from app.routers import (
@@ -16,16 +17,23 @@ from app.routers import (
     epic_router,
     bug_router,
     external_form_router,
-    external_user_router
+    external_user_router,
+    notification_router
 )
 from app.models import *  # Importar todos los modelos para que se registren
 from app.core.database import engine, Base
 import os
+from pathlib import Path
 
 # Las migraciones se ejecutan manualmente con reset_db_direct.py
 
 # Crear instancia de la aplicación
 app = FastAPI(title="SmartPlanner API")
+
+# Configurar archivos estáticos para uploads
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Configurar CORS
 app.add_middleware(
@@ -118,6 +126,7 @@ app.include_router(epic_router.router)
 app.include_router(bug_router.router)
 app.include_router(external_form_router.router)
 app.include_router(external_user_router.router)
+app.include_router(notification_router.router)
 
 # Los datos se inicializan manualmente con reset_db_direct.py
 

@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 # Estados predeterminados del sistema
 default_task_states = {
     "states": [
-        {"id": "pendiente", "label": "Pendiente", "icon": "🟡", "color": "yellow"},
+        {"id": "pendiente", "label": "Pendiente", "icon": "🔴", "color": "red"},
         {"id": "en_progreso", "label": "En Progreso", "icon": "🔵", "color": "blue"},
         {"id": "completada", "label": "Completada", "icon": "🟢", "color": "green"}
     ],
@@ -148,7 +148,7 @@ def upgrade() -> None:
         sa.Column('organization_id', sa.Integer(), sa.ForeignKey('organizations.organization_id'), nullable=True),
         sa.PrimaryKeyConstraint('project_id'),
         sa.UniqueConstraint('name', 'client_id', name='unique_project_client'),
-        sa.CheckConstraint("project_type IN ('development', 'support', 'meeting', 'training', 'other')", name='projects_project_type_check'),
+        sa.CheckConstraint("project_type IN ('web_development', 'mobile_development', 'desktop_development', 'api_development', 'database_design', 'cloud_migration', 'devops_infrastructure', 'security_audit', 'ui_ux_design', 'testing_qa', 'maintenance_support', 'consulting', 'training', 'research_development', 'other')", name='projects_project_type_check'),
         sa.CheckConstraint("status IN ('registered_initiative', 'in_quotation', 'proposal_approved', 'in_planning', 'in_progress', 'at_risk', 'suspended', 'completed', 'canceled', 'post_delivery_support')", name='projects_status_check')
     )
 

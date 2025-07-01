@@ -20,6 +20,7 @@ export default function OrganizationsTable({ onStatsUpdate }) {
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
   const [showModal, setShowModal] = useState(false);
   const [editingOrganization, setEditingOrganization] = useState(null);
+  const [openPlanMenuId, setOpenPlanMenuId] = useState(null);
 
   // Obtener token de la sesión
   const getAuthHeaders = () => {
@@ -234,6 +235,17 @@ export default function OrganizationsTable({ onStatsUpdate }) {
     setEditingOrganization(null);
   };
 
+  // Manejar apertura/cierre de menús de planes
+  const handlePlanMenuToggle = (orgId) => {
+    setOpenPlanMenuId(orgId);
+  };
+
+  // Crear objeto con el estado del menú abierto para pasar a los componentes hijos
+  const planMenuState = {
+    currentOpenMenuId: openPlanMenuId,
+    toggle: handlePlanMenuToggle
+  };
+
   // Si el usuario no es super_user, mostrar mensaje de acceso denegado
   if (user?.role !== 'super_user') {
     return (
@@ -387,6 +399,7 @@ export default function OrganizationsTable({ onStatsUpdate }) {
                   onDelete={handleDelete}
                   onToggleStatus={handleToggleStatus}
                   onPlanChange={handlePlanChange}
+                  onPlanMenuToggle={planMenuState}
                   index={index}
                 />
               ))}

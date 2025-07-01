@@ -134,7 +134,8 @@ def get_client_rating_average(db: Session, client_id: int):
         OrganizationRating.client_id == client_id
     ).scalar()
     
-    return round(float(result) if result else 0.0, 2)
+    # Devolver None si no hay calificaciones, en lugar de 0.0
+    return round(float(result), 2) if result else None
 
 
 def get_client_with_rating(db: Session, client_id: int):

@@ -1,7 +1,9 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { FiUser, FiClock, FiCheckCircle } from 'react-icons/fi';
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { formatDateForDisplay, formatDateForTooltip, debugDate } from '../../utils/dateUtils';
 
 // Configuraciones de estimación por tallas (mismo que en StoryDetailsModal)
 const ESTIMATION_SIZES = {
@@ -76,7 +78,8 @@ const getEstimationSize = (estimatedHours) => {
 };
 
 export default function StoryCard({ story, users, kanbanStates, onClick, isSelected = false }) {
-  const assignedUser = users.find(u => u.user_id === Number(story.assigned_user_id));
+
+  const assignedUser = users.find(u => u.user_id === story.assigned_user_id);
   
   // Calcular horas totales estimadas
   const totalEstimatedHours = 
@@ -87,7 +90,9 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
      (Number(story.documentation_hours) || 0));
   
   const hasWarnings = !story.assigned_user_id || totalEstimatedHours === 0;
-  const state = kanbanStates?.find(s => s.key === story.status);
+  
+  // Verificar que kanbanStates sea un array
+  const state = Array.isArray(kanbanStates) ? kanbanStates.find(s => s.key === story.status) : null;
   
   // Obtener talla de estimación y sus colores
   const estimationSize = getEstimationSize(totalEstimatedHours);
@@ -156,15 +161,35 @@ export default function StoryCard({ story, users, kanbanStates, onClick, isSelec
           {priorityConfig.icon}
         </span>
         
-        {/* Etiquetas */}
-        {story.tags?.map((tag, index) => (
-          <span 
-            key={`${tag}-${index}`}
-            className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700"
-          >
-            {tag}
-          </span>
-        ))}
+        {/* Etiquetas o Fecha de Completado */}
+        {(() => {
+          const shouldShowCompletedDate = story.status === "done" && story.completed_date;
+          
+          if (shouldShowCompletedDate) {
+            // Debug de la fecha
+            debugDate(story.completed_date, 'StoryCard - Fecha de completado');
+            
+            return (
+              <span 
+                className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium flex items-center gap-1"
+                title={`Completada el ${formatDateForTooltip(story.completed_date)}`}
+              >
+                <span>✅</span>
+                <span>Completada {formatDateForDisplay(story.completed_date)}</span>
+              </span>
+            );
+          } else if (story.tags && story.tags.length > 0) {
+            return story.tags.map((tag, index) => (
+              <span 
+                key={`${tag}-${index}`}
+                className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700"
+              >
+                {tag}
+              </span>
+            ));
+          }
+          return null;
+        })()}
       </div>
 
       {/* Title and description */}

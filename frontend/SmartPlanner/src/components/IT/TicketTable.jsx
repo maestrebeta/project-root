@@ -14,6 +14,7 @@ export default function TicketTable({
   getUserName, 
   getClientName,
   getProjectName,
+  getDaysOpen,
   ticketStatuses, 
   ticketPriorities,
   onSort,
@@ -51,22 +52,6 @@ export default function TicketTable({
     }
   };
 
-  const isOverdue = (ticket) => {
-    if (!ticket.due_date || ticket.status === 'cerrado') return false;
-    const dueDate = new Date(ticket.due_date);
-    const today = new Date();
-    return dueDate < today;
-  };
-
-  const getDaysUntilDue = (ticket) => {
-    if (!ticket.due_date) return null;
-    const dueDate = new Date(ticket.due_date);
-    const today = new Date();
-    const diffTime = dueDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
   const toggleRowExpansion = (ticketId) => {
     setExpandedRows(prev => {
       const next = new Set(prev);
@@ -81,21 +66,41 @@ export default function TicketTable({
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'nuevo': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'en_progreso': return 'bg-orange-100 text-orange-700 border-orange-200';
-      case 'cerrado': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'nuevo': return 'bg-blue-100 text-blue-800';
+      case 'en_progreso': return 'bg-yellow-100 text-yellow-800';
+      case 'cerrado': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'baja': return 'bg-green-100 text-green-700 border-green-200';
-      case 'media': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'alta': return 'bg-red-100 text-red-700 border-red-200';
-      case 'critica': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'baja': return 'bg-green-100 text-green-800';
+      case 'media': return 'bg-yellow-100 text-yellow-800';
+      case 'alta': return 'bg-red-100 text-red-800';
+      case 'critica': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Obtener texto descriptivo para los días
+  const getDaysText = (days) => {
+    if (days === 0) return 'Hoy';
+    if (days === 1) return '1 día';
+    if (days < 7) return `${days} días`;
+    if (days < 30) return `${Math.floor(days / 7)} semana${Math.floor(days / 7) > 1 ? 's' : ''}`;
+    if (days < 365) return `${Math.floor(days / 30)} mes${Math.floor(days / 30) > 1 ? 'es' : ''}`;
+    return `${Math.floor(days / 365)} año${Math.floor(days / 365) > 1 ? 's' : ''}`;
+  };
+
+  // Obtener color para los días según el tiempo
+  const getDaysColor = (days, status) => {
+    if (status === 'cerrado') return 'text-green-600 bg-green-50';
+    if (days <= 1) return 'text-green-600 bg-green-50';
+    if (days <= 3) return 'text-blue-600 bg-blue-50';
+    if (days <= 7) return 'text-yellow-600 bg-yellow-50';
+    if (days <= 30) return 'text-orange-600 bg-orange-50';
+    return 'text-red-600 bg-red-50';
   };
 
   return (
@@ -144,18 +149,17 @@ export default function TicketTable({
                 Proyecto
               </th>
               <th 
-                className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
                 onClick={() => onSort('created_at')}
               >
-                <div className="flex items-center gap-2">
-                  Creado
-                  {getSortIcon('created_at')}
+                <div className="flex items-center gap-1">
+                  Creado {getSortIcon('created_at')}
                 </div>
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Vencimiento
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Tiempo
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
               </th>
             </tr>
@@ -180,11 +184,6 @@ export default function TicketTable({
                         <div className="text-sm font-mono text-gray-900">
                           {ticket.ticket_number}
                         </div>
-                        {isOverdue(ticket) && (
-                          <div className="text-xs text-red-600 font-medium">
-                            Vencido
-                          </div>
-                        )}
                       </div>
                     </div>
                   </td>
@@ -236,23 +235,10 @@ export default function TicketTable({
                     {formatDate(ticket.created_at)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <FiClock className="w-4 h-4 text-gray-400 mr-2" />
-                      {ticket.due_date ? (
-                        <div>
-                          <div className={`text-sm ${isOverdue(ticket) ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                            {formatDate(ticket.due_date)}
-                          </div>
-                          {!isOverdue(ticket) && getDaysUntilDue(ticket) !== null && (
-                            <div className="text-xs text-gray-500">
-                              {getDaysUntilDue(ticket)} días
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-500">No definida</span>
-                      )}
-                    </div>
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getDaysColor(getDaysOpen(ticket), ticket.status)}`}>
+                      <FiClock className="w-3 h-3" />
+                      {ticket.status === 'cerrado' ? 'Resuelto en' : 'Abierto'} {getDaysText(getDaysOpen(ticket))}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center gap-2">
@@ -337,12 +323,6 @@ export default function TicketTable({
                             <div>
                               <span className="text-gray-500">Actualizado:</span>
                               <span className="ml-2 text-gray-900">{formatDate(ticket.updated_at)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Vencimiento:</span>
-                              <span className={`ml-2 ${isOverdue(ticket) ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                                {ticket.due_date ? formatDate(ticket.due_date) : 'No definida'}
-                              </span>
                             </div>
                             {ticket.resolved_at && (
                               <div>

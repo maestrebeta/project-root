@@ -166,13 +166,6 @@ const TimerPanel = ({
   });
   const [billableState, setBillable] = useState(billable);
 
-  console.log('TimerPanel - Valores recibidos:', {
-    suggestedProject,
-    suggestedActivity,
-    defaultClient,
-    userHasEntries
-  });
-
   // Efecto para establecer valores predeterminados
   useEffect(() => {
     if (!selectedProject && projectOptions.length) {
@@ -196,10 +189,8 @@ const TimerPanel = ({
   // Efecto separado para establecer la actividad predeterminada
   useEffect(() => {
     if (suggestedActivity) {
-      console.log('TimerPanel - Actualizando actividad sugerida:', suggestedActivity);
       setSelectedTag(suggestedActivity);
     } else if (!selectedTag) {
-      console.log('TimerPanel - Estableciendo actividad por defecto: desarrollo');
       setSelectedTag('desarrollo');
     }
   }, [suggestedActivity]);
@@ -226,27 +217,6 @@ const TimerPanel = ({
     return date.toTimeString().split(' ')[0]; // Formato HH:mm:ss
   };
 
-  // Construye los datos para la entrada de tiempo
-  const buildEntryData = useCallback(() => {
-    const now = new Date();
-    const endTime = new Date(now.getTime() + time * 1000);
-
-    return {
-      user_id: userId,
-      project_id: Number(selectedProject),
-      client_id: selectedClient ? Number(selectedClient) : null,
-      entry_date: now.toISOString().slice(0, 10),
-      activity_type: selectedTag,
-      start_time: now.toTimeString().slice(0, 8),
-      end_time: endTime.toTimeString().slice(0, 8),
-      duration: time,
-      description: desc.trim(),
-      status: selectedState || defaultState,
-      billable: billable,
-      organization_id: session.user.organization_id
-    };
-  }, [selectedProject, selectedClient, selectedTag, desc, billable, time, userId, selectedState, defaultState]);
-
   // Guarda la entrada de tiempo
   const handleSaveEntry = async () => {
     try {
@@ -268,21 +238,59 @@ const TimerPanel = ({
       const now = new Date();
       const startTime = new Date(now.getTime() - time * 1000);
 
+      // Convertir nombre de categoría a ID
+      let activityTypeId = 1; // Fallback a ID 1
+      if (activityTypes.length > 0) {
+        const category = activityTypes.find(cat => cat.name === selectedTag);
+        activityTypeId = category ? category.id : 1;
+      }
+
+      // Convertir estado a ID (siempre completado = ID 3)
+      const statusId = 3; // ID del estado "Completada"
+
+      // Función para formatear fecha y hora a UTC (igual que FormularioEntrada)
+      const formatDateTimeToUTC = (date, timeStr) => {
+        if (!date || !timeStr) return null;
+        
+        // Crear fecha con la hora local especificada
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        
+        // Crear fecha en hora local
+        const localDate = new Date(year, month - 1, day, hours, minutes, 0);
+        
+        // Convertir a UTC manteniendo la misma hora local
+        return localDate.toISOString();
+      };
+
+      // Formatear la fecha actual como YYYY-MM-DD
+      const formatDateForInput = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      // Obtener la fecha actual en formato YYYY-MM-DD
+      const currentDate = formatDateForInput(now);
+      const startTimeStr = startTime.toTimeString().slice(0, 8);
+      const endTimeStr = now.toTimeString().slice(0, 8);
+
       const entryData = {
         user_id: Number(session.user.user_id),
         project_id: Number(selectedProject),
-        entry_date: now.toISOString().split('T')[0],
-        start_time: startTime.toISOString(),
-        end_time: now.toISOString(),
+        entry_date: formatDateTimeToUTC(now, startTimeStr), // Usar la fecha del start_time como entry_date
+        start_time: formatDateTimeToUTC(now, startTimeStr),
+        end_time: formatDateTimeToUTC(now, endTimeStr),
         description: desc.trim() || null,
-        activity_type: selectedTag,
-        status: 'completado', // Estado por defecto siempre completado
+        activity_type: activityTypeId,
+        status: statusId,
         billable: Boolean(billableState),
         organization_id: Number(session.user.organization_id),
         ticket_id: null
       };
-
-      console.log('Datos a enviar:', entryData);
 
       const response = await fetch('http://localhost:8001/time-entries/', {
         method: 'POST',
@@ -305,7 +313,6 @@ const TimerPanel = ({
       }
 
       const savedEntry = await response.json();
-      console.log('Respuesta del servidor:', savedEntry); // Debug log
       
       // Llamar a la función de callback si está definida
       if (onNuevaEntrada) {
@@ -514,13 +521,12 @@ const TimerPanel = ({
                 className="appearance-none bg-gray-100 border rounded-md pl-8 pr-8 py-2 focus:outline-none focus:ring-2 transition text-sm border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                 value={selectedTag}
                 onChange={(e) => {
-                  console.log('Categoría seleccionada:', e.target.value); // Debug log
                   setSelectedTag(e.target.value);
                 }}
               >
                 {activityTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
+                  <option key={type.id || type.value} value={type.name || type.value}>
+                    {type.name || type.label}
                   </option>
                 ))}
               </select>
@@ -558,30 +564,31 @@ const TimerPanel = ({
             )}
           </div>
 
-          {/* Selector de cliente */}
+          {/* Selector de cliente - Solo lectura */}
           <div className="relative min-w-[120px] flex flex-col">
             <label htmlFor="timer-client" className="sr-only">
               Cliente
             </label>
-            <select
-              id="timer-client"
-              className={selectStyles()}
-              value={selectedClient || ''}
-              onChange={(e) => setSelectedClient(e.target.value)}
-              disabled={running || loading}
-              aria-label="Cliente"
-            >
-              <option value="">Sin cliente</option>
-              {clientOptions.map(client => (
-                <option 
-                  key={client.client_id} 
-                  value={client.client_id}
-                >
-                  {client.name}
-                </option>
-              ))}
-            </select>
-            <FiChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" />
+            <div className="relative">
+              <select
+                id="timer-client"
+                className={`${selectStyles()} bg-gray-50 cursor-not-allowed`}
+                value={selectedClient || ''}
+                disabled={true}
+                aria-label="Cliente (determinado por el proyecto)"
+              >
+                <option value="">Sin cliente</option>
+                {clientOptions.map(client => (
+                  <option 
+                    key={client.client_id} 
+                    value={client.client_id}
+                  >
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+              <FiChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none opacity-50" />
+            </div>
           </div>
 
           {/* Toggle Facturable */}

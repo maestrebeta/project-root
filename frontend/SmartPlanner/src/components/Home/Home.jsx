@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiClock, FiTrello, FiUsers, FiPieChart, FiActivity, FiStar, FiCalendar, FiCheckCircle, FiAlertCircle, FiArrowRight, FiPlus, FiEye, FiTrendingUp, FiTrendingDown, FiTarget, FiSearch } from 'react-icons/fi';
+import { FiClock, FiTrello, FiUsers, FiPieChart, FiActivity, FiStar, FiCalendar, FiCheckCircle, FiAlertCircle, FiArrowRight, FiPlus, FiEye, FiTrendingUp, FiTrendingDown, FiTarget, FiAlertTriangle, FiSearch } from 'react-icons/fi';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import Footer from "../Template/Footer.jsx";
-import CalendarView from './CalendarView.jsx';
-import ActivityView from './ActivityView.jsx';
+
+// Estilos CSS para line-clamp
+const lineClampStyles = `
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+`;
 
 // Componente para las acciones rápidas con diseño premium
 const QuickActionCard = ({ action, index, hoveredAction, setHoveredAction, onNavigate }) => {
@@ -16,7 +24,7 @@ const QuickActionCard = ({ action, index, hoveredAction, setHoveredAction, onNav
       whileTap={{ scale: 0.97 }}
       onHoverStart={() => setHoveredAction(index)}
       onHoverEnd={() => setHoveredAction(null)}
-      className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-8 cursor-pointer hover:shadow-2xl transition-all duration-500 overflow-hidden"
+      className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6 cursor-pointer hover:shadow-2xl transition-all duration-500 overflow-hidden"
       onClick={() => onNavigate(action.to)}
       style={{
         background: `linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)`,
@@ -32,22 +40,26 @@ const QuickActionCard = ({ action, index, hoveredAction, setHoveredAction, onNav
         ${action.color === 'purple' ? 'from-purple-400 via-purple-500 to-purple-600' : ''}
         ${action.color === 'green' ? 'from-green-400 via-green-500 to-green-600' : ''}
         ${action.color === 'indigo' ? 'from-indigo-400 via-indigo-500 to-indigo-600' : ''}
+        ${action.color === 'orange' ? 'from-orange-400 via-orange-500 to-orange-600' : ''}
+        ${action.color === 'red' ? 'from-red-400 via-red-500 to-red-600' : ''}
       `} />
       
       <div className="relative z-10">
-        <div className="flex flex-col items-center text-center gap-6">
+        <div className="flex flex-col items-center text-center gap-4">
           <div className={`
-            p-6 rounded-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-2 shadow-lg
+            p-4 rounded-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-2 shadow-lg
             ${action.color === 'blue' ? 'bg-gradient-to-br from-blue-100 via-blue-200 to-blue-300 text-blue-700 shadow-blue-200/50' : ''}
             ${action.color === 'purple' ? 'bg-gradient-to-br from-purple-100 via-purple-200 to-purple-300 text-purple-700 shadow-purple-200/50' : ''}
             ${action.color === 'green' ? 'bg-gradient-to-br from-green-100 via-green-200 to-green-300 text-green-700 shadow-green-200/50' : ''}
             ${action.color === 'indigo' ? 'bg-gradient-to-br from-indigo-100 via-indigo-200 to-indigo-300 text-indigo-700 shadow-indigo-200/50' : ''}
+            ${action.color === 'orange' ? 'bg-gradient-to-br from-orange-100 via-orange-200 to-orange-300 text-orange-700 shadow-orange-200/50' : ''}
+            ${action.color === 'red' ? 'bg-gradient-to-br from-red-100 via-red-200 to-red-300 text-red-700 shadow-red-200/50' : ''}
           `}>
-            <action.icon className="w-10 h-10" />
+            <action.icon className="w-8 h-8" />
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="relative flex items-center justify-center">
-              <h3 className="font-bold text-gray-800 text-xl group-hover:text-gray-900 transition-colors tracking-tight">
+              <h3 className="font-bold text-gray-800 text-lg group-hover:text-gray-900 transition-colors tracking-tight">
                 {action.label}
               </h3>
               {hoveredAction === index && (
@@ -55,13 +67,13 @@ const QuickActionCard = ({ action, index, hoveredAction, setHoveredAction, onNav
                   initial={{ opacity: 0, x: -10, scale: 0.8 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="absolute -right-8"
+                  className="absolute -right-6"
                 >
-                  <FiArrowRight className="w-6 h-6 text-gray-400" />
+                  <FiArrowRight className="w-5 h-5 text-gray-400" />
                 </motion.span>
               )}
             </div>
-            <p className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors leading-relaxed font-medium text-center">
+            <p className="text-xs text-gray-500 group-hover:text-gray-600 transition-colors leading-relaxed font-medium text-center">
               {action.description}
             </p>
           </div>
@@ -72,7 +84,7 @@ const QuickActionCard = ({ action, index, hoveredAction, setHoveredAction, onNav
 };
 
 // Componente para las estadísticas de proyectos con diseño premium
-const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects = [] }) => {
+const ProjectStats = ({ stats, attentionProjects = [] }) => {
   const [selectedMetric, setSelectedMetric] = useState('overview');
   
   const projectMetrics = [
@@ -118,11 +130,6 @@ const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects =
     }
   ];
 
-  const quickActions = [
-    { label: 'Crear Proyecto', icon: FiPlus, color: 'blue', action: onNewProject },
-    { label: 'Ver Calendario', icon: FiCalendar, color: 'green', action: onViewCalendar }
-  ];
-
   const selectedData = projectMetrics.find(metric => metric.id === selectedMetric);
 
   return (
@@ -142,17 +149,9 @@ const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects =
           <h2 className="text-3xl font-bold text-gray-800 mb-3 tracking-tight">Resumen de Proyectos</h2>
           <p className="text-gray-600 text-lg font-medium">Métricas clave y estado actual</p>
         </div>
-        <div className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-600 text-sm font-bold border border-emerald-100 shadow-lg">
-          <div className="flex items-center gap-2">
-            <FiTarget className="w-5 h-5" />
-            {stats.weeklyProgress}% completado esta semana
-          </div>
-        </div>
-      </div>
-
-      {/* Métricas principales con tabs */}
-      <div className="mb-10">
-        <div className="flex flex-wrap gap-3 mb-8">
+        
+        {/* Métricas principales con tabs */}
+        <div className="flex flex-wrap gap-3">
           {projectMetrics.map((metric) => (
             <button
               key={metric.id}
@@ -167,8 +166,10 @@ const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects =
             </button>
           ))}
         </div>
+      </div>
 
-        {/* Métrica seleccionada destacada */}
+      {/* Métrica seleccionada destacada */}
+      <div className="mb-10">
         {selectedData && (
           <motion.div
             key={selectedData.id}
@@ -199,37 +200,10 @@ const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects =
         )}
       </div>
 
-      {/* Acciones rápidas */}
-      <div className="mb-10">
-        <h3 className="text-xl font-bold text-gray-800 mb-6 tracking-tight">Acciones Rápidas</h3>
-        <div className="grid grid-cols-2 gap-6">
-          {quickActions.map((action, index) => (
-            <motion.button
-              key={action.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 * index, duration: 0.5 }}
-              whileHover={{ scale: 1.05, y: -3 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={action.action}
-              className={`p-6 rounded-2xl bg-gradient-to-br from-${action.color}-50 to-${action.color}-100 text-${action.color}-700 hover:from-${action.color}-100 hover:to-${action.color}-200 transition-all duration-300 shadow-lg hover:shadow-xl border border-${action.color}-200/50`}
-            >
-              <div className="flex flex-col items-center gap-3">
-                <action.icon className="w-7 h-7" />
-                <span className="text-sm font-semibold text-center tracking-tight">{action.label}</span>
-              </div>
-            </motion.button>
-          ))}
-        </div>
-      </div>
-
       {/* Proyectos que requieren atención */}
       <div>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-gray-800 tracking-tight">Proyectos que Requieren Atención</h3>
-          <button className="text-sm text-blue-600 hover:text-blue-700 font-semibold transition-colors tracking-tight">
-            Ver todos →
-          </button>
         </div>
         
         {attentionProjects.length === 0 ? (
@@ -274,10 +248,6 @@ const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects =
                       <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
                         <span className="text-gray-700 font-medium">{project.reason}</span>
                         <span className="flex items-center gap-1">
-                          <FiUsers className="w-3 h-3" />
-                          {project.team} miembros
-                        </span>
-                        <span className="flex items-center gap-1">
                           <FiCalendar className="w-3 h-3" />
                           Inicio: {project.start_date ? new Date(project.start_date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No definida'}
                         </span>
@@ -316,8 +286,82 @@ const ProjectStats = ({ stats, onViewCalendar, onNewProject, attentionProjects =
   );
 };
 
-// Componente para la actividad reciente con diseño premium
-const RecentActivity = ({ activities, onViewAll }) => {
+// Componente para KPIs con diseño premium
+const KPIDashboard = ({ kpiData, onViewAll, onNavigateToKPI }) => {
+  const [selectedKPI, setSelectedKPI] = useState('overview');
+  
+  const kpiMetrics = [
+    { 
+      id: 'overview',
+      label: 'Proyectos que necesitan atención', 
+      value: kpiData.attentionProjects || 0, 
+      color: 'blue', 
+      icon: FiActivity,
+      description: 'Proyectos retrasados o en riesgo',
+      detail: 'Estos proyectos requieren revisión inmediata para evitar retrasos',
+      route: '/admin/projects'
+    },
+    { 
+      id: 'stories',
+      label: 'HU vencidas', 
+      value: kpiData.overdueStories || 0, 
+      color: 'amber', 
+      icon: FiClock,
+      description: 'Historias de usuario fuera de plazo',
+      detail: 'Tareas que han superado su fecha límite y necesitan priorización',
+      route: '/manager/planning'
+    },
+    { 
+      id: 'tickets',
+      label: 'Tickets abiertos', 
+      value: kpiData.openTickets || 0, 
+      color: 'red', 
+      icon: FiAlertCircle,
+      description: 'Tickets pendientes de resolución',
+      detail: 'Incidencias y solicitudes de ayuda que esperan respuesta',
+      route: '/it/tickets'
+    },
+    { 
+      id: 'quotations',
+      label: 'Cotizaciones abiertas', 
+      value: kpiData.pendingQuotations || 0, 
+      color: 'orange', 
+      icon: FiStar,
+      description: 'Cotizaciones por aprobar',
+      detail: 'Propuestas comerciales pendientes de aprobación del cliente',
+      route: '/admin/projects'
+    },
+    { 
+      id: 'tasks',
+      label: 'Tareas bloqueadas y vencidas', 
+      value: kpiData.blockedOrOverdueTasks || 0, 
+      color: 'orange', 
+      icon: FiAlertTriangle,
+      description: 'Tareas que requieren atención inmediata',
+      detail: 'Tareas bloqueadas por dependencias o que han superado su fecha límite',
+      route: '/tasks'
+    },
+    { 
+      id: 'rating',
+      label: 'Satisfacción de clientes', 
+      value: kpiData.organizationRating || 'N/A', 
+      color: 'green', 
+      icon: FiCheckCircle,
+      description: 'Calificación promedio de clientes',
+      detail: 'Nivel de satisfacción basado en feedback de nuestros clientes',
+      route: '/admin/customers'
+    }
+  ];
+
+  const selectedData = kpiMetrics.find(metric => metric.id === selectedKPI);
+
+  // Función para manejar la navegación según el KPI seleccionado
+  const handleViewDetails = () => {
+    if (selectedData && onNavigateToKPI) {
+      onNavigateToKPI(selectedData.route);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -329,77 +373,86 @@ const RecentActivity = ({ activities, onViewAll }) => {
         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
       }}
     >
-      <div className="flex items-center justify-between mb-10">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-3 tracking-tight">Actividad Reciente</h2>
-          <p className="text-gray-600 text-lg font-medium">Últimas acciones en el sistema</p>
+          <h2 className="text-3xl font-bold text-gray-800 mb-3 tracking-tight">Resumen del Sistema</h2>
+          <p className="text-gray-600 text-lg font-medium">Métricas importantes de tu organización</p>
         </div>
-        <button 
-          onClick={onViewAll}
-          className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 hover:from-gray-100 hover:to-gray-200 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl"
-        >
-          <FiEye className="w-5 h-5" />
-          Ver todo
-        </button>
       </div>
-      <div className="space-y-5">
-        {activities.map((activity, index) => (
-          <motion.div
-            key={activity.id}
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 * index, duration: 0.5 }}
-            whileHover={{ x: 12, scale: 1.02 }}
-            className="flex items-start gap-5 p-5 rounded-2xl hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50 transition-all duration-300 cursor-pointer group border border-transparent hover:border-gray-200 shadow-sm hover:shadow-md"
+
+      {/* Grid de KPIs */}
+      <div className="mb-4">
+        <p className="text-sm text-gray-500 text-center mb-4">
+          
+        </p>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {kpiMetrics.map((metric) => (
+          <motion.button
+            key={metric.id}
+            onClick={() => setSelectedKPI(metric.id)}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className={`py-8 px-4 rounded-2xl text-center transition-all duration-300 border-2 h-48 flex flex-col items-center justify-center ${
+              selectedKPI === metric.id
+                ? `bg-${metric.color}-50 border-${metric.color}-200 shadow-lg`
+                : 'bg-gray-50 border-transparent hover:bg-gray-100 hover:shadow-md'
+            }`}
           >
-            <div className={`p-4 rounded-2xl bg-gradient-to-br from-blue-100 via-blue-200 to-blue-300 text-blue-700 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
-              <activity.icon className="w-7 h-7" />
+            <div className={`p-3 rounded-xl bg-${metric.color}-100 text-${metric.color}-600 shadow-sm mb-3 flex-shrink-0`}>
+              <metric.icon className="w-6 h-6" />
             </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base font-bold text-gray-800 truncate group-hover:text-gray-900 transition-colors tracking-tight">
-                {activity.title}
-              </h3>
-              <p className="text-sm text-gray-500 truncate group-hover:text-gray-600 transition-colors mt-2 leading-relaxed font-medium">
-                {activity.description}
-              </p>
-            </div>
-            <span className="text-xs text-gray-400 whitespace-nowrap bg-gray-100 px-3 py-2 rounded-xl font-semibold">
-              Hace {activity.time}
-            </span>
-          </motion.div>
+            <div className="text-3xl font-bold text-gray-800 mb-2 leading-tight">{metric.value}</div>
+            <div className="text-sm font-semibold text-gray-700 leading-tight line-clamp-2 px-2">{metric.label}</div>
+          </motion.button>
         ))}
       </div>
+
+      {/* KPI Destacado */}
+      {selectedData && (
+          <motion.div
+          key={selectedData.id}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="p-6 rounded-3xl bg-gradient-to-br from-gray-50 via-white to-gray-50 border border-gray-200 shadow-lg"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className={`p-5 rounded-3xl bg-${selectedData.color}-100 text-${selectedData.color}-600 shadow-lg`}>
+                <selectedData.icon className="w-10 h-10" />
+            </div>
+              <div>
+                <div className="text-4xl font-bold text-gray-800 mb-2 tracking-tight">{selectedData.value}</div>
+                <div className="text-xl font-semibold text-gray-600 mb-2">{selectedData.label}</div>
+                <p className="text-sm text-gray-500 font-medium mb-1">{selectedData.description}</p>
+                <p className="text-xs text-gray-400 mb-4">{selectedData.detail}</p>
+                <button
+                  onClick={() => onNavigateToKPI && onNavigateToKPI(selectedData.route)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+                >
+                  <FiEye className="w-4 h-4" />
+                  Ver detalles
+                </button>
+              </div>
+            </div>
+      </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 };
 
 // Componente de búsqueda y filtros
-const SearchAndFilters = ({ onNewProject }) => {
+const SearchAndFilters = () => {
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       className="mb-10"
     >
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className="flex-1 relative">
-          <FiSearch className="absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400 w-6 h-6" />
-          <input
-            type="text"
-            placeholder="Buscar proyectos, usuarios, tareas..."
-            className="w-full pl-14 pr-6 py-5 rounded-3xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-200/20 transition-all duration-300 bg-white/80 backdrop-blur-sm shadow-lg text-lg"
-          />
-        </div>
-        <div className="flex gap-4">
-          <button 
-            onClick={onNewProject}
-            className="flex items-center gap-3 px-8 py-5 rounded-3xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
-          >
-            <FiPlus className="w-6 h-6" />
-            <span className="font-bold text-lg tracking-tight">Nuevo Proyecto</span>
-          </button>
-        </div>
-      </div>
+      {/* Eliminada la barra de búsqueda y el botón de nuevo proyecto */}
     </motion.div>
   );
 };
@@ -410,8 +463,6 @@ export default function Home() {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [hoveredAction, setHoveredAction] = useState(null);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [isActivityOpen, setIsActivityOpen] = useState(false);
   
   // Estados para datos reales
   const [projectStats, setProjectStats] = useState({
@@ -425,6 +476,16 @@ export default function Home() {
   const [timeAnalytics, setTimeAnalytics] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [attentionProjects, setAttentionProjects] = useState([]);
+  const [kpiData, setKpiData] = useState({
+    totalTickets: 0,
+    openTickets: 0,
+    pendingQuotations: 0,
+    organizationRating: 'N/A',
+    openTasks: 0,
+    overdueStories: 0,
+    attentionProjects: 0,
+    blockedOrOverdueTasks: 0
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -441,40 +502,96 @@ export default function Home() {
     }
   }, [isAuthenticated, user]);
 
+  // Efecto para recargar datos cuando se actualiza un proyecto
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'projectUpdated' && e.newValue === 'true') {
+        // Recargar datos
+        fetchRealData();
+        // Limpiar la bandera
+        localStorage.removeItem('projectUpdated');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // También verificar al cargar la página
+    if (localStorage.getItem('projectUpdated') === 'true') {
+      fetchRealData();
+      localStorage.removeItem('projectUpdated');
+    }
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   const fetchRealData = async () => {
     setLoading(true);
+    setError(''); // Limpiar errores previos
+    
     try {
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
         throw new Error('No hay sesión activa');
       }
 
-      // Cargar estadísticas de proyectos
-      const statsResponse = await fetch('http://localhost:8001/projects/stats', {
+      // Cargar analytics de tiempo (endpoint principal)
+      let analyticsData = null;
+      try {
+        const analyticsResponse = await fetch('http://localhost:8001/projects/time-analytics', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Content-Type': 'application/json'
         }
       });
 
-      // Cargar analytics de tiempo
-      const analyticsResponse = await fetch('http://localhost:8001/projects/time-analytics', {
+        if (analyticsResponse.ok) {
+          analyticsData = await analyticsResponse.json();
+          setTimeAnalytics(analyticsData);
+        } else {
+          console.warn('No se pudo cargar analytics de tiempo');
+          if (analyticsResponse.status === 401) {
+            throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+          } else if (analyticsResponse.status >= 500) {
+            throw new Error('Error del servidor. Por favor, intenta más tarde.');
+          }
+        }
+      } catch (err) {
+        console.warn('Error cargando analytics de tiempo:', err);
+        if (err.name === 'TypeError' && err.message.includes('fetch')) {
+          throw new Error('No se puede conectar con el servidor. Verifica tu conexión a internet.');
+        }
+        throw err;
+      }
+
+      // Cargar estadísticas de proyectos (opcional)
+      try {
+        const statsResponse = await fetch('http://localhost:8001/projects/stats', {
         headers: {
           'Authorization': `Bearer ${session.token}`,
           'Content-Type': 'application/json'
         }
       });
 
-      if (statsResponse.ok && analyticsResponse.ok) {
-        const analyticsData = await analyticsResponse.json();
-        
-        setTimeAnalytics(analyticsData);
-        
-        // Calcular estadísticas reales
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          // Usar datos de stats si están disponibles
+        }
+      } catch (err) {
+        console.warn('Error cargando estadísticas de proyectos:', err);
+      }
+
+      // Si tenemos datos de analytics, procesar estadísticas
+      if (analyticsData) {
         const projects = analyticsData.projects || [];
         const total = projects.length;
         const active = projects.filter(p => ['in_progress', 'in_planning', 'at_risk'].includes(p.status)).length;
-        const delayed = projects.filter(p => p.efficiency === 'Retrasado').length;
+        const delayed = projects.filter(p => 
+          p.efficiency === 'Retrasado' || 
+          p.efficiency === 'Ligeramente retrasado' || 
+          p.status === 'at_risk'
+        ).length;
         const completed = projects.filter(p => p.status === 'completed').length;
         
         // Calcular progreso semanal (simulado basado en proyectos completados)
@@ -495,117 +612,130 @@ export default function Home() {
         // Generar actividad reciente basada en datos reales
         generateRecentActivity(projects, analyticsData);
 
-        // Generar proyectos que requieren atención
-        const attentionProjectsData = generateAttentionProjects(projects);
+        // Generar proyectos que requieren atención con progreso real
+        const attentionProjectsData = await generateAttentionProjectsWithRealProgress(projects);
         setAttentionProjects(attentionProjectsData);
+
+        // Generar datos de KPIs con los proyectos ya cargados
+        const kpiDataResult = await generateKPIData(projects);
+        setKpiData(kpiDataResult);
+      } else {
+        // Si no hay datos de analytics, establecer valores por defecto
+        setProjectStats({
+          total: 0,
+          active: 0,
+          delayed: 0,
+          completed: 0,
+          weeklyProgress: 0,
+          monthlyTrend: '+0%'
+        });
+        setRecentActivity([]);
+        setAttentionProjects([]);
+        
+        // Generar datos de KPIs sin proyectos
+        const kpiDataResult = await generateKPIData([]);
+        setKpiData(kpiDataResult);
       }
+
     } catch (err) {
       console.error('Error fetching real data:', err);
-      setError('Error al cargar los datos');
+      setError('Error al cargar los datos: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const generateRecentActivity = (projects, analyticsData) => {
+    // Generar actividad reciente basada en proyectos y analytics
     const activities = [];
     
-    // Actividad basada en proyectos recientes
-    const recentProjects = projects
-      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
-      .slice(0, 3);
-    
-    recentProjects.forEach((project, index) => {
+    // Actividad de proyectos recientes
+    projects.slice(0, 3).forEach((project, index) => {
       activities.push({
-        id: index + 1,
-        type: 'project',
-        title: 'Proyecto actualizado',
-        description: project.name,
-        time: '2h',
+        id: `project-${project.project_id}`,
+        title: `Proyecto ${project.name} actualizado`,
+        description: `Estado: ${getProjectStatus(project)} - Progreso: ${project.progress_percentage || 0}%`,
+        time: `${Math.floor(Math.random() * 24) + 1}h`,
         icon: FiTrello
       });
     });
 
-    // Actividad basada en horas registradas
-    if (analyticsData.summary?.total_hours_worked > 0) {
+    // Actividad de tiempo registrado
+    if (analyticsData.total_hours > 0) {
       activities.push({
-        id: activities.length + 1,
-        type: 'time',
-        title: 'Tiempo registrado',
-        description: `${analyticsData.summary.total_hours_worked}h en total`,
-        time: '4h',
+        id: 'time-entry',
+        title: 'Horas registradas hoy',
+        description: `${analyticsData.total_hours} horas registradas en el sistema`,
+        time: '2h',
         icon: FiClock
       });
     }
 
-    // Actividad basada en eficiencia
-    const efficientProjects = projects.filter(p => p.efficiency === 'En tiempo').length;
-    if (efficientProjects > 0) {
-      activities.push({
-        id: activities.length + 1,
-        type: 'report',
-        title: 'Eficiencia del equipo',
-        description: `${efficientProjects} proyectos en tiempo`,
-        time: '6h',
-        icon: FiPieChart
-      });
-    }
-
-    // Si no hay suficientes actividades, agregar algunas por defecto
-    while (activities.length < 4) {
-      activities.push({
-        id: activities.length + 1,
-        type: 'system',
-        title: 'Sistema activo',
-        description: 'SmartPlanner funcionando correctamente',
-        time: '8h',
-        icon: FiActivity
-      });
-    }
-
-    setRecentActivity(activities.slice(0, 4));
+    setRecentActivity(activities);
   };
 
-  const generateAttentionProjects = (projects) => {
+  const generateAttentionProjectsWithRealProgress = async (projects) => {
     if (!projects || projects.length === 0) return [];
 
-    console.log('Proyectos disponibles para análisis:', projects.map(p => ({
-      name: p.name,
-      efficiency: p.efficiency,
-      status: p.status,
-      progress: p.progress_percentage
-    })));
+    // Obtener progreso real de todos los proyectos
+    const projectIds = projects.map(p => p.project_id);
+    const progressPromises = projectIds.map(async (projectId) => {
+      try {
+        const response = await fetch(`http://localhost:8001/projects/${projectId}/progress`, {
+          headers: {
+            'Authorization': `Bearer ${JSON.parse(localStorage.getItem('session')).token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (response.ok) {
+          return await response.json();
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error obteniendo progreso del proyecto ${projectId}:`, error);
+        return null;
+      }
+    });
+
+    const progressResults = await Promise.all(progressPromises);
+    const progressMap = {};
+    progressResults.forEach((progress, index) => {
+      if (progress) {
+        progressMap[projectIds[index]] = progress;
+      }
+    });
 
     // Proyectos que requieren atención basados en criterios reales
     const attentionCandidates = projects
       .filter(project => {
+        // Excluir proyectos completados
+        if (project.status === 'completed') {
+          return false;
+        }
+        
         // Proyectos retrasados
         if (project.efficiency === 'Retrasado') {
-          console.log(`Proyecto ${project.name} incluido: Retrasado`);
           return true;
         }
         
         // Proyectos ligeramente retrasados
         if (project.efficiency === 'Ligeramente retrasado') {
-          console.log(`Proyecto ${project.name} incluido: Ligeramente retrasado`);
           return true;
         }
         
         // Proyectos en riesgo
         if (project.status === 'at_risk') {
-          console.log(`Proyecto ${project.name} incluido: En riesgo`);
           return true;
         }
         
-        // Proyectos con progreso muy bajo
-        if ((project.progress_percentage || 0) < 25) {
-          console.log(`Proyecto ${project.name} incluido: Progreso bajo (${project.progress_percentage}%)`);
+        // Proyectos con progreso muy bajo (usando progreso real)
+        const realProgress = progressMap[project.project_id];
+        if (realProgress && realProgress.progress_percentage < 25) {
           return true;
         }
         
         // Proyectos con muchas horas trabajadas pero bajo progreso
-        if (project.total_hours > 40 && (project.progress_percentage || 0) < 60) {
-          console.log(`Proyecto ${project.name} incluido: Muchas horas, bajo progreso`);
+        if (project.total_hours > 40 && realProgress && realProgress.progress_percentage < 60) {
           return true;
         }
         
@@ -614,8 +744,7 @@ export default function Home() {
           const endDate = new Date(project.end_date);
           const today = new Date();
           const daysUntilEnd = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
-          if (daysUntilEnd <= 7 && daysUntilEnd >= 0 && project.status !== 'completed') {
-            console.log(`Proyecto ${project.name} incluido: Fecha límite próxima (${daysUntilEnd} días)`);
+          if (daysUntilEnd <= 7 && daysUntilEnd >= 0) {
             return true;
           }
         }
@@ -624,27 +753,26 @@ export default function Home() {
       })
       .sort((a, b) => {
         // Priorizar por severidad
-        const aSeverity = getProjectSeverity(a);
-        const bSeverity = getProjectSeverity(b);
+        const aSeverity = getProjectSeverity(a, progressMap[a.project_id]);
+        const bSeverity = getProjectSeverity(b, progressMap[b.project_id]);
         return bSeverity - aSeverity;
       })
       .slice(0, 4); // Máximo 4 proyectos
 
-    console.log('Proyectos que requieren atención:', attentionCandidates.map(p => p.name));
-
     return attentionCandidates.map(project => {
-      const reason = getProjectReason(project);
+      const realProgress = progressMap[project.project_id];
+      const reason = getProjectReason(project, realProgress);
       const status = getProjectStatus(project);
-      const criteria = getProjectCriteria(project);
+      const criteria = getProjectCriteria(project, realProgress);
       
       return {
         name: project.name,
-        progress: project.progress_percentage || 0,
+        progress: realProgress ? realProgress.progress_percentage : 0,
         status: status,
         team: project.unique_users || 1,
         deadline: project.end_date || null,
         start_date: project.start_date || null,
-        priority: getProjectPriority(project),
+        priority: getProjectPriority(project, realProgress),
         reason: reason,
         criteria: criteria,
         project_id: project.project_id
@@ -652,15 +780,18 @@ export default function Home() {
     });
   };
 
-  const getProjectSeverity = (project) => {
+  const getProjectSeverity = (project, realProgress) => {
     let severity = 0;
     
     if (project.efficiency === 'Retrasado') severity += 10;
     if (project.efficiency === 'Ligeramente retrasado') severity += 7;
     if (project.status === 'at_risk') severity += 8;
-    if ((project.progress_percentage || 0) < 25) severity += 6;
-    if ((project.progress_percentage || 0) < 50) severity += 4;
-    if (project.total_hours > 40 && (project.progress_percentage || 0) < 60) severity += 3;
+    
+    // Usar el progreso real si está disponible
+    const progressPercentage = realProgress ? realProgress.progress_percentage : (project.progress_percentage || 0);
+    if (progressPercentage < 25) severity += 6;
+    if (progressPercentage < 50) severity += 4;
+    if (project.total_hours > 40 && progressPercentage < 60) severity += 3;
     
     // Agregar severidad por fecha de fin próxima
     if (project.end_date) {
@@ -674,7 +805,7 @@ export default function Home() {
     return severity;
   };
 
-  const getProjectReason = (project) => {
+  const getProjectReason = (project, realProgress) => {
     if (project.efficiency === 'Retrasado') {
       return 'Requiere atención inmediata';
     }
@@ -684,10 +815,13 @@ export default function Home() {
     if (project.status === 'at_risk') {
       return 'Seguimiento crítico necesario';
     }
-    if ((project.progress_percentage || 0) < 25) {
+    
+    // Usar el progreso real si está disponible
+    const progressPercentage = realProgress ? realProgress.progress_percentage : (project.progress_percentage || 0);
+    if (progressPercentage < 25) {
       return 'Revisión de planificación';
     }
-    if (project.total_hours > 40 && (project.progress_percentage || 0) < 60) {
+    if (project.total_hours > 40 && progressPercentage < 60) {
       return 'Eficiencia cuestionable';
     }
     
@@ -704,6 +838,7 @@ export default function Home() {
       }
     }
     
+    // Si no tiene fecha límite, no debería estar en la lista de atención
     return 'Requiere seguimiento';
   };
 
@@ -714,14 +849,14 @@ export default function Home() {
     return 'active';
   };
 
-  const getProjectPriority = (project) => {
-    const severity = getProjectSeverity(project);
+  const getProjectPriority = (project, realProgress) => {
+    const severity = getProjectSeverity(project, realProgress);
     if (severity >= 15) return 'high';
     if (severity >= 10) return 'medium';
     return 'low';
   };
 
-  const getProjectCriteria = (project) => {
+  const getProjectCriteria = (project, realProgress) => {
     if (project.efficiency === 'Retrasado') {
       return 'Retrasado';
     }
@@ -731,10 +866,13 @@ export default function Home() {
     if (project.status === 'at_risk') {
       return 'En riesgo';
     }
-    if ((project.progress_percentage || 0) < 25) {
+    
+    // Usar el progreso real si está disponible
+    const progressPercentage = realProgress ? realProgress.progress_percentage : (project.progress_percentage || 0);
+    if (progressPercentage < 25) {
       return 'Progreso bajo';
     }
-    if (project.total_hours > 40 && (project.progress_percentage || 0) < 60) {
+    if (project.total_hours > 40 && progressPercentage < 60) {
       return 'Eficiencia baja';
     }
     
@@ -751,6 +889,7 @@ export default function Home() {
       }
     }
     
+    // Si no tiene fecha límite, no debería estar en la lista de atención
     return 'Requiere atención';
   };
 
@@ -760,20 +899,6 @@ export default function Home() {
     if (hour < 12) return '¡Buenos días';
     if (hour < 20) return '¡Buenas tardes';
     return '¡Buenas noches';
-  };
-
-  // Función para manejar la creación de nuevo proyecto
-  const handleNewProject = () => {
-    // Navegar a la página de proyectos con parámetro para abrir modal
-    navigate('/admin/projects?openModal=true');
-  };
-
-  const handleViewAll = () => {
-    setIsActivityOpen(true);
-  };
-
-  const handleViewCalendar = () => {
-    setIsCalendarOpen(true);
   };
 
   const quickActions = [
@@ -804,13 +929,232 @@ export default function Home() {
       description: 'Administra el equipo',
       to: '/admin/users',
       color: 'green'
+    },
+    {
+      icon: FiStar,
+      label: 'Gestión de Clientes',
+      description: 'Administra tus clientes y relaciones',
+      to: '/admin/customers',
+      color: 'orange'
+    },
+    {
+      icon: FiActivity,
+      label: 'Tickets',
+      description: 'Gestiona soporte y incidencias',
+      to: '/it/tickets',
+      color: 'red'
     }
   ];
+
+  // Función para generar datos de KPIs
+  const generateKPIData = async (projects) => {
+    try {
+      const session = JSON.parse(localStorage.getItem('session'));
+      if (!session?.token) return {};
+
+      const kpiData = {
+        totalTickets: 0,
+        openTickets: 0,
+        pendingQuotations: 0,
+        organizationRating: 'N/A',
+        openTasks: 0,
+        overdueStories: 0,
+        attentionProjects: 0,
+        blockedOrOverdueTasks: 0
+      };
+
+      // Obtener tickets
+      try {
+        const ticketsResponse = await fetch('http://localhost:8001/tickets/', {
+          headers: {
+            'Authorization': `Bearer ${session.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (ticketsResponse.ok) {
+          const tickets = await ticketsResponse.json();
+          kpiData.totalTickets = tickets.length;
+          kpiData.openTickets = tickets.filter(t => t.status === 'nuevo' || t.status === 'en_progreso').length;
+        }
+      } catch (err) {
+        console.error('Error fetching tickets:', err);
+      }
+
+      // Obtener tareas bloqueadas y vencidas
+      try {
+        const tasksResponse = await fetch('http://localhost:8001/tasks/', {
+          headers: {
+            'Authorization': `Bearer ${session.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (tasksResponse.ok) {
+          const tasks = await tasksResponse.json();
+          const currentDate = new Date();
+          
+          // Filtrar tareas bloqueadas y vencidas
+          const blockedOrOverdueTasks = tasks.filter(task => {
+            // Tareas bloqueadas
+            const isBlocked = task.status === 'blocked';
+            
+            // Tareas vencidas (tienen due_date y no están completadas)
+            const isOverdue = task.due_date && 
+                             task.status !== 'completed' && 
+                             new Date(task.due_date) < currentDate;
+            
+            return isBlocked || isOverdue;
+          });
+          
+          kpiData.blockedOrOverdueTasks = blockedOrOverdueTasks.length;
+        }
+      } catch (err) {
+        console.error('Error fetching tasks:', err);
+        // Fallback: usar 0 si falla la obtención
+        kpiData.blockedOrOverdueTasks = 0;
+      }
+
+      // Obtener cotizaciones
+      try {
+        // Primero obtener el resumen para el total pendiente
+        const quotationsSummaryResponse = await fetch('http://localhost:8001/projects/quotations/summary', {
+          headers: {
+            'Authorization': `Bearer ${session.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (quotationsSummaryResponse.ok) {
+          const quotationsSummaryData = await quotationsSummaryResponse.json();
+          
+          // Si no hay monto pendiente, no hay cotizaciones abiertas
+          if (quotationsSummaryData.total_pending <= 0) {
+            kpiData.pendingQuotations = 0;
+          } else {
+            // Obtener todos los proyectos para luego obtener sus cotizaciones
+            const projectsResponse = await fetch('http://localhost:8001/projects/', {
+              headers: {
+                'Authorization': `Bearer ${session.token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (projectsResponse.ok) {
+              const allProjects = await projectsResponse.json();
+              let openQuotationsCount = 0;
+              
+              // Obtener cotizaciones de cada proyecto
+              for (const project of allProjects) {
+                try {
+                  const projectQuotationsResponse = await fetch(`http://localhost:8001/projects/${project.project_id}/quotations`, {
+                    headers: {
+                      'Authorization': `Bearer ${session.token}`,
+                      'Content-Type': 'application/json'
+                    }
+                  });
+                  
+                  if (projectQuotationsResponse.ok) {
+                    const projectQuotations = await projectQuotationsResponse.json();
+                    // Contar cotizaciones que tienen cuotas pendientes
+                    const openQuotations = projectQuotations.filter(quotation => 
+                      quotation.total_pending > 0
+                    );
+                    openQuotationsCount += openQuotations.length;
+                  }
+                } catch (err) {
+                  console.error(`Error fetching quotations for project ${project.project_id}:`, err);
+                }
+              }
+              
+              kpiData.pendingQuotations = openQuotationsCount;
+            } else {
+              // Fallback: si no podemos obtener los proyectos, usar aproximación
+              kpiData.pendingQuotations = quotationsSummaryData.total_pending > 0 ? 1 : 0;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching quotations:', err);
+      }
+
+      // Obtener calificación de la organización (simulado por ahora)
+      try {
+        const clientsResponse = await fetch('http://localhost:8001/clients/', {
+          headers: {
+            'Authorization': `Bearer ${session.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (clientsResponse.ok) {
+          const clients = await clientsResponse.json();
+          // Calcular calificación promedio basada en clientes con rating
+          const clientsWithRating = clients.filter(c => c.rating_average !== undefined && c.rating_average !== null);
+          if (clientsWithRating.length > 0) {
+            const avgRating = clientsWithRating.reduce((sum, c) => sum + (c.rating_average || 0), 0) / clientsWithRating.length;
+            kpiData.organizationRating = `${avgRating.toFixed(1)}/5.0`;
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching clients:', err);
+      }
+
+      // Calcular tareas abiertas y proyectos que necesitan atención basadas en proyectos pasados como parámetro
+      if (projects && projects.length > 0) {
+        const activeProjects = projects.filter(p => ['in_progress', 'in_planning', 'at_risk'].includes(p.status));
+        kpiData.openTasks = activeProjects.reduce((sum, p) => sum + (p.total_stories || 0), 0);
+        
+        // Calcular proyectos retrasados/en riesgo
+        const delayedProjects = projects.filter(p => 
+          p.efficiency === 'Retrasado' || 
+          p.efficiency === 'Ligeramente retrasado' || 
+          p.status === 'at_risk'
+        );
+        kpiData.attentionProjects = delayedProjects.length; // Proyectos que necesitan atención
+        
+        // Obtener historias de usuario para calcular las vencidas
+        try {
+          const storiesResponse = await fetch('http://localhost:8001/epics/stories/', {
+            headers: {
+              'Authorization': `Bearer ${session.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (storiesResponse.ok) {
+            const stories = await storiesResponse.json();
+            const today = new Date();
+            
+            // Calcular historias vencidas basándose en su fecha límite individual
+            const overdueStories = stories.filter(story => {
+              if (!story.end_date || story.status === 'done') return false;
+              const endDate = new Date(story.end_date);
+              return endDate < today;
+            });
+            
+            kpiData.overdueStories = overdueStories.length;
+          }
+        } catch (err) {
+          console.error('Error fetching user stories:', err);
+          // Fallback al cálculo anterior si falla la obtención de historias
+          const overdueProjects = projects.filter(p => p.efficiency === 'Retrasado');
+          kpiData.overdueStories = overdueProjects.reduce((sum, p) => sum + (p.total_stories || 0), 0);
+        }
+      }
+
+      return kpiData;
+    } catch (err) {
+      console.error('Error generating KPI data:', err);
+      return {};
+    }
+  };
 
   // Mostrar estado de carga
   if (loading) {
     return (
       <div className={`flex flex-col min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] ${theme.FONT_CLASS} relative overflow-hidden`}>
+        <style>{lineClampStyles}</style>
         <main className="flex-1 px-8 py-10 relative z-10">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -829,22 +1173,36 @@ export default function Home() {
   if (error) {
     return (
       <div className={`flex flex-col min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] ${theme.FONT_CLASS} relative overflow-hidden`}>
+        <style>{lineClampStyles}</style>
         <main className="flex-1 px-8 py-10 relative z-10">
           <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="text-center max-w-md">
+              <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-red-600 font-medium mb-2">Error al cargar datos</p>
-              <p className="text-gray-600 text-sm">{error}</p>
+              <h3 className="text-xl font-bold text-gray-800 mb-3">Error al cargar datos</h3>
+              <p className="text-gray-600 mb-6 leading-relaxed">{error}</p>
+              <div className="space-y-3">
               <button 
                 onClick={fetchRealData}
-                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
               >
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
                 Reintentar
+                  </div>
+                </button>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all duration-300"
+                >
+                  Recargar página
               </button>
+              </div>
             </div>
           </div>
         </main>
@@ -854,6 +1212,7 @@ export default function Home() {
 
   return (
     <div className={`flex flex-col min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] ${theme.FONT_CLASS} relative overflow-hidden`}>
+      <style>{lineClampStyles}</style>
       <main className="flex-1 px-8 py-10 relative z-10">
         {/* Welcome Section */}
         <motion.div
@@ -911,14 +1270,14 @@ export default function Home() {
         </motion.div>
 
         {/* Search and Filters */}
-        <SearchAndFilters onNewProject={handleNewProject} />
+        <SearchAndFilters />
 
         {/* Quick Actions Grid */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.8 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-20"
         >
           {quickActions.map((action, idx) => (
             <QuickActionCard
@@ -934,15 +1293,12 @@ export default function Home() {
 
         {/* Stats and Activity Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mb-20">
-          <ProjectStats stats={projectStats} onViewCalendar={handleViewCalendar} onNewProject={handleNewProject} attentionProjects={attentionProjects} />
-          <RecentActivity activities={recentActivity} onViewAll={handleViewAll} />
+          <ProjectStats stats={projectStats} attentionProjects={attentionProjects} />
+          <KPIDashboard kpiData={kpiData} onNavigateToKPI={navigate} />
         </div>
       </main>
       <Footer />
 
-      {/* Modales */}
-      <CalendarView isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} />
-      <ActivityView isOpen={isActivityOpen} onClose={() => setIsActivityOpen(false)} />
     </div>
   );
 }

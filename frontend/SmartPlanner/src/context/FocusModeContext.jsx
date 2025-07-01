@@ -20,12 +20,9 @@ export const FocusModeProvider = ({ children }) => {
 
   // Función para activar modo enfoque
   const activateFocusMode = () => {
-    console.log('FocusMode: Activando modo enfoque...');
-    
     // Verificar que el usuario esté autenticado antes de activar
     const session = localStorage.getItem('session');
     if (!session) {
-      console.log('FocusMode: Usuario no autenticado, no activando modo enfoque');
       return false;
     }
     
@@ -39,35 +36,26 @@ export const FocusModeProvider = ({ children }) => {
 
   // Función para desactivar modo enfoque
   const deactivateFocusMode = () => {
-    console.log('FocusMode: Desactivando modo enfoque...');
     setIsFocusMode(false);
   };
 
   // Efecto para manejar cambios en el modo enfoque
   useEffect(() => {
-    console.log('FocusMode: Estado cambiado a:', isFocusMode);
-    
     if (isFocusMode) {
       // Activar pantalla completa si no está activa
       if (!document.fullscreenElement) {
-        console.log('FocusMode: Activando pantalla completa...');
         document.documentElement.requestFullscreen().catch(err => {
-          console.log('Error al activar pantalla completa:', err);
         });
       }
       // Agregar clases CSS para modo enfoque
-      console.log('FocusMode: Agregando clases CSS...');
       document.body.classList.add('focus-mode-active');
     } else {
       // Siempre intentar salir de pantalla completa si está activa
       if (document.fullscreenElement) {
-        console.log('FocusMode: Saliendo de pantalla completa...');
         document.exitFullscreen().catch(err => {
-          console.log('Error al salir de pantalla completa:', err);
         });
       }
       // Remover clases CSS
-      console.log('FocusMode: Removiendo clases CSS...');
       document.body.classList.remove('focus-mode-active');
     }
   }, [isFocusMode]);
@@ -82,18 +70,14 @@ export const FocusModeProvider = ({ children }) => {
         // Verificar que el usuario esté autenticado
         const session = localStorage.getItem('session');
         if (!session) {
-          console.log('FocusMode: Usuario no autenticado, no activando modo enfoque con teclas');
           return;
         }
-        
-        console.log('FocusMode: Teclas Shift + E detectadas, alternando modo enfoque...');
         toggleFocusMode();
       }
       
       // También permitir salir con Escape
       if (event.key === 'Escape' && isFocusMode) {
         event.preventDefault();
-        console.log('FocusMode: Tecla Escape detectada, desactivando modo enfoque...');
         deactivateFocusMode();
       }
     };
@@ -117,8 +101,20 @@ export const FocusModeProvider = ({ children }) => {
   // Escuchar eventos de logout para desactivar modo enfoque
   useEffect(() => {
     const handleLogout = () => {
-      console.log('FocusMode: Detectado logout, desactivando modo enfoque...');
       setIsFocusMode(false);
+      
+      // Limpiar flags de sessionStorage relacionados con el sidebar
+      sessionStorage.removeItem('focusModeSidebarContracted');
+      
+      // Limpiar clases CSS del modo enfoque
+      document.body.classList.remove('focus-mode-active');
+      
+      // Salir de pantalla completa si está activa
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(err => {
+          console.log('Error al salir de pantalla completa durante logout:', err);
+        });
+      }
     };
 
     window.addEventListener('userLoggedOut', handleLogout);

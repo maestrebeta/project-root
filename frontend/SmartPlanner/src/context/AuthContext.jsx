@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
             
             setUser(currentUser);
             
-            // Disparar evento de inicio de sesión para sincronizar tema
+            // Disparar evento de inicio de sesión para sincronizar tema y resetear sidebar
             window.dispatchEvent(new CustomEvent('userLoggedIn'));
           }
         }
@@ -127,8 +127,6 @@ export const AuthProvider = ({ children }) => {
 
       const data = await response.json();
       
-      console.log('Respuesta completa del login:', data);
-      
       if (!data.access_token) {
         throw new Error('Token no recibido del servidor');
       }
@@ -138,8 +136,6 @@ export const AuthProvider = ({ children }) => {
         console.error('No se recibió información del usuario:', data);
         throw new Error('Información del usuario no recibida del servidor');
       }
-
-      console.log('Información del usuario recibida:', data.user);
 
       // Actualizar imagen de perfil desde el backend
       if (data.user && data.user.profile_image) {
@@ -162,13 +158,6 @@ export const AuthProvider = ({ children }) => {
         token: data.access_token,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 horas
       };
-
-      // Logging detallado para depuración
-      console.group('Datos de Sesión al Iniciar Sesión');
-      console.log('Datos completos del usuario:', data.user);
-      console.log('Datos de sesión:', session);
-      console.log('ID de organización:', session.user.organization_id);
-      console.groupEnd();
 
       localStorage.setItem('session', JSON.stringify(session));
       setUser(session.user);
@@ -272,6 +261,9 @@ export const AuthProvider = ({ children }) => {
     // Marcar que el usuario acaba de cerrar sesión
     localStorage.setItem('smartplanner_just_logged_out', 'true');
     
+    // Limpiar flags de sessionStorage relacionados con el sidebar y modo enfoque
+    sessionStorage.removeItem('focusModeSidebarContracted');
+    
     // Desactivar modo enfoque antes de limpiar la sesión
     // Remover clases CSS del modo enfoque
     document.body.classList.remove('focus-mode-active');
@@ -287,8 +279,7 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setProfileImage(null);
     
-    // Disparar evento de cierre de sesión para resetear el tema
-    console.log('Disparando evento userLoggedOut');
+    // Disparar evento de cierre de sesión para resetear el tema y modo enfoque
     window.dispatchEvent(new CustomEvent('userLoggedOut'));
     
     navigate('/login');

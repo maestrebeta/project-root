@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useAppTheme } from '../../context/ThemeContext';
@@ -7,6 +7,7 @@ import ProjectModal from './ProjectModal';
 import QuotationModal from './QuotationModal';
 import Quotations from './Quotations';
 import ProjectsView from './ProjectsView';
+import projectProgressService from '../../services/projectProgressService';
 
 export default function ProjectManagement() {
   const theme = useAppTheme();
@@ -61,6 +62,9 @@ export default function ProjectManagement() {
 
   // Verificar si el usuario es super_user
   const isSuperUser = user?.role === 'super_user';
+
+  // Estados para progreso de proyectos
+  const [projectProgress, setProjectProgress] = useState({});
 
   // Detectar parámetro openModal en la URL y abrir modal automáticamente
   useEffect(() => {
@@ -208,7 +212,6 @@ export default function ProjectManagement() {
       ]);
       
       // Cargar proyectos por separado para poder usarlos inmediatamente
-      console.log('📊 Loading projects...');
       const session = JSON.parse(localStorage.getItem('session'));
       const projectsResponse = await fetch('http://localhost:8001/projects/', {
         headers: {
@@ -219,8 +222,14 @@ export default function ProjectManagement() {
       
       if (projectsResponse.ok) {
         const projectsData = await projectsResponse.json();
-        console.log('📊 Projects loaded:', projectsData);
         setProjects(projectsData);
+        
+        // Cargar progreso de todos los proyectos usando el servicio centralizado
+        if (projectsData.length > 0) {
+          const projectIds = projectsData.map(project => project.project_id);
+          const progressData = await projectProgressService.getMultipleProjectsProgress(projectIds);
+          setProjectProgress(progressData);
+        }
         
         // Ahora cargar cotizaciones usando los proyectos recién obtenidos
         if (projectsData.length > 0) {
@@ -302,12 +311,10 @@ export default function ProjectManagement() {
   };
 
   const handleEditProject = async (project) => {
-    console.log('handleEditProject called with:', project);
     
     try {
       // Si tenemos el proyecto completo, usarlo directamente
       if (project && project.description !== undefined && project.code !== undefined) {
-        console.log('Using complete project data:', project);
         setSelectedProject(project);
         setShowModal(true);
         return;
@@ -319,7 +326,6 @@ export default function ProjectManagement() {
         const foundProject = projects.find(p => p.project_id === project.project_id);
         if (foundProject) {
           fullProject = foundProject;
-          console.log('Found full project in local list:', fullProject);
           setSelectedProject(fullProject);
           setShowModal(true);
           return;
@@ -327,7 +333,6 @@ export default function ProjectManagement() {
       }
       
       // Si aún no tenemos datos completos, obtener del backend
-      console.log('Fetching complete project data from backend...');
       const session = JSON.parse(localStorage.getItem('session'));
       const response = await fetch(`http://localhost:8001/projects/${project.project_id}`, {
         headers: {
@@ -338,7 +343,6 @@ export default function ProjectManagement() {
       
       if (response.ok) {
         const completeProject = await response.json();
-        console.log('Fetched complete project from backend:', completeProject);
         setSelectedProject(completeProject);
         setShowModal(true);
       } else {
@@ -359,7 +363,13 @@ export default function ProjectManagement() {
     try {
       setError(''); // Limpiar errores previos
       setShowModal(false);
-      await fetchAllData(); // Recargar todos los datos
+      
+      // Recargar todos los datos incluyendo analytics
+      await fetchAllData();
+      await fetchTimeAnalytics(); // Asegurar que se recarguen los analytics
+      
+      // Establecer bandera para que el Home recargue sus datos
+      localStorage.setItem('projectUpdated', 'true');
       
       // Mostrar mensaje de éxito
       const message = selectedProject ? 'Proyecto actualizado exitosamente' : 'Proyecto creado exitosamente';
@@ -399,6 +409,9 @@ export default function ProjectManagement() {
         // Recargar analytics para actualizar las métricas
         await fetchTimeAnalytics();
         
+        // Establecer bandera para que el Home recargue sus datos
+        localStorage.setItem('projectUpdated', 'true');
+        
         setSuccessMessage(`Estado del proyecto actualizado a "${getStatusLabel(newStatus)}"`);
         setTimeout(() => setSuccessMessage(''), 4000);
       } else {
@@ -413,13 +426,10 @@ export default function ProjectManagement() {
   };
 
   const handleDeleteProject = async (project) => {
-    console.log('handleDeleteProject called with:', project);
     
     // Confirmar eliminación
     const projectName = project.name || 'este proyecto';
     const projectId = project.project_id;
-    
-    console.log('Project ID:', projectId, 'Project Name:', projectName);
     
     if (!projectId) {
       const errorMsg = 'Error: No se pudo identificar el proyecto a eliminar';
@@ -434,15 +444,12 @@ export default function ProjectManagement() {
     );
     
     if (!confirmDelete) {
-      console.log('Delete cancelled by user');
       return;
     }
 
     try {
       setError(''); // Limpiar errores previos
       setSuccessMessage(''); // Limpiar mensajes de éxito previos
-      
-      console.log('Attempting to delete project with ID:', projectId);
       
       const session = JSON.parse(localStorage.getItem('session'));
       if (!session?.token) {
@@ -457,12 +464,12 @@ export default function ProjectManagement() {
         }
       });
 
-      console.log('Delete response status:', response.status);
-
       if (response.ok) {
-        console.log('Project deleted successfully');
         // Recargar todos los datos
         await fetchAllData();
+        
+        // Establecer bandera para que el Home recargue sus datos
+        localStorage.setItem('projectUpdated', 'true');
         
         // Mostrar notificación temporal de éxito
         setSuccessMessage(`Proyecto "${projectName}" eliminado exitosamente`);
@@ -501,7 +508,7 @@ export default function ProjectManagement() {
       'in_quotation': 'En Cotización',
       'proposal_approved': 'Propuesta Aprobada',
       'in_planning': 'En Planeación',
-      'in_progress': 'En Curso',
+      'in_progress': 'En Progreso',
       'at_risk': 'En Riesgo',
       'suspended': 'Suspendido',
       'completed': 'Completado',
@@ -513,20 +520,90 @@ export default function ProjectManagement() {
 
   const getEfficiencyColor = (efficiency) => {
     if (!efficiency || efficiency === 'N/A') return 'bg-gray-100 text-gray-800';
-    const value = parseFloat(efficiency);
-    if (value >= 90) return 'bg-green-100 text-green-800';
-    if (value >= 75) return 'bg-blue-100 text-blue-800';
-    if (value >= 60) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-red-100 text-red-800';
+    
+    // Si es null (proyecto completado), no mostrar color
+    if (efficiency === null) return 'bg-transparent text-transparent';
+    
+    // Manejar los nuevos valores de eficiencia
+    switch (efficiency) {
+      case 'En tiempo':
+        return 'bg-green-100 text-green-800';
+      case 'Ligeramente retrasado':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Retrasado':
+        return 'bg-red-100 text-red-800';
+      case 'Sin fecha límite':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Función para calcular la eficiencia del proyecto basándose en su estado y fechas
+  const calculateProjectEfficiency = (project) => {
+    // Si el proyecto está completado, no mostrar eficiencia
+    if (project.status === 'completed') {
+      return null;
+    }
+    
+    // Si no tiene fecha de fin, mostrar "Sin fecha límite"
+    if (!project.end_date) {
+      return "Sin fecha límite";
+    }
+    
+    // Si tiene fecha de fin, calcular eficiencia basándose en la fecha
+    const today = new Date();
+    const endDate = new Date(project.end_date);
+    
+    // Si la fecha de fin ya pasó y el proyecto no está completado
+    if (endDate < today) {
+      return "Retrasado";
+    }
+    
+    // Si la fecha de fin está en el futuro
+    if (endDate > today) {
+      // Calcular días hábiles restantes
+      const workingDaysRemaining = getWorkingDays(today, endDate);
+      
+      // Si faltan 15 días hábiles o menos
+      if (workingDaysRemaining <= 15) {
+        return "Ligeramente retrasado";
+      } else {
+        return "En tiempo";
+      }
+    }
+    
+    // Proyecto completado en tiempo
+    return "En tiempo";
+  };
+
+  // Función para calcular días hábiles entre dos fechas
+  const getWorkingDays = (startDate, endDate) => {
+    if (startDate > endDate) {
+      return 0;
+    }
+    
+    let workingDays = 0;
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      // 0 = Domingo, 6 = Sábado
+      if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+        workingDays += 1;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return workingDays;
   };
 
   // Función para obtener colores de progreso
   const getProgressColors = (progress) => {
-    if (progress >= 90) return '#10b981'; // Verde intenso
-    if (progress >= 75) return '#34d399'; // Verde
-    if (progress >= 50) return '#fbbf24'; // Amarillo/Ámbar
-    if (progress >= 25) return '#fb923c'; // Naranja
-    return '#f87171'; // Rojo
+    if (progress >= 90) return 'bg-green-500'; // Verde intenso
+    if (progress >= 75) return 'bg-green-400'; // Verde
+    if (progress >= 50) return 'bg-yellow-400'; // Amarillo/Ámbar
+    if (progress >= 25) return 'bg-orange-400'; // Naranja
+    return 'bg-red-400'; // Rojo
   };
 
   // 🚀 FUNCIONES ÉPICAS DE SORTING Y FILTRADO - NIVEL BILL GATES
@@ -545,6 +622,7 @@ export default function ProjectManagement() {
       'planeación': 'in_planning',
       'en curso': 'in_progress',
       'curso': 'in_progress',
+      'en progreso': 'in_progress',
       'progreso': 'in_progress',
       'en riesgo': 'at_risk',
       'riesgo': 'at_risk',
@@ -614,7 +692,11 @@ export default function ProjectManagement() {
         const descriptionMatch = project.description && 
                                 project.description.toLowerCase().includes(lowerSearchFilter);
         
-        return nameMatch || statusMatch || codeMatch || descriptionMatch;
+        // Buscar en eficiencia
+        const efficiencyMatch = project.efficiency && 
+                               project.efficiency.toLowerCase().includes(lowerSearchFilter);
+        
+        return nameMatch || statusMatch || codeMatch || descriptionMatch || efficiencyMatch;
       });
     }
     
@@ -633,7 +715,13 @@ export default function ProjectManagement() {
           bValue = Number(bValue) || 0;
         } else if (sortConfig.key === 'efficiency') {
           // Orden personalizado para eficiencia
-          const efficiencyOrder = { 'En tiempo': 3, 'Ligeramente retrasado': 2, 'Retrasado': 1 };
+          const efficiencyOrder = { 
+            'En tiempo': 4, 
+            'Ligeramente retrasado': 3, 
+            'Retrasado': 2, 
+            'Sin fecha límite': 1,
+            null: 0 
+          };
           aValue = efficiencyOrder[aValue] || 0;
           bValue = efficiencyOrder[bValue] || 0;
         }
@@ -771,11 +859,9 @@ export default function ProjectManagement() {
 
   const fetchProjectQuotations = async (projectId) => {
     try {
-      console.log('🌐 fetchProjectQuotations called for projectId:', projectId);
       
       const session = JSON.parse(localStorage.getItem('session'));
       const url = `http://localhost:8001/projects/${projectId}/quotations`;
-      console.log('🌐 Making request to:', url);
       
       const response = await fetch(url, {
         headers: {
@@ -784,11 +870,8 @@ export default function ProjectManagement() {
         }
       });
       
-      console.log('🌐 Response status:', response.status);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log('🌐 Response data for project', projectId, ':', data);
         return data;
       } else {
         console.error('🌐 Error response:', response.status, response.statusText);
@@ -940,25 +1023,19 @@ export default function ProjectManagement() {
 
   const fetchAllProjectQuotations = async (projectsToFetch = null) => {
     try {
-      console.log('🚀 fetchAllProjectQuotations started');
       
       // Usar los proyectos pasados como parámetro o el estado actual
       const projectsToUse = projectsToFetch || projects;
-      console.log('📊 Projects to fetch quotations for:', projectsToUse);
       
       setQuotationLoading(true);
       const quotationsMap = {};
       
       for (const project of projectsToUse) {
-        console.log('🔍 Fetching quotations for project:', project.project_id, project.name);
         const projectQuotations = await fetchProjectQuotations(project.project_id);
-        console.log('📋 Quotations received for project', project.project_id, ':', projectQuotations);
         quotationsMap[project.project_id] = projectQuotations;
       }
-      
-      console.log('📊 Final quotationsMap:', quotationsMap);
+
       setProjectQuotations(quotationsMap);
-      console.log('✅ fetchAllProjectQuotations completed successfully');
     } catch (err) {
       console.error('❌ Error fetching all project quotations:', err);
       setError('Error al cargar las cotizaciones de los proyectos');
@@ -969,39 +1046,29 @@ export default function ProjectManagement() {
 
   // Funciones de filtrado para cotizaciones
   const getQuotationsByProject = (projectId) => {
-    console.log('🔍 getQuotationsByProject called for projectId:', projectId);
-    console.log('📊 projectQuotations state:', projectQuotations);
     
     const quotations = projectQuotations[projectId] || [];
-    console.log('📋 Raw quotations for project', projectId, ':', quotations);
     
     // Aplicar filtros
     let filteredQuotations = quotations;
 
     if (quotationStatusFilter) {
-      console.log('🔍 Filtering by status:', quotationStatusFilter);
       filteredQuotations = filteredQuotations.filter(q => q.status === quotationStatusFilter);
-      console.log('📋 After status filter:', filteredQuotations);
     }
 
     if (quotationSearchFilter) {
-      console.log('🔍 Filtering by search:', quotationSearchFilter);
       filteredQuotations = filteredQuotations.filter(q => 
         q.description?.toLowerCase().includes(quotationSearchFilter.toLowerCase()) ||
         q.quotation_id.toString().includes(quotationSearchFilter) ||
         q.total_amount.toString().includes(quotationSearchFilter)
       );
-      console.log('📋 After search filter:', filteredQuotations);
     }
 
     // Filtrar cuotas pagadas si no se quieren mostrar
     if (!showPaidInstallments) {
-      console.log('🔍 Filtering out paid installments');
       filteredQuotations = filteredQuotations.filter(q => q.total_pending > 0);
-      console.log('📋 After paid filter:', filteredQuotations);
     }
 
-    console.log('✅ Final filtered quotations for project', projectId, ':', filteredQuotations);
     return filteredQuotations;
   };
 
@@ -1023,6 +1090,32 @@ export default function ProjectManagement() {
       month: '2-digit',
       year: 'numeric'
     });
+  };
+
+  // Función para actualizar el progreso de un proyecto específico
+  const updateProjectProgress = async (projectId) => {
+    try {
+      const progress = await projectProgressService.refreshProjectProgress(projectId);
+      setProjectProgress(prev => ({
+        ...prev,
+        [projectId]: progress
+      }));
+    } catch (error) {
+      console.error('Error actualizando progreso del proyecto:', error);
+    }
+  };
+
+  // Función para obtener el progreso de un proyecto
+  const getProjectProgress = (projectId) => {
+    return projectProgress[projectId] || {
+      total_stories: 0,
+      completed_stories: 0,
+      total_estimated_hours: 0,
+      total_actual_hours: 0,
+      progress_percentage: 0,
+      velocity: 0,
+      points_velocity: 0
+    };
   };
 
   if (loading) {
@@ -1187,11 +1280,11 @@ export default function ProjectManagement() {
                           </div>
                         </div>
                         <div>
-                          <p className="text-amber-700 text-sm font-medium mb-1 group-hover:text-amber-800 transition-colors duration-300">Eficiencia</p>
+                          <p className="text-amber-700 text-sm font-medium mb-1 group-hover:text-amber-800 transition-colors duration-300">Valor Pendiente</p>
                           <p className="text-2xl font-bold text-gray-900 mb-1 transform-gpu group-hover:scale-105 transition-transform duration-300 origin-left">
-                            {Math.round((timeAnalytics.projects.filter(p => p.efficiency === 'En tiempo').length / timeAnalytics.projects.length) * 100)}%
+                            {formatCurrency(calculateTotalPending())}
                           </p>
-                          <p className="text-amber-600 text-xs group-hover:text-amber-700 transition-colors duration-300">En tiempo</p>
+                          <p className="text-amber-600 text-xs group-hover:text-amber-700 transition-colors duration-300">Total por cobrar</p>
                         </div>
                       </div>
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
@@ -1215,7 +1308,7 @@ export default function ProjectManagement() {
                             {calculateOpenQuotations()}
                           </p>
                           <p className="text-blue-600 text-xs group-hover:text-blue-700 transition-colors duration-300">
-                            {formatCurrency(calculateTotalPending())} pendiente
+                            Cotizaciones activas
                           </p>
                         </div>
                       </div>
@@ -1472,7 +1565,8 @@ export default function ProjectManagement() {
                           const efficiencyOptions = [
                             { value: 'En tiempo', color: 'from-emerald-500 to-emerald-600', icon: '✅' },
                             { value: 'Ligeramente retrasado', color: 'from-amber-500 to-amber-600', icon: '⚠️' },
-                            { value: 'Retrasado', color: 'from-rose-500 to-rose-600', icon: '🚨' }
+                            { value: 'Retrasado', color: 'from-rose-500 to-rose-600', icon: '🚨' },
+                            { value: 'Sin fecha límite', color: 'from-blue-500 to-blue-600', icon: '📅' }
                           ];
 
                           // Contar proyectos por eficiencia y ordenar por cantidad descendente
@@ -1484,9 +1578,12 @@ export default function ProjectManagement() {
                             .filter(option => option.count > 0)
                             .sort((a, b) => b.count - a.count); // Orden descendente por cantidad
 
+                          // Calcular total de proyectos con eficiencia (excluyendo los completados)
+                          const totalProjectsWithEfficiency = timeAnalytics.projects.filter(p => p.efficiency !== null).length;
+
                           return efficiencyCounts.map((efficiency) => {
                             const count = efficiency.count;
-                            const percentage = Math.round((count / timeAnalytics.projects.length) * 100);
+                            const percentage = totalProjectsWithEfficiency > 0 ? Math.round((count / totalProjectsWithEfficiency) * 100) : 0;
                             const projectsInEfficiency = timeAnalytics.projects.filter(p => p.efficiency === efficiency.value);
                             
                             return (
@@ -1596,6 +1693,9 @@ export default function ProjectManagement() {
               handleDeleteProject={handleDeleteProject}
               handleUpdateProjectStatus={handleUpdateProjectStatus}
               isSuperUser={isSuperUser}
+              projectProgress={projectProgress}
+              getProjectProgress={getProjectProgress}
+              updateProjectProgress={updateProjectProgress}
             />
           )}
 

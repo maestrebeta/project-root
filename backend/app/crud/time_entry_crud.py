@@ -60,34 +60,40 @@ def get_valid_states(db: Session, organization_id: int) -> Dict:
         raise ValueError("Organización no encontrada")
     return org.task_states
 
-def validate_state(db: Session, organization_id: int, state: str) -> str:
+def validate_state(db: Session, organization_id: int, state) -> int:
     """
     Valida que el estado sea uno de los permitidos para la organización
     """
     task_states = get_valid_states(db, organization_id)
     valid_states = [s["id"] for s in task_states["states"]]
     
-    if state not in valid_states:
+    # Convertir state a entero si es string
+    try:
+        state_id = int(state) if isinstance(state, str) else state
+    except (ValueError, TypeError):
+        raise ValueError(f"Estado inválido. Debe ser un número entero válido")
+    
+    if state_id not in valid_states:
         raise ValueError(f"Estado inválido. Debe ser uno de: {valid_states}")
-    return state
+    return state_id
 
-def normalize_status(status: str) -> str:
+def normalize_status(status) -> int:
     """
     Normaliza el estado de una entrada de tiempo
     """
     if not status:
-        return 'pendiente'
+        return 1  # ID del estado por defecto (Pendiente)
         
-    normalized = status.lower().strip()
+    # Si ya es un número, devolverlo directamente
+    if isinstance(status, (int, float)):
+        return int(status)
     
-    if normalized in ['pendiente', 'pending', 'nueva']:
-        return 'pendiente'
-    elif normalized in ['en_progreso', 'en progreso', 'in_progress', 'in progress']:
-        return 'en_progreso'
-    elif normalized in ['completada', 'completado', 'completed', 'done']:
-        return 'completada'
-    else:
-        return 'pendiente'
+    # Si es string, intentar convertirlo a número
+    try:
+        return int(status)
+    except (ValueError, TypeError):
+        # Si no se puede convertir, devolver el estado por defecto
+        return 1
 
 def create_time_entry(db: Session, entry: TimeEntryCreate):
     """
